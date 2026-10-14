@@ -1,0 +1,15 @@
+# 环境
+.env
+*.env 
+
+# 日志
+logs/
+*.log
+
+# 临时文件
+tmp/
+*.tmp
+
+# 缓存
+cache/
+*.cache  
