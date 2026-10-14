@@ -1,3 +1,43 @@
 ---
+description: 项目 Git 分支、提交、远程和 PR 协作规范
 alwaysApply: true
 ---
+
+# Git 开发规范
+
+## 开始工作前
+
+1. 先查看当前身份和工作区状态：
+   - `git branch --show-current`
+   - `git status --short --branch`
+   - `git remote -v`
+2. 当前开发者身份必须能由当前分支 `feature/<开发者>` 明确确认。当前项目已有：
+   - `feature/dev-a`
+   - `feature/dev-c`
+   - `feature/dev-b`
+3. 身份或目标分支无法明确时，先向用户确认，再进行任何文件修改。
+4. 开发工作只能发生在与当前开发者对应的 `feature/<开发者>` 分支上。`develop` 是集成分支，`master` 是稳定分支；只通过合并或 PR 集成，不直接在这两个分支上开发。
+5. 开始前检查目标分支是否包含最新的 `develop` 变更；需要同步时先说明将要执行的操作，并保留用户未提交的修改。
+
+## 修改和提交
+
+1. 每完成一个逻辑上完整、可验证的变更就及时提交，不积累无关修改。
+2. 提交信息使用 Conventional Commits 格式，以便 git-cliff 正确分类，例如：
+   - `feat(scope): add ...`
+   - `fix(scope): correct ...`
+   - `docs(scope): update ...`
+   - `refactor(scope): simplify ...`
+   - `test(scope): cover ...`
+   - `chore(scope): maintain ...`
+3. 一个提交只表达一个逻辑目的；不要把格式化、重命名和功能修改混在同一个提交中。
+4. 提交前查看 `git diff` 和 `git diff --cached`，确认没有凭据、临时文件、无关修改或生成物被误加入。
+5. 提交后检查 `git status`，并记录验证命令及结果。提交失败时先修正原因，不绕过钩子强制提交。
+
+## 远程和分支集成
+
+1. `origin` 用于常规远程读取；需要通过 SSH 推送时使用 `ssh_origin`，例如 `git push ssh_origin <branch>`。
+2. 推送前确认远程名称、目标分支和待推送提交；禁止把开发分支误推送到 `develop` 或 `master`。
+3. 完成一个可审查的功能、需要合并到 `develop`，或用户明确要求时，创建 PR；默认目标分支为 `develop`。
+4. PR 正文遵循 `.cursor/skills/engineering/pr/SKILL.md`：说明变更摘要、验证证据、合并风险和影响范围。PR 应引用对应的 fer issue 或 spec。
+5. 需要审查时使用 `.cursor/skills/engineering/code-review/SKILL.md`；审查发现的问题修复后再提交，并在 PR 中补充验证结果。
+6. 合并、变基、重置或删除分支属于可能影响他人工作的操作。执行前确认工作区状态和目标，并避免覆盖他人提交。

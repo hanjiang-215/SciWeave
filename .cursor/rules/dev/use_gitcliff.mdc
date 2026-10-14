@@ -1,3 +1,14 @@
 ---
+description: 使用 git-cliff 维护项目变更日志
 alwaysApply: true
 ---
+
+# git-cliff 变更日志规范
+
+1. 项目变更日志配置位于根目录的 `cliff.toml`；执行 git-cliff 前先读取该配置，优先使用项目配置，不在命令行重复覆盖分类规则。
+2. 提交信息必须遵循 Conventional Commits，使 git-cliff 能按 `feat`、`fix`、`docs`、`refactor`、`test`、`chore` 等类别归档。
+3. 在创建 PR、准备发布版本或用户要求更新变更日志时，运行 git-cliff 生成或更新根目录的 `CHANGELOG.md`。优先使用：
+   - `git cliff --config cliff.toml --output CHANGELOG.md`
+4. 生成变更日志前确认提交范围、版本标签和工作区状态；不要把未确认的临时提交或其他开发者分支的提交写入发布日志。
+5. 变更日志属于项目交付物。确认内容正确后，将 `CHANGELOG.md` 与对应变更一起提交；不要为了更新日志反复生成无意义的提交。
+6. 如果配置文件未声明输出文件，使用命令行显式指定 `--output CHANGELOG.md`，不要默认把日志仅输出到终端后声称记录已完成。
