@@ -1,0 +1,6 @@
+---
+description: 项目 Gitee 仓库协作规范
+alwaysApply: true
+---
+
+本项目的远程仓库平台为openi,请使用gitee-cli工具进行仓库协作(包括pr)，具体地址已经配置在origin和ssh_origin
