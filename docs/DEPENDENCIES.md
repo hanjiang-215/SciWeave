@@ -1,6 +1,6 @@
 # 项目依赖清单
 
-更新日期：2026-10-14
+更新日期：2026-10-15
 
 ## 结论
 
@@ -14,15 +14,17 @@
 | 变更日志 | git-cliff | 根据 Conventional Commits 生成 `CHANGELOG.md` | 已配置 `cliff.toml`；尚未生成发布日志 |
 | 任务跟踪 | fer | 管理需求、任务、状态和依赖关系 | 已初始化 `.tickets/`；当前任务为 `ai4-5vru` |
 | 创作平台 | SciencePal | 赛事作品的主要创作平台 | 文档中声明为外部平台；尚未接入代码或 API |
-| 仓库协作 | gitee-cli | 在 OpenI/Gitee 远程仓库上执行仓库协作和 Pull Request 操作 | 项目规则要求使用；当前环境未安装，版本约束待确定 |
+| 仓库协作 | gitee-cli（命令名：`gitee`） | 在 Gitee 远程仓库上执行仓库协作和 Pull Request 操作 | 已安装 `gitee` 0.7.1；目标分支为 `develop` |
 
 ### gitee-cli 依赖记录
 
-- **来源**：项目协作规则 `.cursor/rules/dev/use_gitee.mdc`；具体上游发布地址待确认。
-- **用途**：替代直接调用平台接口，执行远程仓库协作和 Pull Request 操作。
-- **版本约束**：待确定；安装后应固定可复现的版本。
-- **许可证或使用限制**：当前未确认；需要以实际发行包或上游仓库的许可证为准。仅用于项目配置的 OpenI 远程仓库，不提交访问凭据。
-- **安装与验证**：当前环境执行 `command -v gitee-cli` 结果为未找到命令；安装来源和包管理器确定后，补充安装命令，并至少验证 `gitee-cli --version` 与 `gitee-cli --help`。
+- **来源**：项目协作规则 `.cursor/rules/dev/use_gitee.mdc`；当前使用 Gitee 仓库 `qi-yueran/ai4science`。
+- **用途**：使用 `gitee pr create --base develop` 创建目标为 `develop` 的 Pull Request，并执行其他仓库协作操作。
+- **版本约束**：当前验证版本为 `gitee` 0.7.1；后续升级需重新验证 PR 创建和仓库操作命令。
+- **许可证或使用限制**：以实际发行包或上游仓库许可证为准。不得提交访问令牌、密码或其他凭据。
+- **Git 远程地址**：HTTPS 为 `https://gitee.com/qi-yueran/ai4science.git`，SSH 为 `git@gitee.com:qi-yueran/ai4science.git`；远程名称分别为 `origin` 和 `ssh_origin`。
+- **凭据配置**：如需避免 HTTPS `push`/`pull` 反复输入账号密码，可执行 `git config --global credential.helper store`。该方式会将凭据明文保存到用户目录，仅适用于受信任的个人环境；共享环境应优先使用 SSH 或安全凭据管理器。
+- **安装与验证**：当前环境 `gitee --version` 输出 `gitee 0.7.1`，`gitee pr create --help` 可查看 PR 创建参数，`git config --get credential.helper` 输出 `store`。
 
 ## 当前缺失项
 
