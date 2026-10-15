@@ -1,0 +1,26 @@
+---
+description: 项目 Gitee 仓库协作规范
+alwaysApply: true
+---
+
+本项目使用 Gitee 作为远程仓库平台，仓库地址如下：
+
+- HTTPS：`https://gitee.com/OWNER/ai4science.git`
+- SSH：`git@gitee.com:OWNER/ai4science.git`
+- 常规远程名称：`origin`
+- SSH 推送远程名称：`ssh_origin`
+- 主分支：`develop`
+
+仓库协作和 Pull Request 必须使用 `gitee-cli`（命令名为 `gitee`）：
+
+- 创建 PR 时将目标分支设置为 `develop`，例如 `gitee pr create --base develop`。
+- 创建 PR 前确认当前分支为对应的 `feature/<开发者>` 分支，并确认标题、正文和验证证据完整。
+- 常规 Git 读写使用 `origin`；需要通过 SSH 推送时使用 `ssh_origin`，例如 `git push ssh_origin <branch>`。
+
+为避免 HTTPS 的 `push` 和 `pull` 反复输入账号密码，可在本机配置：
+
+```bash
+git config --global credential.helper store
+```
+
+该配置会将 HTTPS 凭据以明文保存在用户目录的 Git 凭据文件中，只应在受信任的个人开发环境使用；不得把凭据文件、访问令牌或密码提交到仓库。共享机器或不适合明文保存凭据的环境应改用 SSH 或其他安全凭据管理方式。
