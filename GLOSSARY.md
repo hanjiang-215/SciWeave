@@ -32,11 +32,13 @@
 
 ## 版本与存储
 
-**Mapping Revision（Mapping 版本）**：正式 Research Mapping 在版本化存储中的一次批准状态；第一阶段优先以 TerminusDB 的正式 Commit 验证这一概念，不预先复制一套独立版本协议。
+**Mapping Revision（Mapping 版本）**：Research Mapping 在版本化存储中的一个具体版本。FormalRevision 是已经通过负责人审核、可供正式查询的版本；TerminusDB Commit 是其底层存储版本，两者通过平台治理记录关联。
 
-**Formal Mapping（正式 Mapping）**：项目当前正式分支上最后一个经负责人批准的 Mapping 状态；端侧 Agent 的草稿或候选分支不属于正式 Mapping。
+**Formal Mapping（正式 Mapping）**：单一物理 Research Mapping 中由当前最新 FormalRevision 形成的查询投影；草稿节点和草稿边可以共存于同一物理图，但不属于正式投影。
 
-**TerminusDB Commit（TerminusDB 提交）**：TerminusDB 中记录一次图状态变化的存储版本；在本项目中，只有经过平台治理和负责人批准的 Commit 才能成为正式 Mapping 的版本依据。
+**TerminusDB Commit（TerminusDB 提交）**：TerminusDB 中记录一次图状态变化的存储版本；它可以对应草稿或正式数据，只有经过平台治理和负责人批准并关联到 FormalRevision 的 Commit 才能作为正式 Mapping 的版本依据。
+
+**FormalRevision（正式版本）**：经负责人批准、可被普通查询读取的 Mapping 版本标识；它关联对应的 TerminusDB Commit、来源 Proposal 和审核结果。
 
 **Trace（执行痕迹）**：对提交、执行、失败、审核、批准和路线变化等过程事件的记录；它解释 Mapping 如何变成当前状态，但不替代 Mapping 本身。
 
