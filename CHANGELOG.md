@@ -16,6 +16,8 @@
 - *(wayfinder)* Define TerminusDB revision validation
 - *(wayfinder)* Record TerminusDB behavior
 - *(wayfinder)* Define mapping draft and formal views
+- *(changelog)* Record project changes
+- *(wiki)* Record TerminusDB-Wiki governance direction
 
 ### ⚙️ Miscellaneous Tasks
 
@@ -24,3 +26,4 @@
 - *(fer)* Record pull request auth blocker
 - *(fer)* Record Gitee pull request
 - *(terminusdb)* Add local compose service
+- *(fer)* Record Gitee pull request
