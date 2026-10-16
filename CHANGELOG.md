@@ -19,6 +19,10 @@
 - *(changelog)* Record project changes
 - *(wiki)* Record TerminusDB-Wiki governance direction
 - *(changelog)* Record TerminusDB-Wiki governance
+- *(changelog)* Record pull request metadata
+- *(mapping)* Define single graph draft lifecycle
+- *(terminusdb)* Record candidate branch validation
+- *(mapping)* Add node edge field model ticket
 
 ### ⚙️ Miscellaneous Tasks
 
