@@ -26,6 +26,7 @@ tags: [wayfinder:map, product, ai4science]
 - [科研路线图与动态研究图](ai4-ebqx.md)：项目只维护一张完整 Research Mapping，拓扑只包含统一的 TaskNode；节点保存自身信息，依赖和执行语义只由边保存；资源由独立资源系统管理并通过引用关联，展示通过视图筛选主图；第一阶段优先验证 TerminusDB 的原生版本能力，Agent 通过 MCP 提交结构化变更，中央 Agent 预审，负责人批准后形成正式 Commit。
 - [TerminusDB Mapping 版本与 Agent 提交原型验证](ai4-9hcj.md)：实测 TerminusDB 12.0.8 支持 Schema、TaskNode、依赖边、Commit、History 和 Diff；HTTP 文档写入会立即生成 Commit，`commit=false` 不提供未提交工作区；原生 reset 会移动当前分支状态并使新提交不再出现在该分支日志中，因此 Proposal、审核和不可擦除回滚痕迹仍需由平台补充。
 - [科研公共资源与证据空间](ai4-saug.md)：以 TerminusDB-Wiki 重建 Harness Wiki 的 raw/source/entity/concept/synthesis 内容组织；raw 文件由中央节点服务托管，TerminusDB 保存资源名片、版本、关系和治理状态；Wiki MCP 提供按资源版本受控查询和下载；Wiki 与 Research Mapping 共用 Proposal、Trace/AuditEvent 和负责人审计链，但分别维护 Wiki Revision 与 Mapping Revision。
+- [单一 Mapping 的草稿与正式视图模型](ai4-u3rs.md)：只维护一张物理 Mapping，节点和边内容创建后不可原地修改；同一逻辑对象同一时间只允许一个活动草稿，Proposal 整体审核草稿变更；普通查询只读取当前最新正式投影，TerminusDB Commit/History/Diff 负责数据历史，平台仅保存 Proposal、审核事件和正式 Revision 关联。
 
 ## Not yet specified
 
