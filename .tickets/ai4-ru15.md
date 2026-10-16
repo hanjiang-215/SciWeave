@@ -49,3 +49,7 @@ tags: [wayfinder:map, product, ai4science]
 **2026-10-16T05:28:22Z**
 
 PR 已创建：Gitee Pull Request #2 https://gitee.com/OWNER/ai4science/pulls/2，目标分支 develop，当前分支 feature/dev-a。PR 覆盖提交 87a51ee、dbba4c6、89cefa5、6af81f8、9218507、f58f675、98bea71、fbaa5c1、bcae02c、5b280b9；验证包括 git diff --check、git-cliff 生成 CHANGELOG.md，以及 TerminusDB 12.0.8 的 Schema/TaskNode/DependencyEdge/Commit/History/Diff/reset 实测。后续 TerminusDB 候选分支与草稿工作区仍由 ai4-2alw 验证。
+
+**2026-10-16T11:26:37Z**
+
+Gitee Pull Request #3 已创建：https://gitee.com/OWNER/ai4science/pulls/3，目标分支 develop，当前分支 feature/dev-a。PR 包含 TerminusDB-Wiki 治理方向、需求地图更新、术语表和 CHANGELOG.md；验证包括 git diff --check 与 git-cliff --config cliff.toml --output CHANGELOG.md。
