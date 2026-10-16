@@ -18,3 +18,9 @@ tags: [wayfinder:prototype, terminusdb, mapping, ai4science]
 ## Acceptance Criteria
 
 完成一个最小可运行原型或验证记录；明确 TerminusDB 支持和不支持的操作；给出 Agent 提交、中央 Agent 预审、负责人批准、正式 Commit 和回滚流程；记录安装、运行和验证命令；据此确定后续是否保留 TerminusDB 或增加平台适配层。
+
+## Notes
+
+**2026-10-16T03:41:02Z**
+
+已添加本地 TerminusDB Compose 配置：dockers/service/terminusdb/compose.yaml，以及手动启动、查看日志、停止和清理说明：dockers/service/terminusdb/README.md。配置使用 terminusdb/terminusdb-server:latest、6363 端口和 ai4sci-terminusdb-data 持久化卷；未执行 Docker 命令，未提交真实凭据。首次验证后需要根据实际镜像行为固定版本 tag，并回写验证结果。
