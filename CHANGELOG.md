@@ -1,5 +1,9 @@
 ## [unreleased]
 
+### 🐛 Bug Fixes
+
+- *(rules)* Correct stale paths and add missing rule description
+
 ### 📚 Documentation
 
 - *(rules)* Define git and fer workflow
@@ -17,8 +21,15 @@
 - *(wayfinder)* Record TerminusDB behavior
 - *(wayfinder)* Define mapping draft and formal views
 - *(changelog)* Record project changes
+- *(rules)* Add file and naming convention rule
 - *(wiki)* Record TerminusDB-Wiki governance direction
 - *(changelog)* Record TerminusDB-Wiki governance
+- *(changelog)* Record pull request metadata
+- *(rules)* Include project manifests in root file list
+- *(dependencies)* Record Node.js, pnpm and harness-wiki dependency
+- *(dependencies)* Sync human-facing copy with authoritative ledger
+- *(dependencies)* Record local install of git-cliff, fer and gitee
+- *(dependencies)* Sync human-facing copy with authoritative ledger
 
 ### ⚙️ Miscellaneous Tasks
 
@@ -29,3 +40,4 @@
 - *(terminusdb)* Add local compose service
 - *(fer)* Record Gitee pull request
 - *(fer)* Record Gitee pull request
+- *(fer)* Record toolchain installation
