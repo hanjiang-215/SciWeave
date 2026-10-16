@@ -32,3 +32,9 @@ tags: [wayfinder:grilling, product, ai4science]
 端侧 Agent 分为两类：研究人员可以通过 MCP、Skills、系统提示词和 Hooks 配置自己的 personal agent；平台只提供接入和协作接口。平台支持轻量、可配置的任务 Agent，但不开发新的通用智能体。
 
 后续产品设计应围绕平台机制的通用性展开，而不是内置某个领域的科研能力。
+
+**2026-10-16T01:48:06Z**
+
+## Clarification
+
+“不开发 Agent”明确指不开发新的通用 harness 框架，不代表平台不支持或不管理 Agent 能力配置。研究人员可以使用自己的 personal-agent harness，并通过 MCP、Skills、系统提示词和 Hooks 接入平台；平台提供的独立研究 Agent 使用轻量化、可配置的任务 harness。平台的开发重点仍是中央调度、审核、共享资源和执行留痕。
