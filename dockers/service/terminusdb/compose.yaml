@@ -1,0 +1,13 @@
+services:
+  terminusdb:
+    image: terminusdb/terminusdb-server:latest
+    container_name: ai4sci-terminusdb
+    ports:
+      - "6363:6363"
+    volumes:
+      - terminusdb-data:/app/terminusdb/storage
+    restart: unless-stopped
+
+volumes:
+  terminusdb-data:
+    name: ai4sci-terminusdb-data
