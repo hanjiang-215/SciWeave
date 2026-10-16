@@ -25,15 +25,17 @@ tags: [wayfinder:map, product, ai4science]
 - [多人和多 Agent 协作执行](ai4-e257.md)：任务节点可以由单人、多人、Personal Agent、轻量任务 Agent 或协作集合负责；Agent 处理重复和结构化工作，研究人员负责实验、判断、头脑风暴、路线维护和全部审计；Agent 结果须经负责人审核后才能进入公共资源，研究路线变化通过 Proposal 更新动态研究图。
 - [科研路线图与动态研究图](ai4-ebqx.md)：项目只维护一张完整 Research Mapping，拓扑只包含统一的 TaskNode；节点保存自身信息，依赖和执行语义只由边保存；资源由独立资源系统管理并通过引用关联，展示通过视图筛选主图；第一阶段优先验证 TerminusDB 的原生版本能力，Agent 通过 MCP 提交结构化变更，中央 Agent 预审，负责人批准后形成正式 Commit。
 - [TerminusDB Mapping 版本与 Agent 提交原型验证](ai4-9hcj.md)：实测 TerminusDB 12.0.8 支持 Schema、TaskNode、依赖边、Commit、History 和 Diff；HTTP 文档写入会立即生成 Commit，`commit=false` 不提供未提交工作区；原生 reset 会移动当前分支状态并使新提交不再出现在该分支日志中，因此 Proposal、审核和不可擦除回滚痕迹仍需由平台补充。
+- [科研公共资源与证据空间](ai4-saug.md)：以 TerminusDB-Wiki 重建 Harness Wiki 的 raw/source/entity/concept/synthesis 内容组织；raw 文件由中央节点服务托管，TerminusDB 保存资源名片、版本、关系和治理状态；Wiki MCP 提供按资源版本受控查询和下载；Wiki 与 Research Mapping 共用 Proposal、Trace/AuditEvent 和负责人审计链，但分别维护 Wiki Revision 与 Mapping Revision。
 
 ## Not yet specified
 
-- 首个可演示科研场景和第一阶段产品范围。
-- 公共资源、证据、版本和可复现记录的范围。
-- Proposal / PR、中央协调 Agent 和负责人审计机制。
+- TerminusDB-Wiki 的 Resource、ResourceVersion、RawArtifact、SourceDocument、Entity、Concept、Synthesis、Proposal 和 AuditEvent 之间的具体领域模型与关系。
+- 中央节点服务 raw 存储的版本、哈希、访问权限、容量阈值、备份、保留和删除规则。
+- Wiki 文档与 Resource Reference 的 Proposal 生命周期，以及 Wiki Revision 与 Mapping Revision 的关联规则。
 - TerminusDB 对候选分支、Diff、Merge 和草稿工作区的实际支持，见 [TerminusDB 候选分支与草稿工作区行为验证](ai4-2alw.md)。
+- Wiki 与 Mapping 共用审计事件的事件类型、不可擦除保存方式、回滚语义和负责人审批边界。
 - 节点和边的执行痕迹、失败路线和动态变更的完整表达。
-- 第一阶段最小产品范围与验证方式。
+- 首个可演示科研场景、MCP 工具边界和第一阶段最小产品范围与验证方式。
 
 ## Out of scope
 
@@ -47,3 +49,7 @@ tags: [wayfinder:map, product, ai4science]
 **2026-10-16T05:28:22Z**
 
 PR 已创建：Gitee Pull Request #2 https://gitee.com/OWNER/ai4science/pulls/2，目标分支 develop，当前分支 feature/dev-a。PR 覆盖提交 87a51ee、dbba4c6、89cefa5、6af81f8、9218507、f58f675、98bea71、fbaa5c1、bcae02c、5b280b9；验证包括 git diff --check、git-cliff 生成 CHANGELOG.md，以及 TerminusDB 12.0.8 的 Schema/TaskNode/DependencyEdge/Commit/History/Diff/reset 实测。后续 TerminusDB 候选分支与草稿工作区仍由 ai4-2alw 验证。
+
+**2026-10-16T11:26:37Z**
+
+Gitee Pull Request #3 已创建：https://gitee.com/OWNER/ai4science/pulls/3，目标分支 develop，当前分支 feature/dev-a。PR 包含 TerminusDB-Wiki 治理方向、需求地图更新、术语表和 CHANGELOG.md；验证包括 git diff --check 与 git-cliff --config cliff.toml --output CHANGELOG.md。

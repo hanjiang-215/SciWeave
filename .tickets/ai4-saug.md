@@ -1,6 +1,6 @@
 ---
 id: ai4-saug
-status: open
+status: in_progress
 deps: [ai4-9f7i]
 links: []
 created: 2026-10-16T00:37:54Z
@@ -18,3 +18,24 @@ tags: [wayfinder:research, product, ai4science]
 ## Acceptance Criteria
 
 形成公共资源和证据空间的一级功能清单；明确资源共享、来源追踪、版本和可复现性的产品范围。
+
+## Notes
+
+**2026-10-16T07:02:28Z**
+
+本轮讨论决策记录：
+- 采用 LLM-Wiki 作为项目级科研知识与证据索引，只保存文字说明、结构化元数据和外部资源引用，不保存数据、代码或实验文件本体。
+- Resource Reference 定义为一条结构化外部资源引用记录，包含资源类型、外部定位、版本、来源任务、创建者、生成时间、输入资源、治理状态和引用关系。
+- Q3 接受：Wiki 文档和 Resource Reference 采用 draft -> submitted -> approved/rejected -> superseded/archived 生命周期，但不同对象的批准含义不同。
+- Q6 接受：优先记录不可变外部版本；无法保证时由资源维护人及时更新 Wiki，平台记录引用状态并提示链接变化或失效。
+- Q7 接受：LLM-Wiki 作为资源发现主入口，支持跨资源协作和从 Mapping、TaskNode、Proposal 进入引用视图。
+- Q8 接受：资源链接失效不删除历史引用，使用 available/unavailable/moved/superseded/archived 等状态提示当前可用性。
+
+**2026-10-16T08:55:16Z**
+
+本轮 Wayfinder 讨论形成的阶段结论：
+- 参考 Harness Wiki 的内容组织方式，将 raw、source、entity、concept、synthesis 等内容重建为 TerminusDB-Wiki 中的领域对象和关系，不直接采用现成 Harness Wiki 的 MCP 或存储实现。
+- raw 文件由中央节点服务所在机器负责保存和提供访问；TerminusDB 保存 Resource、ResourceVersion、RawArtifact 名片、来源关系、治理状态和访问定位。文件本体不以中央机器的绝对路径作为业务标识。
+- TerminusDB-Wiki 的 MCP 作为受控访问入口，按 resource_id 和 version_id 提供元数据查询、受限文本读取和 raw 下载能力；大文件优先返回受控下载句柄或流式能力，不直接塞入 Agent 上下文。
+- Research Mapping 与 TerminusDB-Wiki 共用 Proposal、Trace/AuditEvent 和负责人审计链；Mapping Revision 与 Wiki Revision 分开，TerminusDB Commit 只表示存储状态变化，不单独表示科研内容已经批准。
+- raw 文件可用性状态与 Wiki 文档、Resource Reference 的治理状态分开管理；上传成功不等于资源批准，文件版本不可覆盖，只能新增版本并保留哈希和来源。
