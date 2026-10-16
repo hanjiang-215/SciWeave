@@ -33,3 +33,13 @@
 **TerminusDB Commit（TerminusDB 提交）**：TerminusDB 中记录一次图状态变化的存储版本；在本项目中，只有经过平台治理和负责人批准的 Commit 才能成为正式 Mapping 的版本依据。
 
 **Trace（执行痕迹）**：对提交、执行、失败、审核、批准和路线变化等过程事件的记录；它解释 Mapping 如何变成当前状态，但不替代 Mapping 本身。
+
+**Mapping Status（Mapping 状态）**：TaskNode 或 Dependency Edge 在治理流程中的生命周期状态，例如 `draft`、`approved`、`rejected`、`superseded` 和 `invalidated`；状态决定对象能否出现在正式视图或参与正式调度。
+
+**Formal Mapping View（正式 Mapping 视图）**：只展示已批准且有效的 TaskNode 和 Dependency Edge 的查询视图，用于正式进度、依赖判断和任务调度；它不是独立物理图。
+
+**Draft Mapping View（草稿 Mapping 视图）**：展示某个 Proposal 变更应用后的预览结果，可包含尚未批准的节点和边；草稿视图不能触发正式调度或发布正式资源。
+
+**Proposal Preview（提案预览）**：将 Proposal 的结构化变更应用到当前正式 Mapping 后生成的临时视图，用于负责人查看结构 Diff 和影响分析。
+
+**ChangeSet（变更集）**：Proposal 中描述新增、修改、废弃或恢复节点和边的结构化操作集合；它是生成草稿预览和正式提交的机器可读依据。
