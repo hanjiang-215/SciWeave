@@ -43,3 +43,7 @@ tags: [wayfinder:map, product, ai4science]
 ## Acceptance Criteria
 
 完成宏观需求地图；每个一级功能域都有明确的产品决策票；明确当前范围、未决问题和暂不涉及的实现细节。
+
+**2026-10-16T05:28:22Z**
+
+PR 已创建：Gitee Pull Request #2 https://gitee.com/qi-yueran/ai4science/pulls/2，目标分支 develop，当前分支 feature/qiyueran。PR 覆盖提交 87a51ee、dbba4c6、89cefa5、6af81f8、9218507、f58f675、98bea71、fbaa5c1、bcae02c、5b280b9；验证包括 git diff --check、git-cliff 生成 CHANGELOG.md，以及 TerminusDB 12.0.8 的 Schema/TaskNode/DependencyEdge/Commit/History/Diff/reset 实测。后续 TerminusDB 候选分支与草稿工作区仍由 ai4-2alw 验证。
