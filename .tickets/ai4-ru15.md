@@ -1,0 +1,42 @@
+---
+id: ai4-ru15
+status: open
+deps: []
+links: []
+created: 2026-10-16T00:37:28Z
+type: epic
+priority: 1
+assignee: SciWeave
+tags: [wayfinder:map, product, ai4science]
+---
+# 动态科研协作平台需求地图
+
+## Destination
+形成一个面向科研团队的动态科研协作平台宏观规格：支持多人和多个 AI Agent 围绕可演化的研究路线图共同规划、执行、共享资源、提交变更提案并完成负责人审计。此阶段只确定产品边界和一级功能，不进入技术栈、数据库、消息队列或具体实现。
+
+## Notes
+领域：通用科研 Agent 协作平台。
+工作方式：研究路线图驱动任务，Agent 与人共同执行，公共资源沉淀，中央协调 Agent 处理提案，项目负责人承担最终审计责任。
+参考方向：DeepScientist、Dify、n8n、LangGraph、AutoGen，以及现有相似产品调研。
+
+## Decisions so far
+
+暂无。
+
+## Not yet specified
+
+- 首个可演示科研场景和通用平台边界。
+- 研究路线图、任务节点、依赖和动态分支的产品语义。
+- 人与 Agent 的协作、交接、消息和责任边界。
+- 公共资源、证据、版本和可复现记录的范围。
+- Proposal / PR、中央协调 Agent 和负责人审计机制。
+- 第一阶段最小产品范围与验证方式。
+
+## Out of scope
+
+- 当前阶段不确定具体编程语言、框架、数据库、消息中间件或部署方案。
+- 当前阶段不实现完整科研平台、公开 Agent 市场或真实实验设备控制。
+
+## Acceptance Criteria
+
+完成宏观需求地图；每个一级功能域都有明确的产品决策票；明确当前范围、未决问题和暂不涉及的实现细节。
