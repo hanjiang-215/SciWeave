@@ -30,6 +30,7 @@
 - *(dependencies)* Sync human-facing copy with authoritative ledger
 - *(dependencies)* Record local install of git-cliff, fer and gitee
 - *(dependencies)* Sync human-facing copy with authoritative ledger
+- *(changelog)* Record toolchain installation
 
 ### ⚙️ Miscellaneous Tasks
 
@@ -41,3 +42,4 @@
 - *(fer)* Record Gitee pull request
 - *(fer)* Record Gitee pull request
 - *(fer)* Record toolchain installation
+- *(fer)* Record toolchain installation commits
