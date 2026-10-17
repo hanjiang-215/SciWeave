@@ -59,3 +59,7 @@ Q2.9a/Q2.9b 治理分工确认：Wiki 和 Research Mapping 都采用两阶段审
 **2026-10-17T01:43:58Z**
 
 边界确认：LLM-Wiki 与 Research Mapping 完全独立，Wiki 维护自己的 Agent、MCP、Buffer、TerminusDB、WikiRevision 和审核链；第一阶段不接受跨域 MCP Submission 或 Proposal。Wiki 只能通过稳定对象 ID 和版本 ID 弱引用 Mapping，不共享内存对象、数据库连接或运行时状态。
+
+**2026-10-17T07:45:31Z**
+
+本轮用户确认：Resource Reference 的范围不限于文本或计算机可存储对象，也可以引用实物；研究假设、服务本科研项目的 Agent 输出、Skill 和 MCP 能力都属于可引用资源，但项目初始化阶段用于管理项目本身的基础 Skill/MCP（例如 map 管理能力）不纳入科研资源空间。Wiki 或可直接读取的 raw 资源可以直接查询；实物及其他不能直接读取的资源需要指派研究员处理，并将处理结果作为新的可追溯资源或 Wiki 内容提交。用户倾向于第一阶段采用最小资源状态模型，暂不引入复杂的多对象状态机。
