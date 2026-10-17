@@ -17,7 +17,7 @@ alwaysApply: true
 
 ## 文件命名
 
-1. fer 工单文件名以创建时的 UTC 时间戳开头，格式为 `YYYYMMDD_HHMMSS-<名称>.md`，例如 `20261014_085423-盘点项目依赖.md`；fer 生成的随机 ID 只保留在文件的 `id` 字段中，不写入文件名。创建和重命名流程见 `.cursor/rules/dev/use_fer.mdc`。
+1. fer 工单文件名沿用 `fer create` 生成的 `ai4-<id>.md`，以文件头中的 `id` 字段识别票据，用 `created` 字段读取创建时间；历史票据文件名不强制迁移，确需重命名时必须同步更新仓库内所有相对链接。创建和重命名流程见 `.cursor/rules/dev/use_fer.mdc`。
 2. `docs/` 和 `humans/` 下的文档使用稳定的主题名，中文文档直接用中文标题，例如 `DEPENDENCIES.md`、`赛事通知.md`；同一主题再次更新时沿用原文件名，历史版本由 Git 保存，不要用日期或版本后缀新建副本。
 3. 文件名不使用 `new`、`final`、`副本`、`v2` 这类临时标记；正本和副本用目录区分，而不是用文件名区分。
 
