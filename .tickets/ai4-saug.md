@@ -1,6 +1,6 @@
 ---
 id: ai4-saug
-status: in_progress
+status: closed
 deps: [ai4-9f7i]
 links: []
 created: 2026-10-16T00:37:54Z
@@ -39,3 +39,40 @@ tags: [wayfinder:research, product, ai4science]
 - TerminusDB-Wiki 的 MCP 作为受控访问入口，按 resource_id 和 version_id 提供元数据查询、受限文本读取和 raw 下载能力；大文件优先返回受控下载句柄或流式能力，不直接塞入 Agent 上下文。
 - Research Mapping 与 TerminusDB-Wiki 共用 Proposal、Trace/AuditEvent 和负责人审计链；Mapping Revision 与 Wiki Revision 分开，TerminusDB Commit 只表示存储状态变化，不单独表示科研内容已经批准。
 - raw 文件可用性状态与 Wiki 文档、Resource Reference 的治理状态分开管理；上传成功不等于资源批准，文件版本不可覆盖，只能新增版本并保留哈希和来源。
+
+**2026-10-17T01:07:05Z**
+
+Q2 治理决策确认：TerminusDB 作为 Wiki 文档正式事实源，Wiki 文档正文统一使用 Markdown。WikiDocument 保持稳定逻辑身份，修改或创建都生成新的不可变 WikiRevision，不覆盖已有正式版本；候选版本写入 Proposal 对应的 TerminusDB candidate branch，并通过 Commit 保留存储历史。正式 MCP 只读取当前 Formal WikiRevision；文档存在草稿时返回最新正式版本，只有草稿时返回无正式版本，不返回草稿。一个 Proposal 修改多个 Wiki 文档时整体审核、整体正式化。TerminusDB Commit 仅表示存储变化，不单独表示内容已批准。
+
+**2026-10-17T01:10:00Z**
+
+Q2.4-Q2.6 决策确认：Markdown frontmatter 仅展示页面描述性元数据，Proposal 状态、Formal WikiRevision 指针、ResourceVersion 关系、RawArtifact 哈希、权限、审计、candidate branch 和 Commit 等治理事实以 TerminusDB 结构化记录为准。Markdown wikilinks 用于阅读和导出，TerminusDB 结构化关系是引用事实源，不一致时以结构化关系为准并由 lint 检查。正式查询与草稿预览分离：正式查询只读 Formal WikiRevision 和正式资源版本，不读草稿或 candidate branch；预览必须带 Proposal 上下文，只读对应候选分支并明确标记 draft，不能参与正式调度或形成正式研究结论。
+
+**2026-10-17T01:22:20Z**
+
+Q2.9a/Q2.9b 治理分工确认：Wiki 和 Research Mapping 都采用两阶段审核。端侧 Agent 提交修改后，先进入 Buffer，由相关 TaskNode 负责人进行草稿接纳审核；审核通过后才写入 TerminusDB candidate branch，形成 WikiRevision 或 MappingRevision 草稿。草稿转正式版本时，由 Project Owner 进行 Formal Publication Review；只有通过后才更新 Formal WikiRevision 或 Formal MappingRevision 指针，进入正式查询和正式调度。端侧 Agent 可以提出修改，不能替代任务节点负责人或项目负责人完成审核。
+
+**2026-10-17T01:40:33Z**
+
+模型边界修正：TaskNode 和 DependencyEdge 只属于 Research Mapping，由独立的 Mapping TerminusDB 处理；WikiDocument、WikiRevision、Resource、ResourceVersion 和 RawArtifact 元数据只属于 LLM-Wiki，由独立的 Wiki TerminusDB 处理。此前将 TaskNode 负责人泛化为 Wiki 第一阶段审核者的表述不适用，已修正为：Mapping 由 TaskNode 负责人审核，Wiki 由 Wiki Curator、Resource Owner 或文档负责人审核。两边可共享 Proposal、Trace/AuditEvent 的治理概念，但领域对象、Revision 和数据库边界分离。
+
+**2026-10-17T01:43:58Z**
+
+边界确认：LLM-Wiki 与 Research Mapping 完全独立，Wiki 维护自己的 Agent、MCP、Buffer、TerminusDB、WikiRevision 和审核链；第一阶段不接受跨域 MCP Submission 或 Proposal。Wiki 只能通过稳定对象 ID 和版本 ID 弱引用 Mapping，不共享内存对象、数据库连接或运行时状态。
+
+**2026-10-17T07:45:31Z**
+
+本轮用户确认：Resource Reference 的范围不限于文本或计算机可存储对象，也可以引用实物；研究假设、服务本科研项目的 Agent 输出、Skill 和 MCP 能力都属于可引用资源，但项目初始化阶段用于管理项目本身的基础 Skill/MCP（例如 map 管理能力）不纳入科研资源空间。Wiki 或可直接读取的 raw 资源可以直接查询；实物及其他不能直接读取的资源需要指派研究员处理，并将处理结果作为新的可追溯资源或 Wiki 内容提交。用户倾向于第一阶段采用最小资源状态模型，暂不引入复杂的多对象状态机。
+
+## Answer
+
+科研公共资源与证据空间采用“范围广、首期实现窄”的产品边界：
+
+- Resource Reference 可以引用数字对象、文字内容、计算结果、研究假设、服务本科研项目的 Agent 输出、Skill、MCP 能力或实物；项目初始化阶段用于管理平台本身的基础 Skill/MCP 不纳入科研资源空间。
+- 领域模型保留 Resource、ResourceVersion、Resource Reference 和可选的 RawArtifact。Resource 表示逻辑身份，ResourceVersion 表示不可变版本，Resource Reference 指向具体版本，RawArtifact 只为文件、数据集或代码快照等载体提供可选记录。
+- 正式引用必须指向具体 ResourceVersion；资源本体由外部系统或中央节点服务保存，LLM-Wiki 保存说明、结构化元数据和资源引用，不把资源本体复制进 Wiki。
+- 第一阶段不为每个对象建立独立的复杂状态机。Resource Reference 复用提交和审核生命周期，ResourceVersion 记录可访问性；历史引用保留，资源失效不删除历史事实。
+- 资源处理分为 `direct_query` 和 `researcher_required`。Wiki 文档和可直接读取的 raw 资源可以直接查询；实物或其他无法直接读取的资源需要指派研究员处理，处理结果作为新的 ResourceVersion、资源引用或 Wiki 内容提交。
+- 首个资源空间演示采用数字资源端到端闭环，并保留实物处理任务分流；第一阶段不实现实物库存、现场采集、实验设备控制或完整人工工作流。
+
+本决策形成 Resource、ResourceVersion、RawArtifact、Resource Reference 和 Resource Handling Mode 的术语边界，并约束后续 LLM-Wiki 的领域模型和首期产品范围。

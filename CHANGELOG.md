@@ -31,6 +31,30 @@
 - *(dependencies)* Record local install of git-cliff, fer and gitee
 - *(dependencies)* Sync human-facing copy with authoritative ledger
 - *(changelog)* Record toolchain installation
+- *(changelog)* Record toolchain installation commits
+- *(mapping)* Define single graph draft lifecycle
+- *(terminusdb)* Record candidate branch validation
+- *(mapping)* Add node edge field model ticket
+- *(changelog)* Record mapping validation
+- *(glossary)* Clarify LLM-Wiki governance boundary
+- *(glossary)* Define wiki document revisions
+- *(wayfinder)* Record wiki revision governance
+- *(glossary)* Define wiki query governance
+- *(wayfinder)* Record wiki query governance
+- *(glossary)* Define two-stage review roles
+- *(wayfinder)* Record two-stage review
+- *(glossary)* Separate mapping and wiki stores
+- *(wayfinder)* Correct mapping wiki boundary
+- *(wayfinder)* Isolate mapping and wiki domains
+- *(wayfinder)* Clarify isolated management MCPs
+- *(wiki)* Define Wiki Buffer submission unit
+- *(terminusdb)* Record candidate branch governance limits
+- *(wiki)* Define Proposal and merge request lifecycle
+- *(domain)* Clarify research resource boundaries
+- *(wayfinder)* Resolve research resource scope
+- *(governance)* Align mapping and wiki proposals
+- *(fer)* Use native ticket filenames
+- *(changelog)* Record governance and ticket updates
 
 ### ⚙️ Miscellaneous Tasks
 
@@ -43,3 +67,4 @@
 - *(fer)* Record Gitee pull request
 - *(fer)* Record toolchain installation
 - *(fer)* Record toolchain installation commits
+- *(fer)* Restore native ticket filenames
