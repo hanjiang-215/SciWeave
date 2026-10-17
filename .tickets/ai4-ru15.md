@@ -27,21 +27,22 @@ tags: [wayfinder:map, product, ai4science]
 - [TerminusDB Mapping 版本与 Agent 提交原型验证](ai4-9hcj.md)：实测 TerminusDB 12.0.8 支持 Schema、TaskNode、依赖边、Commit、History 和 Diff；HTTP 文档写入会立即生成 Commit，`commit=false` 不提供未提交工作区；原生 reset 会移动当前分支状态并使新提交不再出现在该分支日志中，因此 Proposal、审核和不可擦除回滚痕迹仍需由平台补充。
 - [TerminusDB 候选分支与草稿工作区行为验证](ai4-2alw.md)：TerminusDB 12.0.8 支持从 main 创建隔离 candidate branch、独立写入、Commit/History/Diff 和通过 rebase 推进到 main；不存在无 Commit 草稿工作区，平台需将 candidate branch 与 Proposal 审核、正式 Revision 和正式查询投影关联，不能把 rebase 本身当作审批。
 - [科研公共资源与证据空间](ai4-saug.md)：资源空间采用“范围广、首期实现窄”的边界；Resource Reference 可引用数字对象、研究假设、项目 Agent 输出、Skill、MCP 能力或实物，但排除平台初始化基础能力。Resource、ResourceVersion、Resource Reference 和可选 RawArtifact 分工明确，正式引用指向不可变版本；可直接读取资源走 direct query，实物等不可直接读取资源转为 researcher-required 处理任务，首期只完整演示数字资源闭环。
-- [单一 Mapping 的草稿与正式视图模型](ai4-u3rs.md)：项目只维护一个逻辑 Research Mapping，但不要求草稿和正式内容共存于同一存储分支；正式内容位于 formal branch，每个 Proposal 使用独立 candidate branch 承载草稿。节点和边内容创建后不可原地修改，同一逻辑对象同一时间只允许一个活动草稿；Proposal 整体审核草稿变更，普通查询只读取当前 Formal MappingRevision，TerminusDB Commit/History/Diff 负责底层版本历史。
+- [单一 Mapping 的草稿与正式视图模型](ai4-u3rs.md)：项目只维护一个逻辑 Research Mapping，正式内容位于 formal branch，每个 Proposal 使用独立 candidate branch 承载草稿；节点和边内容创建后不可原地修改，候选版本不可变，普通查询只读取当前 Formal MappingRevision，TerminusDB Commit/History/Diff 负责底层版本历史。后续统一治理决策允许从同一正式版本派生多个并行 Proposal，提交 Merge Request 后锁定 candidate head，最终只能选择一个完整方案正式化。
 - [Wiki Buffer 提交单位：单文档、文档加引用还是完整 ChangeSet](ai4-36ek.md)：Buffer 以单个文档变更单元为最小接纳对象，正文与该版本所需的 Resource Reference 关系一起保持一致；多个单元再由 Proposal 聚合并整体审核，单个逻辑文档同一时间只允许一个活动草稿。
-- [TerminusDB candidate branch 状态标记与只读归档能力验证](ai4-2sdn.md)：TerminusDB 12.0.8 的 branch 只提供存储分支创建、写入和删除，不提供 Proposal 状态、只读或归档元数据；Wiki 应在平台结构化记录中保存 selected/not_selected/rejected/abandoned、审计和写入控制，物理删除只能作为受控存储清理。
-- [Wiki candidate Commit 只读对象与正式查询边界](ai4-2sdn.md)：一个正式版本可以派生多个 candidate branch 和 candidate Commit；candidate Commit 作为不可变候选对象，提交 Merge Request 后锁定对应 candidate head。普通查询只读取 formal branch 的当前 Formal WikiRevision，审计查询才按 Proposal 读取全部 candidate branch、candidate Commit、Diff 和治理记录；后续修改必须基于新的正式版本，不修改既有候选提交。
+- [TerminusDB candidate branch 状态、只读归档与正式查询边界](ai4-2sdn.md)：TerminusDB 12.0.8 的 branch 只提供存储分支创建、写入和删除，不提供 Proposal 状态、只读或归档元数据；候选 Commit 不代表已批准，平台必须在结构化记录中保存 selected/not_selected/rejected/abandoned、审计和写入控制。一个正式版本可以派生多个 candidate branch，提交 Merge Request 后锁定 candidate head；普通查询只读取 formal branch 的当前 Formal WikiRevision，审计查询才读取候选分支、Commit、Diff 和治理记录，物理删除只能作为受控存储清理。
 - [研究变更 Proposal / PR 治理](ai4-dy2x.md)：SciWeave 首版只将 Research Mapping 的路线结构变化纳入 Proposal / PR 闭环；任务执行状态、运行日志和普通进度记录不改变正式 Mapping，不单独创建 Proposal。首版采用单候选演示路径，中央 Agent 预审，项目负责人正式发布，候选和驳回记录保留审计；LLM-Wiki 与跨域原子正式化暂不进入首版。
+- [通用平台的第一阶段产品范围](ai4-ay0e.md)：SciWeave 首版以 Research Mapping 驱动的科研任务闭环为唯一主线，覆盖项目入口、任务依赖、人员/Agent 执行、数字证据引用、Mapping Proposal、Project Owner 人工审核和执行审计；平台保持场景中立，通过可替换示例场景验证跨场景复用。LLM-Wiki 完整治理、复杂资源模型、并行候选、跨域写入、真实设备控制和复杂权限暂缓。
 - [中央协调 Agent 与审计体系](ai4-vbnr.md)：首版由一个 Central Agent 负责调度、格式和影响范围预审、失败重试与执行留痕；Mapping 与 Wiki 仍通过独立管理 MCP 隔离。任何 Formal Mapping 或正式科研结果发布都必须由 Project Owner 明确批准，审计事件追加保留，失败改变路线时必须进入 Mapping Proposal。
 - [Research Mapping 与 LLM-Wiki 统一提案治理内核](ai4-3nru.md)：Map 与 Wiki 共享 Buffer、Proposal、candidate branch、candidate head lock、Merge Request Buffer、diff/dry-run 和 Formal Revision 的治理语义，但分别实现独立 MCP、Buffer、校验器、TerminusDB、Revision 和审计链；允许并行 Proposal，最终只能选择一个完整方案正式化，不支持跨域 Proposal 或跨域原子正式化。
 
 ## Not yet specified
 
-- TerminusDB-Wiki 的 Resource、ResourceVersion、RawArtifact、SourceDocument、Entity、Concept、Synthesis、Proposal 和 AuditEvent 之间的具体领域模型与关系。
-- 中央节点服务 raw 存储的版本、哈希、访问权限、容量阈值、备份、保留和删除规则。
-- Wiki 文档、Resource Reference、Proposal、Trace 和 AuditEvent 的领域对象模型与审计字段仍由 LLM-Wiki 自己定义和维护；Research Mapping 采用自己的对应对象和审计链。两者共享提案治理语义，但不共享领域实现、治理存储或跨域写入。
-- 节点和边的执行痕迹、失败路线和动态变更的完整表达。
-- 首个可演示科研场景、MCP 工具边界和第一阶段最小产品范围与验证方式。
+- Research Mapping 的 TaskNode 与 Dependency Edge 字段模型、必填条件、状态约束、版本字段和正式查询所需字段，继续由 [Research Mapping 节点与依赖边字段模型](ai4-r3so.md) 决定。
+- 首版默认科研示例场景、最小数字证据、SciencePal 承载方式、失败或路线调整脚本和最终验收证据，继续由 [SciWeave 默认科研示例场景与验证证据](ai4-aaff.md) 决定；当前只确定选择标准和验证闭环，尚未替用户选择具体学科。
+- 首版进入规格设计前，还需要把已确定的产品边界翻译为可验证的最小领域规格：MCP 提交边界、Execution Record、AuditEvent、Formal Mapping 查询/调度边界、Proposal Diff/影响预览和演示验收脚本。
+- TerminusDB-Wiki 的 Resource、ResourceVersion、RawArtifact、SourceDocument、Entity、Concept、Synthesis、Proposal 和 AuditEvent 之间的具体领域模型与关系，仍由 LLM-Wiki 自己定义和维护；Research Mapping 采用自己的对应对象和审计链。两者共享提案治理语义，但不共享领域实现、治理存储或跨域写入。
+- 中央节点服务 raw 存储的版本、哈希、访问权限、容量阈值、备份、保留和删除规则，仍未确定。
+- 节点和边的执行痕迹、失败路线和动态变更的完整表达，需在字段模型和首版规格中共同收敛。
 
 ## Out of scope
 
