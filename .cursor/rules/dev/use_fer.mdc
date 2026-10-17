@@ -10,7 +10,7 @@ alwaysApply: true
 1. fer 是本项目唯一的 issue tracker。需求、缺陷、任务、spec、阻塞关系、状态和讨论以 fer 中的记录为准；不要用聊天内容或本地临时笔记替代 issue。
 2. 开始开发前先确认对应的 fer issue、目标、验收标准、负责人和当前状态。没有明确 issue 时，先创建或请用户确认，不直接凭模糊描述扩大范围。
 3. 使用 fer 的实际命令和项目配置完成读取、创建、更新、评论、标签、状态变更和关联操作；执行前先查看仓库中 issue-tracker 配置，命令不确定时查看 `fer --help`，不要猜测参数。
-4. 创建 ticket 后，文件名必须以创建时的 UTC 时间戳开头，格式为 `YYYYMMDD_HHMMSS-文件名.md`，例如 `20261014_085423-盘点项目依赖.md`；时间戳取实际创建时间，便于按文件名排序。fer 生成的随机 ticket ID 必须保留在文件的 `id` 字段中，并通过该字段识别 ticket。fer 不提供自定义文件名参数，因此创建后必须立即按此格式重命名文件。
+4. 创建 ticket 后保留 `fer create` 生成的 `ai4-<id>.md` 文件名，并以文件头中的 `id` 字段识别票据；按 `created` 字段读取创建时间。历史票据文件名不强制迁移；若确需重命名，必须同步更新仓库内所有相对链接。
 5. 如果工程技能要求 issue tracker 配置或标签映射，先读取 `docs/agents/issue-tracker.md`、`docs/agents/triage-labels.md`（如存在）；缺少配置时使用 `.cursor/skills/engineering/setup-matt-pocock-skills/` 中的流程补齐配置，并将 fer 的工作流记录为自定义 tracker。
 
 ## 工程技能流程
