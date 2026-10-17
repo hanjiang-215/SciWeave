@@ -1,6 +1,6 @@
 ---
 id: ai4-saug
-status: in_progress
+status: closed
 deps: [ai4-9f7i]
 links: []
 created: 2026-10-16T00:37:54Z
@@ -63,3 +63,16 @@ Q2.9a/Q2.9b 治理分工确认：Wiki 和 Research Mapping 都采用两阶段审
 **2026-10-17T07:45:31Z**
 
 本轮用户确认：Resource Reference 的范围不限于文本或计算机可存储对象，也可以引用实物；研究假设、服务本科研项目的 Agent 输出、Skill 和 MCP 能力都属于可引用资源，但项目初始化阶段用于管理项目本身的基础 Skill/MCP（例如 map 管理能力）不纳入科研资源空间。Wiki 或可直接读取的 raw 资源可以直接查询；实物及其他不能直接读取的资源需要指派研究员处理，并将处理结果作为新的可追溯资源或 Wiki 内容提交。用户倾向于第一阶段采用最小资源状态模型，暂不引入复杂的多对象状态机。
+
+## Answer
+
+科研公共资源与证据空间采用“范围广、首期实现窄”的产品边界：
+
+- Resource Reference 可以引用数字对象、文字内容、计算结果、研究假设、服务本科研项目的 Agent 输出、Skill、MCP 能力或实物；项目初始化阶段用于管理平台本身的基础 Skill/MCP 不纳入科研资源空间。
+- 领域模型保留 Resource、ResourceVersion、Resource Reference 和可选的 RawArtifact。Resource 表示逻辑身份，ResourceVersion 表示不可变版本，Resource Reference 指向具体版本，RawArtifact 只为文件、数据集或代码快照等载体提供可选记录。
+- 正式引用必须指向具体 ResourceVersion；资源本体由外部系统或中央节点服务保存，LLM-Wiki 保存说明、结构化元数据和资源引用，不把资源本体复制进 Wiki。
+- 第一阶段不为每个对象建立独立的复杂状态机。Resource Reference 复用提交和审核生命周期，ResourceVersion 记录可访问性；历史引用保留，资源失效不删除历史事实。
+- 资源处理分为 `direct_query` 和 `researcher_required`。Wiki 文档和可直接读取的 raw 资源可以直接查询；实物或其他无法直接读取的资源需要指派研究员处理，处理结果作为新的 ResourceVersion、资源引用或 Wiki 内容提交。
+- 首个资源空间演示采用数字资源端到端闭环，并保留实物处理任务分流；第一阶段不实现实物库存、现场采集、实验设备控制或完整人工工作流。
+
+本决策形成 Resource、ResourceVersion、RawArtifact、Resource Reference 和 Resource Handling Mode 的术语边界，并约束后续 LLM-Wiki 的领域模型和首期产品范围。
