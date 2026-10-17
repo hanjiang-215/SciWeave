@@ -38,3 +38,7 @@ tags: [wayfinder:grilling, mapping, proposal, ai4science]
 - 审核人、审核时间和评语记录在 Proposal/AuditEvent；对象保存生命周期状态、Proposal 引用和正式化 Revision 引用，避免把一份整体审核信息重复复制到每个对象。
 - TerminusDB 的 Commit、History 和 Diff 负责记录节点与边的数据变化；平台保存 Proposal、审核事件、base_commit、candidate_commit 和 resulting FormalRevision 的关联，不重复保存完整文字版 Diff。
 - 第一阶段只要求历史追溯，不实现数据库 reset 式回滚。未来回滚应通过新 Proposal 生成新的正式 Revision，而不是移动或删除历史指针。
+
+**2026-10-17T08:28:32Z**
+
+本决策被「Research Mapping 与 LLM-Wiki 统一提案治理内核」更新：不再采用“同一逻辑对象全局只能有一个活动草稿”的限制。Research Mapping 与 Wiki 均允许从同一 Formal Revision 派生多个并行 Proposal/candidate branch；每个候选版本不可变，创建 Merge Request Buffer 后固定 candidate head，最终由 Project Owner 选择一个完整方案正式化。领域实现和冲突检测仍然独立。

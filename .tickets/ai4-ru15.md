@@ -31,13 +31,13 @@ tags: [wayfinder:map, product, ai4science]
 - [Wiki Buffer 提交单位：单文档、文档加引用还是完整 ChangeSet](20261017_015557-Wiki%20Buffer%20提交单位：单文档、文档加引用还是完整%20ChangeSet.md)：Buffer 以单个文档变更单元为最小接纳对象，正文与该版本所需的 Resource Reference 关系一起保持一致；多个单元再由 Proposal 聚合并整体审核，单个逻辑文档同一时间只允许一个活动草稿。
 - [TerminusDB candidate branch 状态标记与只读归档能力验证](20261017_025922-TerminusDB%20candidate%20branch%20状态标记与只读归档能力验证.md)：TerminusDB 12.0.8 的 branch 只提供存储分支创建、写入和删除，不提供 Proposal 状态、只读或归档元数据；Wiki 应在平台结构化记录中保存 selected/not_selected/rejected/abandoned、审计和写入控制，物理删除只能作为受控存储清理。
 - [Wiki candidate Commit 只读对象与正式查询边界](20261017_025922-TerminusDB%20candidate%20branch%20状态标记与只读归档能力验证.md)：一个正式版本可以派生多个 candidate branch 和 candidate Commit；candidate Commit 作为不可变候选对象，提交 Merge Request 后锁定对应 candidate head。普通查询只读取 formal branch 的当前 Formal WikiRevision，审计查询才按 Proposal 读取全部 candidate branch、candidate Commit、Diff 和治理记录；后续修改必须基于新的正式版本，不修改既有候选提交。
-- [Wiki Proposal 与 Merge Request Buffer 生命周期](20261017_032142-Wiki%20Proposal%20与%20Merge%20Request%20Buffer%20生命周期.md)：Wiki Buffer 通过第一阶段接纳后进入 Proposal 的 candidate branch；Agent 在 merge 前必须提交 diff/merge dry-run，并以固定 candidate head 创建 Merge Request Buffer。冲突时可生成多个新的完整解决方案，包括将多个 Proposal 的改动组合为新的 `blended` 候选提交，但 Project Owner 最终只能选择一个方案直接正式化；其他方案标记 not_selected，驳回方案保留为只读审计对象，后续修改必须基于新的 Formal WikiRevision 重新提交。
+- [Research Mapping 与 LLM-Wiki 统一提案治理内核](20261017_082736-Research%20Mapping%20与%20LLM-Wiki%20统一提案治理内核.md)：Map 与 Wiki 共享 Buffer、Proposal、candidate branch、candidate head lock、Merge Request Buffer、diff/dry-run 和 Formal Revision 的治理语义，但分别实现独立 MCP、Buffer、校验器、TerminusDB、Revision 和审计链；允许并行 Proposal，最终只能选择一个完整方案正式化，不支持跨域 Proposal 或跨域原子正式化。
 
 ## Not yet specified
 
 - TerminusDB-Wiki 的 Resource、ResourceVersion、RawArtifact、SourceDocument、Entity、Concept、Synthesis、Proposal 和 AuditEvent 之间的具体领域模型与关系。
 - 中央节点服务 raw 存储的版本、哈希、访问权限、容量阈值、备份、保留和删除规则。
-- Wiki 文档、Resource Reference、Proposal、Trace 和 AuditEvent 分别由 LLM-Wiki 自己定义和维护；Research Mapping 采用自己的对应对象和审计链，两者不共享治理存储或跨域写入。
+- Wiki 文档、Resource Reference、Proposal、Trace 和 AuditEvent 的领域对象模型与审计字段仍由 LLM-Wiki 自己定义和维护；Research Mapping 采用自己的对应对象和审计链。两者共享提案治理语义，但不共享领域实现、治理存储或跨域写入。
 - 节点和边的执行痕迹、失败路线和动态变更的完整表达。
 - 首个可演示科研场景、MCP 工具边界和第一阶段最小产品范围与验证方式。
 

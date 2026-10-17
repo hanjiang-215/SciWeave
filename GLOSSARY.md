@@ -30,9 +30,9 @@
 
 **Proposal Preview（提案预览）**：在明确 Proposal 上下文中读取 candidate branch 草稿、生成 Diff 和查看影响范围的能力。提案预览与正式查询分离，预览内容带有草稿标记，不能直接参与正式调度或形成正式研究结论。
 
-**Candidate Commit（候选提交）**：由 Formal WikiRevision 派生、写入 candidate branch 的不可变存储版本。Candidate Commit 只表示候选内容和存储历史，不表示已经正式批准；提交 Merge Request Buffer 后，关联的 candidate head 被锁定为本次正式化审核对象。
+**Candidate Commit（候选提交）**：由某个 Formal Revision 派生、写入领域 candidate branch 的不可变存储版本。Candidate Commit 只表示候选内容和存储历史，不表示已经正式批准；提交 Merge Request Buffer 后，关联的 candidate head 被锁定为本次正式化审核对象。
 
-**Merge Request Buffer（合并请求缓冲）**：Agent 通过 Wiki MCP 提交的正式化请求，引用一个或多个 candidate Commit、固定 candidate head、基准 Formal WikiRevision、diff/merge dry-run 结果和候选解决方案。Project Owner 从完整方案中只能选择一个批准或驳回；方案可以是直接采用一个候选，也可以是 `blended` 的新候选结果；它不重复承载 Wiki 正文。
+**Merge Request Buffer（合并请求缓冲）**：Agent 通过领域管理 MCP 提交的正式化请求，引用一个或多个 Candidate Commit、固定 candidate head、基准 Formal Revision、diff/merge dry-run 结果和候选解决方案。Project Owner 从完整方案中只能选择一个批准或驳回；方案可以是直接采用一个候选，也可以是 `blended` 的新候选结果；它不重复承载领域正文。
 
 **Candidate Resolution（候选解决版本）**：Agent 针对多个冲突 candidate branch 生成的新候选版本。它可以选择某个候选、综合多个候选或放弃部分修改，但不能改写其他提交者的原始 candidate branch 或 Commit。综合多个来源形成的新候选结果称为 `blended`，必须拥有自己的不可变 candidate Commit。
 
@@ -59,6 +59,10 @@
 **Resource Reference Status（资源引用状态）**：描述外部资源当前可追踪性的状态，例如 `available`、`unavailable`、`moved`、`superseded` 和 `archived`；资源链接失效不会删除历史引用，但正式视图应提示当前不可用。
 
 ## 协作与治理
+
+**Unified Proposal Governance Kernel（统一提案治理内核）**：Research Mapping 与 LLM-Wiki 共享的提案版本治理语义，包括 Buffer 接纳、Proposal、candidate branch、candidate Commit、candidate head 锁定、Merge Request Buffer、冲突检查和 Formal Revision；它不要求两个领域共享实现、存储、MCP 或审计链。
+
+**Domain Adapter（领域适配层）**：某个领域对统一提案治理内核的独立实现，负责领域专属的 Buffer、MCP、对象校验、冲突检测、候选存储、正式版本和审计；Research Mapping 与 LLM-Wiki 各自拥有一个领域适配层。
 
 **Proposal（变更提案）**：对正式 Research Mapping 或 LLM-Wiki 受治理内容提出的结构化变更请求。Mapping Proposal 只修改 Research Mapping；Wiki Proposal 只修改 LLM-Wiki；第一阶段不存在跨域 Proposal。
 
