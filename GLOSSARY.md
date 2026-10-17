@@ -12,6 +12,12 @@
 
 **Mapping View（Mapping 视图）**：从 Research Mapping 筛选或投影出的展示结果，例如路线、任务、负责人、Agent、资源引用或历史视图；视图不拥有独立事实。
 
+**WikiDocument（Wiki 文档）**：LLM-Wiki 中一个具有稳定逻辑身份的文档对象，例如来源文档、实体、概念或综合内容。WikiDocument 的正文通过多个 WikiRevision 版本保存；更新文档不会覆盖已有正式版本。只有当前 Formal WikiRevision 才能作为正式查询结果。
+
+**WikiRevision（Wiki 文档版本）**：WikiDocument 的一次不可变内容版本，包含 Markdown 正文、页面元数据、来源引用、创建者、创建时间、基础版本、Proposal 关联和治理状态。草稿版本可以在 Proposal 预览中查看，但正式 MCP 查询只返回最新 Formal WikiRevision。
+
+**Formal WikiRevision（正式 Wiki 版本）**：已经通过 Proposal 整体审核并被平台正式查询指针选中的 WikiRevision。TerminusDB Commit 只记录存储变化，不能单独证明 WikiRevision 已经正式批准。
+
 **LLM-Wiki（大语言模型科研 Wiki）**：面向科研项目的文字知识与证据索引空间。LLM-Wiki 保存研究说明、结构化元数据和对外部科研资源的引用，不保存数据、代码、实验文件等资源本体；其内容可以由人或 Agent 提交，并经过项目治理流程形成正式版本。平台仅参考 Harness Wiki 的 LLM-Wiki 文档分类和治理方式，不将 Harness Wiki 作为本平台的整体存储架构或唯一事实源。
 
 **Resource Reference（资源引用）**：LLM-Wiki 中指向外部科研资源的一条结构化记录，而不是资源本体。记录至少包括资源类型、外部定位信息、不可变版本标识（如 DOI、提交号或数据集版本）、来源任务、创建者、生成时间、输入资源、治理状态、被引用的 Wiki 文档或研究结论，以及资源可访问性状态。数据、代码、论文、实验结果和图表等资源由外部系统保存，Resource Reference 负责让它们可发现、可解释和可追溯。
