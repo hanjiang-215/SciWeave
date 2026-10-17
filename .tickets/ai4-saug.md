@@ -55,3 +55,7 @@ Q2.9a/Q2.9b 治理分工确认：Wiki 和 Research Mapping 都采用两阶段审
 **2026-10-17T01:40:33Z**
 
 模型边界修正：TaskNode 和 DependencyEdge 只属于 Research Mapping，由独立的 Mapping TerminusDB 处理；WikiDocument、WikiRevision、Resource、ResourceVersion 和 RawArtifact 元数据只属于 LLM-Wiki，由独立的 Wiki TerminusDB 处理。此前将 TaskNode 负责人泛化为 Wiki 第一阶段审核者的表述不适用，已修正为：Mapping 由 TaskNode 负责人审核，Wiki 由 Wiki Curator、Resource Owner 或文档负责人审核。两边可共享 Proposal、Trace/AuditEvent 的治理概念，但领域对象、Revision 和数据库边界分离。
+
+**2026-10-17T01:43:58Z**
+
+边界确认：LLM-Wiki 与 Research Mapping 完全独立，Wiki 维护自己的 Agent、MCP、Buffer、TerminusDB、WikiRevision 和审核链；第一阶段不接受跨域 MCP Submission 或 Proposal。Wiki 只能通过稳定对象 ID 和版本 ID 弱引用 Mapping，不共享内存对象、数据库连接或运行时状态。

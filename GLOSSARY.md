@@ -10,6 +10,8 @@
 
 **LLM-Wiki Store（LLM-Wiki 存储）**：独立处理 LLM-Wiki 的 TerminusDB 实例或逻辑存储边界，保存 WikiDocument、WikiRevision、Resource、ResourceVersion、RawArtifact 元数据及其引用关系。它不保存 TaskNode 或 Dependency Edge。
 
+**Domain Isolation（领域隔离）**：Research Mapping 与 LLM-Wiki 在第一阶段采用完全独立的运行边界，分别拥有自己的 Agent、MCP、Buffer、内存上下文、校验器、TerminusDB、candidate branch、Revision 和审计链。两个领域只能通过稳定的对象 ID 和版本 ID 建立显式弱引用，不共享内存对象、数据库连接、Buffer 或运行时状态；第一阶段不支持单个 MCP Submission 或 Proposal 同时修改两个领域。
+
 **TaskNode（任务节点）**：Research Mapping 中的唯一拓扑节点，表示一个需要规划、执行、讨论、审核或推进的科研任务；平台不预设固定的学科任务类型。
 
 **Dependency Edge（依赖边）**：连接两个 TaskNode 的关系，保存信息依赖、执行阻塞、所需输出和激活条件；节点不重复保存前置或后继节点列表。
