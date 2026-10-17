@@ -24,6 +24,14 @@
 
 **Proposal Preview（提案预览）**：在明确 Proposal 上下文中读取 candidate branch 草稿、生成 Diff 和查看影响范围的能力。提案预览与正式查询分离，预览内容带有草稿标记，不能直接参与正式调度或形成正式研究结论。
 
+**Draft Acceptance Review（草稿接纳审核）**：端侧 Agent 提交修改后，由相关任务节点负责人进行的第一阶段审核。审核通过后，Buffer 中的变更才可以写入 TerminusDB candidate branch，形成 WikiRevision 或 Mapping Revision 草稿；该审核不代表内容已经成为正式科研事实。
+
+**Formal Publication Review（正式发布审核）**：草稿转为正式版本前，由项目负责人进行的第二阶段审核。只有审核通过并更新 Formal WikiRevision 或 Formal Mapping Revision 指针后，内容才能进入正式查询和正式调度。
+
+**Task Node Owner（任务节点负责人）**：对相关 TaskNode 的任务修改、结果和证据进行第一阶段审核的责任人。其审核范围是草稿接纳，不替代项目负责人进行正式发布批准。
+
+**Project Owner（项目负责人）**：对项目正式 Research Mapping、Wiki 内容及其治理变更承担最终审核责任的人，负责草稿转正式版本的正式发布审核。
+
 **LLM-Wiki（大语言模型科研 Wiki）**：面向科研项目的文字知识与证据索引空间。LLM-Wiki 保存研究说明、结构化元数据和对外部科研资源的引用，不保存数据、代码、实验文件等资源本体；其内容可以由人或 Agent 提交，并经过项目治理流程形成正式版本。平台仅参考 Harness Wiki 的 LLM-Wiki 文档分类和治理方式，不将 Harness Wiki 作为本平台的整体存储架构或唯一事实源。
 
 **Resource Reference（资源引用）**：LLM-Wiki 中指向外部科研资源的一条结构化记录，而不是资源本体。记录至少包括资源类型、外部定位信息、不可变版本标识（如 DOI、提交号或数据集版本）、来源任务、创建者、生成时间、输入资源、治理状态、被引用的 Wiki 文档或研究结论，以及资源可访问性状态。数据、代码、论文、实验结果和图表等资源由外部系统保存，Resource Reference 负责让它们可发现、可解释和可追溯。
