@@ -30,6 +30,12 @@
 
 **Proposal Preview（提案预览）**：在明确 Proposal 上下文中读取 candidate branch 草稿、生成 Diff 和查看影响范围的能力。提案预览与正式查询分离，预览内容带有草稿标记，不能直接参与正式调度或形成正式研究结论。
 
+**Candidate Commit（候选提交）**：由 Formal WikiRevision 派生、写入 candidate branch 的不可变存储版本。Candidate Commit 只表示候选内容和存储历史，不表示已经正式批准；提交 Merge Request Buffer 后，关联的 candidate head 被锁定为本次正式化审核对象。
+
+**Merge Request Buffer（合并请求缓冲）**：Agent 通过 Wiki MCP 提交的正式化请求，引用一个或多个 candidate Commit、固定 candidate head、基准 Formal WikiRevision、diff/merge dry-run 结果和候选解决方案。Project Owner 从完整方案中只能选择一个批准或驳回；方案可以是直接采用一个候选，也可以是 `blended` 的新候选结果；它不重复承载 Wiki 正文。
+
+**Candidate Resolution（候选解决版本）**：Agent 针对多个冲突 candidate branch 生成的新候选版本。它可以选择某个候选、综合多个候选或放弃部分修改，但不能改写其他提交者的原始 candidate branch 或 Commit。综合多个来源形成的新候选结果称为 `blended`，必须拥有自己的不可变 candidate Commit。
+
 **Draft Acceptance Review（草稿接纳审核）**：端侧 Agent 提交修改后进行的第一阶段审核。Research Mapping 变更由相关 TaskNode 负责人审核；LLM-Wiki 变更由 Wiki Curator、Resource Owner 或文档负责人审核。审核通过后，Buffer 中的变更才可以分别写入对应的 TerminusDB candidate branch，形成 WikiRevision 或 Mapping Revision 草稿；该审核不代表内容已经成为正式科研事实。
 
 **Formal Publication Review（正式发布审核）**：草稿转为正式版本前，由项目负责人进行的第二阶段审核。只有审核通过并更新 Formal WikiRevision 或 Formal Mapping Revision 指针后，内容才能进入正式查询和正式调度。
@@ -46,7 +52,9 @@
 
 ## 协作与治理
 
-**Proposal（变更提案）**：对正式 Research Mapping 或其受治理内容提出的结构化变更请求，例如新增任务、修改依赖、废弃路线或申请回滚。
+**Proposal（变更提案）**：对正式 Research Mapping 或 LLM-Wiki 受治理内容提出的结构化变更请求。Mapping Proposal 只修改 Research Mapping；Wiki Proposal 只修改 LLM-Wiki；第一阶段不存在跨域 Proposal。
+
+**Wiki Proposal（Wiki 变更提案）**：由一个或多个已通过第一阶段接纳审核的 Wiki Buffer Submission 组成的 Wiki 治理单元。Wiki Proposal 关联 candidate branch、candidate Commit、Merge Request Buffer、基准 Formal WikiRevision 和正式化结果；它可以包含多个文档变更，但默认整体选择和整体正式化。
 
 **MCP Submission（MCP 提交）**：端侧 Agent 通过标准化 MCP 工具提交任务结果、失败报告或 Proposal 的行为；它是平台接收 Agent 变更的统一入口，不等于正式批准。
 
