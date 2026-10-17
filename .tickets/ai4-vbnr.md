@@ -2,7 +2,7 @@
 id: ai4-vbnr
 status: closed
 deps: [ai4-9f7i, ai4-ebqx, ai4-e257, ai4-dy2x]
-links: []
+links: [ai4-m0vt]
 created: 2026-10-16T00:37:54Z
 type: grilling
 priority: 1
