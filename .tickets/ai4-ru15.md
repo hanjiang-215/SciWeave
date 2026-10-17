@@ -26,15 +26,14 @@ tags: [wayfinder:map, product, ai4science]
 - [科研路线图与动态研究图](ai4-ebqx.md)：项目只维护一张完整 Research Mapping，拓扑只包含统一的 TaskNode；节点保存自身信息，依赖和执行语义只由边保存；资源由独立资源系统管理并通过引用关联，展示通过视图筛选主图；第一阶段优先验证 TerminusDB 的原生版本能力，Agent 通过 MCP 提交结构化变更，中央 Agent 预审，负责人批准后形成正式 Commit。
 - [TerminusDB Mapping 版本与 Agent 提交原型验证](ai4-9hcj.md)：实测 TerminusDB 12.0.8 支持 Schema、TaskNode、依赖边、Commit、History 和 Diff；HTTP 文档写入会立即生成 Commit，`commit=false` 不提供未提交工作区；原生 reset 会移动当前分支状态并使新提交不再出现在该分支日志中，因此 Proposal、审核和不可擦除回滚痕迹仍需由平台补充。
 - [TerminusDB 候选分支与草稿工作区行为验证](ai4-2alw.md)：TerminusDB 12.0.8 支持从 main 创建隔离 candidate branch、独立写入、Commit/History/Diff 和通过 rebase 推进到 main；不存在无 Commit 草稿工作区，平台需将 candidate branch 与 Proposal 审核、正式 Revision 和正式查询投影关联，不能把 rebase 本身当作审批。
-- [科研公共资源与证据空间](ai4-saug.md)：以 TerminusDB-Wiki 重建 Harness Wiki 的 raw/source/entity/concept/synthesis 内容组织；raw 文件由中央节点服务托管，TerminusDB 保存资源名片、版本、关系和治理状态；Wiki MCP 提供按资源版本受控查询和下载；Wiki 与 Research Mapping 共用 Proposal、Trace/AuditEvent 和负责人审计链，但分别维护 Wiki Revision 与 Mapping Revision。
+- [科研公共资源与证据空间](ai4-saug.md)：LLM-Wiki 采用独立的 TerminusDB、Buffer、MCP 管理面、WikiRevision 和审计链；raw 文件由中央节点服务托管，Wiki TerminusDB 保存资源名片、版本、关系和治理状态；Wiki MCP 提供按资源版本受控查询和下载。Research Mapping 与 LLM-Wiki 的领域对象、Revision、数据库和写入治理分离，只通过稳定对象 ID 和版本 ID 建立显式弱引用。
 - [单一 Mapping 的草稿与正式视图模型](ai4-u3rs.md)：只维护一张物理 Mapping，节点和边内容创建后不可原地修改；同一逻辑对象同一时间只允许一个活动草稿，Proposal 整体审核草稿变更；普通查询只读取当前最新正式投影，TerminusDB Commit/History/Diff 负责数据历史，平台仅保存 Proposal、审核事件和正式 Revision 关联。
 
 ## Not yet specified
 
 - TerminusDB-Wiki 的 Resource、ResourceVersion、RawArtifact、SourceDocument、Entity、Concept、Synthesis、Proposal 和 AuditEvent 之间的具体领域模型与关系。
 - 中央节点服务 raw 存储的版本、哈希、访问权限、容量阈值、备份、保留和删除规则。
-- Wiki 文档与 Resource Reference 的 Proposal 生命周期，以及 Wiki Revision 与 Mapping Revision 的关联规则。
-- Wiki 与 Mapping 共用审计事件的事件类型、不可擦除保存方式、回滚语义和负责人审批边界。
+- Wiki 文档、Resource Reference、Proposal、Trace 和 AuditEvent 分别由 LLM-Wiki 自己定义和维护；Research Mapping 采用自己的对应对象和审计链，两者不共享治理存储或跨域写入。
 - 节点和边的执行痕迹、失败路线和动态变更的完整表达。
 - 首个可演示科研场景、MCP 工具边界和第一阶段最小产品范围与验证方式。
 
@@ -59,3 +58,7 @@ Gitee Pull Request #3 已创建：https://gitee.com/OWNER/ai4science/pulls/3，�
 **2026-10-17T01:43:58Z**
 
 边界确认：Research Mapping 与 LLM-Wiki 第一阶段完全独立，分别拥有自己的 Agent、MCP、Buffer、内存上下文、校验器、TerminusDB、candidate branch、Revision 和审计链。第一阶段不支持跨域写入：单个 MCP Submission 或 Proposal 只能修改一个领域，不支持跨两个 TerminusDB 的原子正式化；需要同时产生两边变化时分别提交独立变更。两个领域只允许通过稳定对象 ID 和版本 ID 建立显式弱引用。
+
+**2026-10-17T01:50:00Z**
+
+冲突表述修正：Central Agent 不拆成两个独立 Agent；由同一个 Central Agent 配置独立的 Wiki 管理 MCP 和 Mapping 管理 MCP。两个管理 MCP 背后的 Buffer、TerminusDB、领域对象、Revision、审计链和写入状态仍然完全隔离，Central Agent 不通过一个 MCP Submission 或 Proposal 同时修改两个领域。Proposal 按领域分别维护，不存在跨域 Proposal。
