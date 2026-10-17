@@ -51,3 +51,7 @@ Q2.4-Q2.6 决策确认：Markdown frontmatter 仅展示页面描述性元数据�
 **2026-10-17T01:22:20Z**
 
 Q2.9a/Q2.9b 治理分工确认：Wiki 和 Research Mapping 都采用两阶段审核。端侧 Agent 提交修改后，先进入 Buffer，由相关 TaskNode 负责人进行草稿接纳审核；审核通过后才写入 TerminusDB candidate branch，形成 WikiRevision 或 MappingRevision 草稿。草稿转正式版本时，由 Project Owner 进行 Formal Publication Review；只有通过后才更新 Formal WikiRevision 或 Formal MappingRevision 指针，进入正式查询和正式调度。端侧 Agent 可以提出修改，不能替代任务节点负责人或项目负责人完成审核。
+
+**2026-10-17T01:40:33Z**
+
+模型边界修正：TaskNode 和 DependencyEdge 只属于 Research Mapping，由独立的 Mapping TerminusDB 处理；WikiDocument、WikiRevision、Resource、ResourceVersion 和 RawArtifact 元数据只属于 LLM-Wiki，由独立的 Wiki TerminusDB 处理。此前将 TaskNode 负责人泛化为 Wiki 第一阶段审核者的表述不适用，已修正为：Mapping 由 TaskNode 负责人审核，Wiki 由 Wiki Curator、Resource Owner 或文档负责人审核。两边可共享 Proposal、Trace/AuditEvent 的治理概念，但领域对象、Revision 和数据库边界分离。
