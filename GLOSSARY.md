@@ -6,6 +6,10 @@
 
 **Research Mapping（研究 Mapping）**：一个科研项目唯一的、完整的研究任务关系图，包含 TaskNode 和它们之间的依赖边；展示视图只是对它的筛选和投影，不是独立事实源。
 
+**Research Mapping Store（研究 Mapping 存储）**：独立处理 Research Mapping 的 TerminusDB 实例或逻辑存储边界，保存 TaskNode、Dependency Edge、MappingRevision 及其候选分支和正式视图。它不保存 WikiDocument、WikiRevision 或资源本体。
+
+**LLM-Wiki Store（LLM-Wiki 存储）**：独立处理 LLM-Wiki 的 TerminusDB 实例或逻辑存储边界，保存 WikiDocument、WikiRevision、Resource、ResourceVersion、RawArtifact 元数据及其引用关系。它不保存 TaskNode 或 Dependency Edge。
+
 **TaskNode（任务节点）**：Research Mapping 中的唯一拓扑节点，表示一个需要规划、执行、讨论、审核或推进的科研任务；平台不预设固定的学科任务类型。
 
 **Dependency Edge（依赖边）**：连接两个 TaskNode 的关系，保存信息依赖、执行阻塞、所需输出和激活条件；节点不重复保存前置或后继节点列表。
@@ -24,7 +28,7 @@
 
 **Proposal Preview（提案预览）**：在明确 Proposal 上下文中读取 candidate branch 草稿、生成 Diff 和查看影响范围的能力。提案预览与正式查询分离，预览内容带有草稿标记，不能直接参与正式调度或形成正式研究结论。
 
-**Draft Acceptance Review（草稿接纳审核）**：端侧 Agent 提交修改后，由相关任务节点负责人进行的第一阶段审核。审核通过后，Buffer 中的变更才可以写入 TerminusDB candidate branch，形成 WikiRevision 或 Mapping Revision 草稿；该审核不代表内容已经成为正式科研事实。
+**Draft Acceptance Review（草稿接纳审核）**：端侧 Agent 提交修改后进行的第一阶段审核。Research Mapping 变更由相关 TaskNode 负责人审核；LLM-Wiki 变更由 Wiki Curator、Resource Owner 或文档负责人审核。审核通过后，Buffer 中的变更才可以分别写入对应的 TerminusDB candidate branch，形成 WikiRevision 或 Mapping Revision 草稿；该审核不代表内容已经成为正式科研事实。
 
 **Formal Publication Review（正式发布审核）**：草稿转为正式版本前，由项目负责人进行的第二阶段审核。只有审核通过并更新 Formal WikiRevision 或 Formal Mapping Revision 指针后，内容才能进入正式查询和正式调度。
 
