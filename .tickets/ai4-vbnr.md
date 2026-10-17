@@ -18,3 +18,9 @@ tags: [wayfinder:grilling, product, ai4science]
 ## Acceptance Criteria
 
 明确中央协调、人工审计、风险分级和可追溯记录的一级功能；形成平台治理边界。
+
+## Notes
+
+**2026-10-17T01:53:26Z**
+
+边界修正：Central Agent 保持为一个 Agent，但配置独立的 Mapping 管理 MCP 和 Wiki 管理 MCP。两个管理 MCP 背后的 Buffer、TerminusDB、Revision、审核和审计链完全隔离；Central Agent 负责路由和各领域预审，不通过单个提交跨域修改。
