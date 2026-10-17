@@ -29,6 +29,7 @@ tags: [wayfinder:map, product, ai4science]
 - [科研公共资源与证据空间](ai4-saug.md)：LLM-Wiki 采用独立的 TerminusDB、Buffer、MCP 管理面、WikiRevision 和审计链；raw 文件由中央节点服务托管，Wiki TerminusDB 保存资源名片、版本、关系和治理状态；Wiki MCP 提供按资源版本受控查询和下载。Research Mapping 与 LLM-Wiki 的领域对象、Revision、数据库和写入治理分离，只通过稳定对象 ID 和版本 ID 建立显式弱引用。
 - [单一 Mapping 的草稿与正式视图模型](ai4-u3rs.md)：只维护一张物理 Mapping，节点和边内容创建后不可原地修改；同一逻辑对象同一时间只允许一个活动草稿，Proposal 整体审核草稿变更；普通查询只读取当前最新正式投影，TerminusDB Commit/History/Diff 负责数据历史，平台仅保存 Proposal、审核事件和正式 Revision 关联。
 
+- [Wiki Buffer 提交单位：单文档、文档加引用还是完整 ChangeSet](20261017_015557-Wiki%20Buffer%20提交单位：单文档、文档加引用还是完整%20ChangeSet.md)：Buffer 以单个文档变更单元为最小接纳对象，正文与该版本所需的 Resource Reference 关系一起保持一致；多个单元再由 Proposal 聚合并整体审核，单个逻辑文档同一时间只允许一个活动草稿。
 ## Not yet specified
 
 - TerminusDB-Wiki 的 Resource、ResourceVersion、RawArtifact、SourceDocument、Entity、Concept、Synthesis、Proposal 和 AuditEvent 之间的具体领域模型与关系。
