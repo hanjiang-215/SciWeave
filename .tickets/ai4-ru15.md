@@ -31,6 +31,7 @@ tags: [wayfinder:map, product, ai4science]
 - [Wiki Buffer 提交单位：单文档、文档加引用还是完整 ChangeSet](ai4-36ek.md)：Buffer 以单个文档变更单元为最小接纳对象，正文与该版本所需的 Resource Reference 关系一起保持一致；多个单元再由 Proposal 聚合并整体审核，单个逻辑文档同一时间只允许一个活动草稿。
 - [TerminusDB candidate branch 状态标记与只读归档能力验证](ai4-2sdn.md)：TerminusDB 12.0.8 的 branch 只提供存储分支创建、写入和删除，不提供 Proposal 状态、只读或归档元数据；Wiki 应在平台结构化记录中保存 selected/not_selected/rejected/abandoned、审计和写入控制，物理删除只能作为受控存储清理。
 - [Wiki candidate Commit 只读对象与正式查询边界](ai4-2sdn.md)：一个正式版本可以派生多个 candidate branch 和 candidate Commit；candidate Commit 作为不可变候选对象，提交 Merge Request 后锁定对应 candidate head。普通查询只读取 formal branch 的当前 Formal WikiRevision，审计查询才按 Proposal 读取全部 candidate branch、candidate Commit、Diff 和治理记录；后续修改必须基于新的正式版本，不修改既有候选提交。
+- [研究变更 Proposal / PR 治理](ai4-dy2x.md)：SciWeave 首版只将 Research Mapping 的路线结构变化纳入 Proposal / PR 闭环；任务执行状态、运行日志和普通进度记录不改变正式 Mapping，不单独创建 Proposal。首版采用单候选演示路径，中央 Agent 预审，项目负责人正式发布，候选和驳回记录保留审计；LLM-Wiki 与跨域原子正式化暂不进入首版。
 - [Research Mapping 与 LLM-Wiki 统一提案治理内核](ai4-3nru.md)：Map 与 Wiki 共享 Buffer、Proposal、candidate branch、candidate head lock、Merge Request Buffer、diff/dry-run 和 Formal Revision 的治理语义，但分别实现独立 MCP、Buffer、校验器、TerminusDB、Revision 和审计链；允许并行 Proposal，最终只能选择一个完整方案正式化，不支持跨域 Proposal 或跨域原子正式化。
 
 ## Not yet specified
