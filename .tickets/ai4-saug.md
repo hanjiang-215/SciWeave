@@ -47,3 +47,7 @@ Q2 治理决策确认：TerminusDB 作为 Wiki 文档正式事实源，Wiki 文�
 **2026-10-17T01:10:00Z**
 
 Q2.4-Q2.6 决策确认：Markdown frontmatter 仅展示页面描述性元数据，Proposal 状态、Formal WikiRevision 指针、ResourceVersion 关系、RawArtifact 哈希、权限、审计、candidate branch 和 Commit 等治理事实以 TerminusDB 结构化记录为准。Markdown wikilinks 用于阅读和导出，TerminusDB 结构化关系是引用事实源，不一致时以结构化关系为准并由 lint 检查。正式查询与草稿预览分离：正式查询只读 Formal WikiRevision 和正式资源版本，不读草稿或 candidate branch；预览必须带 Proposal 上下文，只读对应候选分支并明确标记 draft，不能参与正式调度或形成正式研究结论。
+
+**2026-10-17T01:22:20Z**
+
+Q2.9a/Q2.9b 治理分工确认：Wiki 和 Research Mapping 都采用两阶段审核。端侧 Agent 提交修改后，先进入 Buffer，由相关 TaskNode 负责人进行草稿接纳审核；审核通过后才写入 TerminusDB candidate branch，形成 WikiRevision 或 MappingRevision 草稿。草稿转正式版本时，由 Project Owner 进行 Formal Publication Review；只有通过后才更新 Formal WikiRevision 或 Formal MappingRevision 指针，进入正式查询和正式调度。端侧 Agent 可以提出修改，不能替代任务节点负责人或项目负责人完成审核。
