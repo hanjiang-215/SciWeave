@@ -23,6 +23,25 @@
 - *(mapping)* Define single graph draft lifecycle
 - *(terminusdb)* Record candidate branch validation
 - *(mapping)* Add node edge field model ticket
+- *(changelog)* Record mapping validation
+- *(glossary)* Clarify LLM-Wiki governance boundary
+- *(glossary)* Define wiki document revisions
+- *(wayfinder)* Record wiki revision governance
+- *(glossary)* Define wiki query governance
+- *(wayfinder)* Record wiki query governance
+- *(glossary)* Define two-stage review roles
+- *(wayfinder)* Record two-stage review
+- *(glossary)* Separate mapping and wiki stores
+- *(wayfinder)* Correct mapping wiki boundary
+- *(wayfinder)* Isolate mapping and wiki domains
+- *(wayfinder)* Clarify isolated management MCPs
+- *(wiki)* Define Wiki Buffer submission unit
+- *(terminusdb)* Record candidate branch governance limits
+- *(wiki)* Define Proposal and merge request lifecycle
+- *(domain)* Clarify research resource boundaries
+- *(wayfinder)* Resolve research resource scope
+- *(governance)* Align mapping and wiki proposals
+- *(fer)* Use native ticket filenames
 
 ### ⚙️ Miscellaneous Tasks
 
@@ -33,3 +52,4 @@
 - *(terminusdb)* Add local compose service
 - *(fer)* Record Gitee pull request
 - *(fer)* Record Gitee pull request
+- *(fer)* Restore native ticket filenames
