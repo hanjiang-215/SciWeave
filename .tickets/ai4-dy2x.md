@@ -18,3 +18,13 @@ tags: [wayfinder:grilling, product, ai4science]
 ## Acceptance Criteria
 
 明确 Proposal / PR 的适用范围、主要变更类型和审查闭环；保证 Agent 可以提出变化但不能无控制地改变公共研究事实。
+
+## Notes
+
+**2026-10-17T01:53:26Z**
+
+边界修正：Proposal 按领域分别维护。Mapping Proposal 只能修改 Research Mapping；Wiki Proposal 只能修改 LLM-Wiki。一个 Proposal 不得同时包含 Mapping ChangeSet 和 Wiki ChangeSet；Central Agent 可通过两个独立管理 MCP 分别处理它们，但不执行跨域写入。
+
+**2026-10-17T08:28:32Z**
+
+本票据后续应采用统一提案治理内核：Mapping Proposal 与 Wiki Proposal 共享 Buffer → candidate branch → candidate head lock → Merge Request Buffer → Formal Revision 的治理语义，但各自使用独立 MCP、Buffer、校验器、TerminusDB 和审计链；不支持跨域 Proposal 或跨域原子正式化。
