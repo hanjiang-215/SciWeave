@@ -39,3 +39,7 @@ tags: [wayfinder:research, product, ai4science]
 - TerminusDB-Wiki 的 MCP 作为受控访问入口，按 resource_id 和 version_id 提供元数据查询、受限文本读取和 raw 下载能力；大文件优先返回受控下载句柄或流式能力，不直接塞入 Agent 上下文。
 - Research Mapping 与 TerminusDB-Wiki 共用 Proposal、Trace/AuditEvent 和负责人审计链；Mapping Revision 与 Wiki Revision 分开，TerminusDB Commit 只表示存储状态变化，不单独表示科研内容已经批准。
 - raw 文件可用性状态与 Wiki 文档、Resource Reference 的治理状态分开管理；上传成功不等于资源批准，文件版本不可覆盖，只能新增版本并保留哈希和来源。
+
+**2026-10-17T01:07:05Z**
+
+Q2 治理决策确认：TerminusDB 作为 Wiki 文档正式事实源，Wiki 文档正文统一使用 Markdown。WikiDocument 保持稳定逻辑身份，修改或创建都生成新的不可变 WikiRevision，不覆盖已有正式版本；候选版本写入 Proposal 对应的 TerminusDB candidate branch，并通过 Commit 保留存储历史。正式 MCP 只读取当前 Formal WikiRevision；文档存在草稿时返回最新正式版本，只有草稿时返回无正式版本，不返回草稿。一个 Proposal 修改多个 Wiki 文档时整体审核、整体正式化。TerminusDB Commit 仅表示存储变化，不单独表示内容已批准。
