@@ -42,6 +42,7 @@ tags: [wayfinder:map, product, ai4science]
 
 - 当前阶段不确定具体编程语言、框架、数据库、消息中间件或部署方案。
 - 当前阶段不实现完整科研平台、公开 Agent 市场或真实实验设备控制。
+- 第一阶段不支持 Research Mapping 与 LLM-Wiki 的跨域写入：不允许单个 MCP Submission 或 Proposal 同时修改两个领域，不支持跨两个 TerminusDB 的原子正式化；需要同时产生两边变化时，由端侧 Agent 分别提交两次独立变更。
 
 ## Acceptance Criteria
 
@@ -54,3 +55,7 @@ PR 已创建：Gitee Pull Request #2 https://gitee.com/OWNER/ai4science/pulls/2�
 **2026-10-16T11:26:37Z**
 
 Gitee Pull Request #3 已创建：https://gitee.com/OWNER/ai4science/pulls/3，目标分支 develop，当前分支 feature/dev-a。PR 包含 TerminusDB-Wiki 治理方向、需求地图更新、术语表和 CHANGELOG.md；验证包括 git diff --check 与 git-cliff --config cliff.toml --output CHANGELOG.md。
+
+**2026-10-17T01:43:58Z**
+
+边界确认：Research Mapping 与 LLM-Wiki 第一阶段完全独立，分别拥有自己的 Agent、MCP、Buffer、内存上下文、校验器、TerminusDB、candidate branch、Revision 和审计链。第一阶段不支持跨域写入：单个 MCP Submission 或 Proposal 只能修改一个领域，不支持跨两个 TerminusDB 的原子正式化；需要同时产生两边变化时分别提交独立变更。两个领域只允许通过稳定对象 ID 和版本 ID 建立显式弱引用。
