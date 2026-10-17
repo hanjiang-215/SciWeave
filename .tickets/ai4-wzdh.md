@@ -6,7 +6,7 @@ links: []
 created: 2026-10-16T14:32:58Z
 type: task
 priority: 2
-assignee: zhanyunfei
+assignee: SciWeave
 parent: ai4-5vru
 tags: [dependencies, setup, toolchain]
 ---

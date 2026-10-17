@@ -6,7 +6,7 @@ links: []
 created: 2026-10-16T00:37:28Z
 type: epic
 priority: 1
-assignee: qiyueran
+assignee: SciWeave
 tags: [wayfinder:map, product, ai4science]
 ---
 # 动态科研协作平台需求地图

@@ -6,7 +6,7 @@ links: []
 created: 2026-10-17T02:59:22Z
 type: research
 priority: 1
-assignee: qiyueran
+assignee: SciWeave
 parent: ai4-ru15  # 动态科研协作平台需求地图
 tags: [wayfinder:research, wiki, terminusdb, proposal, ai4science]
 ---

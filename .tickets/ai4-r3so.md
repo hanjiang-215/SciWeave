@@ -6,7 +6,7 @@ links: []
 created: 2026-10-16T13:42:18Z
 type: grilling
 priority: 1
-assignee: qiyueran
+assignee: SciWeave
 parent: ai4-ru15
 tags: [wayfinder:grilling, mapping, domain-model, ai4science]
 ---

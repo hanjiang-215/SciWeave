@@ -6,7 +6,7 @@ links: []
 created: 2026-10-16T03:23:05Z
 type: task
 priority: 1
-assignee: qiyueran
+assignee: SciWeave
 parent: ai4-ru15
 tags: [wayfinder:prototype, terminusdb, mapping, ai4science]
 ---

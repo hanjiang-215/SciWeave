@@ -6,7 +6,7 @@ links: []
 created: 2026-10-17T08:27:36Z
 type: task
 priority: 1
-assignee: Frank Qi
+assignee: SciWeave
 parent: ai4-ru15
 tags: [wayfinder:grilling, mapping, wiki, proposal, ai4science]
 ---

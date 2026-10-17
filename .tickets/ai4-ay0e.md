@@ -6,7 +6,7 @@ links: []
 created: 2026-10-16T00:37:54Z
 type: prototype
 priority: 1
-assignee: qiyueran
+assignee: SciWeave
 parent: ai4-ru15
 tags: [wayfinder:prototype, product, ai4science]
 ---
