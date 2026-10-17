@@ -9,7 +9,7 @@ priority: 1
 assignee: SciWeave
 tags: [wayfinder:map, product, ai4science]
 ---
-# 动态科研协作平台需求地图
+# SciWeave 动态科研协作平台需求地图
 
 ## Destination
 形成一个面向科研团队的动态科研协作平台宏观规格：支持多人和多个 AI Agent 围绕可演化的研究路线图共同规划、执行、共享资源、提交变更提案并完成负责人审计。此阶段只确定产品边界和一级功能，不进入技术栈、数据库、消息队列或具体实现。
