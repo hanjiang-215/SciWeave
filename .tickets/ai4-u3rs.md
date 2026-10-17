@@ -2,7 +2,7 @@
 id: ai4-u3rs
 status: closed
 deps: [ai4-ebqx, ai4-e257]
-links: []
+links: [ai4-xrxw]
 created: 2026-10-16T05:19:17Z
 type: grilling
 priority: 1

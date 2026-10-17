@@ -39,8 +39,11 @@ tags: [wayfinder:map, product, ai4science]
 
 - Research Mapping 的 TaskNode 与 Dependency Edge 字段模型、必填条件、状态约束、版本字段和正式查询所需字段，继续由 [Research Mapping 节点与依赖边字段模型](ai4-r3so.md) 决定。
 - 首版默认科研示例场景、最小数字证据、SciencePal 承载方式、失败或路线调整脚本和最终验收证据，继续由 [SciWeave 默认科研示例场景与验证证据](ai4-aaff.md) 决定；当前只确定选择标准和验证闭环，尚未替用户选择具体学科。
-- 首版进入规格设计前，还需要把已确定的产品边界翻译为可验证的最小领域规格：MCP 提交边界、Execution Record、AuditEvent、Formal Mapping 查询/调度边界、Proposal Diff/影响预览和演示验收脚本。
-- TerminusDB-Wiki 的 Resource、ResourceVersion、RawArtifact、SourceDocument、Entity、Concept、Synthesis、Proposal 和 AuditEvent 之间的具体领域模型与关系，仍由 LLM-Wiki 自己定义和维护；Research Mapping 采用自己的对应对象和审计链。两者共享提案治理语义，但不共享领域实现、治理存储或跨域写入。
+- [首版任务执行、交接与失败恢复模型](ai4-m0vt.md) 负责在进入规格设计前确定任务状态、Execution Record、MCP Submission、执行主体、交接、重试、转交、人工接管、失败分类、幂等和两阶段审核边界；普通执行失败不自动改变正式 Mapping，改变研究路线才进入 Proposal。
+- [首版 Mapping Proposal 生命周期与审计证据模型](ai4-xrxw.md) 负责确定 Proposal 状态生命周期、候选版本锁定、Diff/影响预览、Formal Query/正式调度门槛和 AuditEvent 的最小关联；它不重复决定已由 `ai4-u3rs` 与 `ai4-dy2x` 确定的候选分支宏观方向。
+- [固定 TerminusDB 验证服务版本并同步说明](ai4-5j2j.md) 是实现准备任务，负责把已验证的 TerminusDB 12.0.8 固定到本地 Compose 并同步说明，不把实现准备误写成新的产品架构结论。
+- Research Mapping 的 TaskNode 与 Dependency Edge 字段模型、必填条件、状态约束、版本字段和正式查询所需字段，继续由 [Research Mapping 节点与依赖边字段模型](ai4-r3so.md) 决定。
+- 首版进入规格设计前，还需要把上述决策票收敛为可验证的最小领域规格：MCP 提交边界、Execution Record、AuditEvent、Formal Mapping 查询/调度边界、Proposal Diff/影响预览和演示验收脚本。
 - 中央节点服务 raw 存储的版本、哈希、访问权限、容量阈值、备份、保留和删除规则，仍未确定。
 - 节点和边的执行痕迹、失败路线和动态变更的完整表达，需在字段模型和首版规格中共同收敛。
 
@@ -69,3 +72,7 @@ Gitee Pull Request #3 已创建：https://gitee.com/OWNER/ai4science/pulls/3，�
 **2026-10-17T01:50:00Z**
 
 冲突表述修正：Central Agent 不拆成两个独立 Agent；由同一个 Central Agent 配置独立的 Wiki 管理 MCP 和 Mapping 管理 MCP。两个管理 MCP 背后的 Buffer、TerminusDB、领域对象、Revision、审计链和写入状态仍然完全隔离，Central Agent 不通过一个 MCP Submission 或 Proposal 同时修改两个领域。Proposal 按领域分别维护，不存在跨域 Proposal。
+
+**2026-10-17T15:26:44Z**
+
+方案复审记录（2026-10-17）：复核时开放工单只有 ai4-aaff 与 ai4-r3so，未发现执行模型或 Proposal 生命周期模型的重复开放票。已创建 ai4-m0vt（任务执行/交接/失败恢复）、ai4-xrxw（Mapping Proposal 生命周期/审计证据）和 ai4-5j2j（固定 TerminusDB 验证服务版本并同步说明）；三票均挂在本需求地图下，并已建立与既有决策/验证票的依赖或关联。
