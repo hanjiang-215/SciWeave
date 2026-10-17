@@ -55,6 +55,7 @@
 - *(governance)* Align mapping and wiki proposals
 - *(fer)* Use native ticket filenames
 - *(changelog)* Record governance and ticket updates
+- *(rules)* Align ticket filename rule with native fer naming
 
 ### ⚙️ Miscellaneous Tasks
 
@@ -68,3 +69,4 @@
 - *(fer)* Record toolchain installation
 - *(fer)* Record toolchain installation commits
 - *(fer)* Restore native ticket filenames
+- *(fer)* Use native filename for ai4-wzdh
