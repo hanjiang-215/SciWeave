@@ -67,7 +67,6 @@
 - *(product)* Refine first-stage mapping specifications
 - *(product)* Complete ticket consistency review
 - *(fer)* Record ticket review verification
-- *(changelog)* Record ticket review
 - *(product)* Integrate zhanyunfei changes
 - *(dependencies)* Consolidate dev environment record (ai4-ljg3)
 - *(wayfinder)* Chart candidate governance map
