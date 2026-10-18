@@ -24,7 +24,7 @@
 
 ### 技术栈与包管理记录（Node.js + pnpm）
 
-- **来源**：提交 `1f920aa`引入 `package.json`、`pnpm-lock.yaml` 和 `.cursor/skills/ref/harness-wiki/SKILL.md`。
+- **来源**：提交 `1f920aa` 引入 `package.json`、`pnpm-lock.yaml` 和 `.cursor/skills/ref/harness-wiki/SKILL.md`。
 - **用途**：Node.js 是当前选定的应用运行时；pnpm 是当前选定的包管理器，依赖必须通过它在 `package.json` 中声明，并提交 `pnpm-lock.yaml`。
 - **版本约束**：`package.json` 声明 `"packageManager": "pnpm@12.11.2"`，并通过 `devEngines.packageManager` 要求同名同版本、`onFail` 为 `download`。`pnpm@12.11.2` 在 registry 中存在（查询时最新为 `12.14.0`）；升级需重新验证安装和锁文件。Node.js 本机验证版本为 `v24.14.0`。
 - **许可证或使用限制**：以 pnpm 发行包或上游仓库许可证为准。本机 npm/pnpm 使用的 registry 为 `registry.npmmirror.com`（依据安装与查询输出中的 tarball 地址）。
