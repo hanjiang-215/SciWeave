@@ -6,6 +6,7 @@ links: []
 created: 2026-10-18T15:18:52Z
 type: epic
 priority: 1
+assignee: Frank Qi
 parent: ai4-xup8
 tags: [wayfinder:grilling]
 ---
