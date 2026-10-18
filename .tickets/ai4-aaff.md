@@ -1,0 +1,52 @@
+---
+id: ai4-aaff
+status: open
+deps: [ai4-ay0e, ai4-r3so, ai4-m0vt, ai4-xrxw, ai4-vbnr]
+links: []
+created: 2026-10-17T14:58:26Z
+type: prototype
+priority: 1
+assignee: SciWeave
+parent: ai4-ru15
+tags: [wayfinder:prototype, product, sciencepal, ai4science]
+---
+# SciWeave 默认科研示例场景与验证证据
+
+为 SciencePal 参赛演示选择一个具体、可运行、可验证且不改变 SciWeave 场景中立核心的科研示例场景，明确初始 Research Mapping、数字证据、Agent/人员执行步骤、路线变化和验收证据。
+
+## Design
+
+采用“场景中立核心 + 一个可替换示例场景”。示例场景只负责提供初始 TaskNode、Dependency Edge、Agent/人员执行内容和数字证据，不新增领域专属核心对象，也不改变 SciWeave 的 Research Mapping、Execution Record、Resource Reference 或 Mapping Proposal 语义。
+
+场景选择必须同时满足以下约束：
+
+- 使用公开、可访问、合规且体量可控的数字数据或证据，不依赖真实个人信息、私有账号、现场设备或不稳定的外部服务；
+- 能在 5—10 分钟演示中形成 3—6 个有明确依赖的 TaskNode，并至少包含一个人员判断点和一个 Agent/SciencePal 可稳定执行的结构化步骤；
+- 能提供可核验的输入、预期输出、来源或版本标识，使结果可以通过 Resource Reference 追溯；
+- 能注入一次可观察的执行失败、证据不足或前置条件不满足，并明确区分普通重试/转交与必须改变路线的 Mapping Proposal；
+- 能用同一套通用字段表达初始路线、执行记录、结果审核、路线 Diff、Project Owner 决策和正式化结果；
+- 不把生物、材料、健康或其他学科概念写入平台核心对象，场景专属内容只存在于示例数据、任务说明、Agent 能力和验收脚本中。
+
+场景决策以“可运行性、证据可追溯性、失败可演示性、SciencePal 可承载性、跨场景替换成本”作为评估维度。参赛交付还必须满足：SciencePal 实际承载核心科研能力；主视频控制在 3—5 分钟；说明文档不超过 5 页；提交物明确原创性、第三方资源、数据来源和许可证声明。未完成评估前保留候选，不在需求地图或术语表中把某个学科写成默认事实。
+
+## 需要多人讨论的问题
+
+- 默认场景应选择哪一条公开、稳定、可预加载的科研数据闭环，才能在 3—5 分钟内同时展示路线图、SciencePal 核心使用、证据引用和人工判断，而不是只展示静态页面？
+- 首版演示的“最小数字证据卡”需要哪些不可删字段（来源、版本或快照标识、指标、单位、提取时间、定位信息、哈希或访问说明），哪些完整 `ResourceVersion` 治理能力可以明确留到后续实现？
+- 哪一步由 SciencePal 承载为核心科研工作，哪一步必须由研究人员接管；TaskNode Owner 的结果接纳审核与 Project Owner 的 Formal Mapping 路线正式发布审核如何在脚本中分别可见？首版不单独建立正式科研结论对象。
+- 演示中的失败应如何区分普通重试/转交/人工接管与必须改变研究路线的失败，才能证明 Mapping Proposal 不是普通运行日志？
+- 3—5 分钟视频、5 页以内说明和原创/资源声明分别由哪些验收证据证明，并如何在不泄露真实凭据或受限数据的前提下复现？
+
+## Acceptance Criteria
+
+- [ ] 明确一个默认科研示例场景、目标科研痛点、适用角色和可替换边界，并说明选择依据。
+- [ ] 提供初始 Research Mapping：TaskNode、Dependency Edge、负责人/Agent、输入输出、完成条件和至少一个数字 Resource Reference。
+- [ ] 提供可访问的最小数字数据或证据包，并记录来源、版本标识、访问限制、许可证和替代数据方案。
+- [ ] 定义最小数字证据卡的字段、与完整 `ResourceVersion` 治理的边界，以及从证据卡回到可核验资源的路径。
+- [ ] 定义一条 3—5 分钟可复现的演示脚本：任务执行、结果提交、数字证据引用、TaskNode Owner 结果接纳、失败或路线调整、Mapping Proposal、Diff/影响预览以及 Project Owner 批准或驳回。
+- [ ] 明确 SciencePal 实际承载的核心 Agent、任务流程或结果审核环节，并说明人工接管点；SciencePal 不能只用于展示文案。
+- [ ] 在脚本中明确区分 TaskNode Owner 的结果接纳审核与 Project Owner 的 Formal Mapping 路线正式发布审核；首版不以一次批准替代两者，也不新增独立的“正式科研结论”对象。
+- [ ] 证明演示只依赖通用 TaskNode、Dependency Edge、Execution Record、Resource Reference 和 Mapping Proposal，不新增领域专属核心对象。
+- [ ] 记录一次成功路径和一次失败/驳回路径的可观察证据，包括执行记录、审计时间线、Proposal 状态和 Formal MappingRevision 结果（如批准）。
+- [ ] 提供不超过 5 页的说明材料及原创性、第三方资源、数据来源和许可证声明；不得提交真实凭据或受限数据。
+- [ ] 给出将同一闭环替换到另一科研场景时需要替换的配置和数据清单，证明核心流程不依赖当前示例学科。

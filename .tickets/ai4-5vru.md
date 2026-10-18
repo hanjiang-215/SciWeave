@@ -6,7 +6,7 @@ links: []
 created: 2026-10-14T00:45:15Z
 type: task
 priority: 2
-assignee: qiyueran
+assignee: SciWeave
 tags: [dependencies, setup]
 ---
 # 盘点并补齐项目依赖

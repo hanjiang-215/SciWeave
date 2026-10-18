@@ -2,11 +2,11 @@
 id: ai4-saug
 status: closed
 deps: [ai4-9f7i]
-links: []
+links: [ai4-xup8]
 created: 2026-10-16T00:37:54Z
 type: research
 priority: 1
-assignee: qiyueran
+assignee: SciWeave
 parent: ai4-ru15
 tags: [wayfinder:research, product, ai4science]
 ---
@@ -50,7 +50,7 @@ Q2.4-Q2.6 决策确认：Markdown frontmatter 仅展示页面描述性元数据�
 
 **2026-10-17T01:22:20Z**
 
-Q2.9a/Q2.9b 治理分工确认：Wiki 和 Research Mapping 都采用两阶段审核。端侧 Agent 提交修改后，先进入 Buffer，由相关 TaskNode 负责人进行草稿接纳审核；审核通过后才写入 TerminusDB candidate branch，形成 WikiRevision 或 MappingRevision 草稿。草稿转正式版本时，由 Project Owner 进行 Formal Publication Review；只有通过后才更新 Formal WikiRevision 或 Formal MappingRevision 指针，进入正式查询和正式调度。端侧 Agent 可以提出修改，不能替代任务节点负责人或项目负责人完成审核。
+Q2.9a/Q2.9b 治理分工确认：Wiki 和 Research Mapping 都采用两阶段审核。端侧 Agent 提交修改后，先进入 Buffer，由对应领域审核人接纳（Research Mapping 由 TaskNode Owner 负责，LLM-Wiki 由 Wiki Curator、Resource Owner 或文档负责人负责）；审核通过后才写入对应 TerminusDB candidate branch，形成 WikiRevision 或 MappingRevision 草稿。草稿转正式版本时，由 Project Owner 进行 Formal Publication Review；只有通过后才更新 Formal WikiRevision 或 Formal MappingRevision 指针，进入正式查询和正式调度。端侧 Agent 可以提出修改，不能替代领域审核人或项目负责人完成审核。
 
 **2026-10-17T01:40:33Z**
 
@@ -76,3 +76,7 @@ Q2.9a/Q2.9b 治理分工确认：Wiki 和 Research Mapping 都采用两阶段审
 - 首个资源空间演示采用数字资源端到端闭环，并保留实物处理任务分流；第一阶段不实现实物库存、现场采集、实验设备控制或完整人工工作流。
 
 本决策形成 Resource、ResourceVersion、RawArtifact、Resource Reference 和 Resource Handling Mode 的术语边界，并约束后续 LLM-Wiki 的领域模型和首期产品范围。
+
+## Review conclusion (2026-10-18)
+
+本票据作为后续资源治理规格保留，不扩大 SciWeave 首版：首版完整演示可直接读取的数字证据，实物或不可直接读取资源只分流到 researcher-required 的后续任务。资源引用必须保留来源任务、提交者、时间和版本标识；失效资源保留历史引用并提示可用性，不把资源正文或设备控制塞进首版平台。Mapping 与 LLM-Wiki 的审核对象和存储边界保持独立。

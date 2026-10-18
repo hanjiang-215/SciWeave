@@ -1,5 +1,9 @@
 ## [unreleased]
 
+### 🐛 Bug Fixes
+
+- *(rules)* Correct stale paths and add missing rule description
+
 ### 📚 Documentation
 
 - *(rules)* Define git and fer workflow
@@ -42,6 +46,36 @@
 - *(wayfinder)* Resolve research resource scope
 - *(governance)* Align mapping and wiki proposals
 - *(fer)* Use native ticket filenames
+- *(changelog)* Record governance and ticket updates
+- *(rules)* Add file and naming convention rule
+- *(rules)* Include project manifests in root file list
+- *(dependencies)* Record Node.js, pnpm and harness-wiki dependency
+- *(dependencies)* Sync human-facing copy with authoritative ledger
+- *(dependencies)* Record local install of git-cliff, fer and gitee
+- *(dependencies)* Sync human-facing copy with authoritative ledger
+- *(changelog)* Record toolchain installation
+- *(changelog)* Record toolchain installation commits
+- *(rules)* Align ticket filename rule with native fer naming
+- *(changelog)* Record develop merge and ticket naming alignment
+- *(product)* Name the platform SciWeave
+- *(governance)* Define SciWeave mapping proposal scope
+- *(governance)* Define SciWeave central agent audit
+- *(product)* Refine SciWeave planning map
+- *(product)* Complete SciWeave planning review
+- *(changelog)* Record SciWeave planning review
+- *(dependencies)* Drop personal email from dependency provenance
+- *(product)* Refine first-stage mapping specifications
+- *(product)* Complete ticket consistency review
+- *(fer)* Record ticket review verification
+- *(product)* Integrate zhanyunfei changes
+- *(dependencies)* Consolidate dev environment record (ai4-ljg3)
+- *(wayfinder)* Chart candidate governance map
+- *(wayfinder)* Resolve candidate governance rules
+- *(wayfinder)* Open persistence schema map
+- *(wayfinder)* Split mapping and wiki schema branches
+- *(wayfinder)* Scope wiki work to content model
+- *(wayfinder)* Add agent and messaging branches
+- *(wayfinder)* Claim agent decision branches
 
 ### ⚙️ Miscellaneous Tasks
 
@@ -53,3 +87,9 @@
 - *(fer)* Record Gitee pull request
 - *(fer)* Record Gitee pull request
 - *(fer)* Restore native ticket filenames
+- *(merge)* Sync develop before PR review integration
+- *(fer)* Record toolchain installation
+- *(fer)* Record toolchain installation commits
+- *(fer)* Use native filename for ai4-wzdh
+- *(fer)* Assign tickets to SciWeave
+- *(fer)* Record pull request 6 for SciWeave planning review

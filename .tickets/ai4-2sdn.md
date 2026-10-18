@@ -1,12 +1,12 @@
 ---
 id: ai4-2sdn
 status: closed
-deps: []
+deps: [ai4-9hcj]
 links: []
 created: 2026-10-17T02:59:22Z
 type: research
 priority: 1
-assignee: qiyueran
+assignee: SciWeave
 parent: ai4-ru15  # 动态科研协作平台需求地图
 tags: [wayfinder:research, wiki, terminusdb, proposal, ai4science]
 ---
@@ -63,3 +63,7 @@ DELETE /api/branch/.../candidate       -> 200，含候选 Commit 的分支也可
 ```
 
 结论：TerminusDB 提供 branch 创建、写入和删除能力，但不提供本项目需要的 Proposal 状态、只读归档或正式治理标记。Wiki 必须把分支治理状态和审计信息保存在平台结构化记录中；candidate branch 物理删除只能作为受控存储清理，不能作为业务上的“废弃”或审计记录。
+
+## Review conclusion (2026-10-18)
+
+验证结果已被 `ai4-5j2j` 的固定版本和服务说明引用。该票据支持的产品结论是：TerminusDB 存储能力不能替代 Proposal 状态、Project Owner 审核或 AuditEvent；普通研究人员不应直接操作 branch。由于 `ai4-9hcj` 是 Mapping 存储验证前置，已补充依赖关系；Wiki 相关能力仍不阻塞首版 Mapping 演示。
