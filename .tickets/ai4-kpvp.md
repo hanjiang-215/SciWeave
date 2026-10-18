@@ -17,3 +17,9 @@ tags: [wayfinder:grilling]
 ## Acceptance Criteria
 
 形成可供后续规划使用的端侧 Agent 角色与协作规格，至少明确 Agent 类型/责任边界、任务执行及提交入口、审核与人工接管关系、与消息协作和套件能力的衔接；具体实现和模型选型另行决策。
+
+## Notes
+
+**2026-10-18T15:39:58Z**
+
+本分支规划变更已推送至 feature/qiyueran，当前提交 622cae7；关联 Pull Request：docs(wayfinder): expand collaboration specification map（https://gitee.com/qi-yueran/ai4science/pulls/8，目标 develop）。本工单保持开放，讨论问题尚未解决。

@@ -23,3 +23,7 @@ Wiki 的版本治理已由 [Wiki Proposal 与 Merge Request Buffer 生命周期]
 
 ## Acceptance Criteria
 Wiki 内容/资源对象字段与 Wiki 专属 SQLite 提交/候选治理字段已分别决定，并能组合成无歧义的数据模型；跨存储一致性由地图下的独立决策票处理。
+
+**2026-10-18T15:39:58Z**
+
+本分支所在的规划地图已推送至 feature/qiyueran，当前提交 622cae7；关联 Pull Request：docs(wayfinder): expand collaboration specification map（https://gitee.com/qi-yueran/ai4science/pulls/8，目标 develop）。

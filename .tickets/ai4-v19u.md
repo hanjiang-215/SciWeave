@@ -17,3 +17,9 @@ tags: [wayfinder:grilling]
 ## Acceptance Criteria
 
 形成可供后续规划使用的套件边界与职责规格，至少明确平台提供能力与用户自带能力的分工、与端侧 Agent/消息协作及治理流程的接口边界；具体实现和依赖选型另行决策。
+
+## Notes
+
+**2026-10-18T15:39:58Z**
+
+本分支规划变更已推送至 feature/qiyueran，当前提交 622cae7；关联 Pull Request：docs(wayfinder): expand collaboration specification map（https://gitee.com/qi-yueran/ai4science/pulls/8，目标 develop）。本工单保持开放，讨论问题尚未解决。

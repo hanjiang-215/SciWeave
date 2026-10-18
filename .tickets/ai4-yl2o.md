@@ -20,3 +20,9 @@ Research Mapping 的 TerminusDB 图对象模型与本领域 SQLite 候选治理�
 
 ## Acceptance Criteria
 TaskNode/Dependency Edge 对象字段与 Research Mapping 专属 SQLite 提交/候选治理字段已分别决定，并能组合成无歧义的数据模型；跨存储一致性由地图下的独立决策票处理。
+
+## Notes
+
+**2026-10-18T15:39:58Z**
+
+本分支所在的规划地图已推送至 feature/qiyueran，当前提交 622cae7；关联 Pull Request：docs(wayfinder): expand collaboration specification map（https://gitee.com/qi-yueran/ai4science/pulls/8，目标 develop）。

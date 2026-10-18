@@ -27,3 +27,7 @@ tags: [wayfinder:map]
 
 ## Out of scope
 - 具体 MCP/API 参数、冲突检测算法、消息队列产品选型、代码实现和部署架构。
+
+**2026-10-18T15:39:58Z**
+
+本地图及其开放分支已推送至 feature/qiyueran，当前提交 622cae7；Pull Request：docs(wayfinder): expand collaboration specification map（https://gitee.com/qi-yueran/ai4science/pulls/8，目标 develop）。旧版 PR 提交 cbe871c 保存在 backup/feature-qiyueran-pr-7。

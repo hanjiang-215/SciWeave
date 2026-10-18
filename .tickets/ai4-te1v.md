@@ -42,3 +42,7 @@ tags: [wayfinder:grilling]
 - 产品层消息语义与最终队列基础设施、协议、存储及部署方案的边界。
 
 本讨论暂不包含消息队列产品、协议、数据库或云服务选型，最终载荷结构或状态机，代码实现、依赖新增和部署设计。
+
+**2026-10-18T15:39:58Z**
+
+消息队列草案已纳入本工单讨论备注；相关规划变更已推送至 feature/qiyueran，当前提交 622cae7；关联 Pull Request：docs(wayfinder): expand collaboration specification map（https://gitee.com/qi-yueran/ai4science/pulls/8，目标 develop）。本工单保持开放。
