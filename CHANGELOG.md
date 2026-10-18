@@ -56,6 +56,12 @@
 - *(fer)* Use native ticket filenames
 - *(changelog)* Record governance and ticket updates
 - *(rules)* Align ticket filename rule with native fer naming
+- *(changelog)* Record develop merge and ticket naming alignment
+- *(product)* Name the platform SciWeave
+- *(governance)* Define SciWeave mapping proposal scope
+- *(governance)* Define SciWeave central agent audit
+- *(product)* Refine SciWeave planning map
+- *(product)* Complete SciWeave planning review
 
 ### ⚙️ Miscellaneous Tasks
 
@@ -70,3 +76,4 @@
 - *(fer)* Record toolchain installation commits
 - *(fer)* Restore native ticket filenames
 - *(fer)* Use native filename for ai4-wzdh
+- *(fer)* Assign tickets to SciWeave
