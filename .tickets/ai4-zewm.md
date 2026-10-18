@@ -1,12 +1,12 @@
 ---
 id: ai4-zewm
 status: closed
-deps: []
+deps: [ai4-36ek, ai4-2sdn]
 links: []
 created: 2026-10-17T03:22:08Z
 type: grilling
 priority: 1
-assignee: qiyueran
+assignee: SciWeave
 parent: ai4-ru15  # 动态科研协作平台需求地图
 tags: [wayfinder:grilling, wiki, proposal, terminusdb, ai4science]
 ---
@@ -95,3 +95,7 @@ Wiki Buffer Submission
 - `blended` 方案必须是新的不可变 candidate Commit 或 candidate branch，并记录所有被混合的来源 Proposal、来源 Commit、保留内容、舍弃内容和冲突解决说明。
 - 一旦 Project Owner 选择 `blended` 方案，该新候选结果直接正式化；被参考但未被直接采用的原始方案不被覆盖，按实际结果标记为 `not_selected` 或其他适用的治理状态，并通知其提交者。
 - Merge Request Buffer 不允许同时选择多个方案，也不允许把多个方案分别部分正式化。
+
+## Review conclusion (2026-10-18)
+
+本票据明确的是后续 LLM-Wiki 治理设计，不是首版 Research Mapping 的交付依赖。它与 `ai4-3nru` 的统一治理语义一致：候选分支状态、只读控制和审计归档由平台结构化记录维护，TerminusDB branch/Commit 只承担存储历史。首版只复用其中的“候选不可变、head 锁定、完整方案单选”原则。

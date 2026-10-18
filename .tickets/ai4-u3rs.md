@@ -2,11 +2,11 @@
 id: ai4-u3rs
 status: closed
 deps: [ai4-ebqx, ai4-e257]
-links: []
+links: [ai4-xrxw]
 created: 2026-10-16T05:19:17Z
 type: grilling
 priority: 1
-assignee: qiyueran
+assignee: SciWeave
 parent: ai4-ru15
 tags: [wayfinder:grilling, mapping, proposal, ai4science]
 ---
@@ -30,7 +30,7 @@ tags: [wayfinder:grilling, mapping, proposal, ai4science]
 - 只维护一张物理 Research Mapping；正式节点、草稿节点、正式边和草稿边共存于同一张图。
 - 普通查询只读取当前最新的正式投影，不读取初始版本，也不读取 draft、submitted、rejected 或 superseded 内容；历史查询可按 FormalRevision 或时间点读取旧版本。
 - 节点和边的内容创建后不可原地修改。正式对象不能直接修改；草稿对象在草稿阶段也不允许变更或再次提交新的草稿。需要修订时，必须在原草稿被批准或拒绝后，基于最新正式版本创建新的草稿版本。
-- 同一逻辑对象（节点或边）同一时间只允许一个活动草稿，不允许多个并行草稿版本。一个 Proposal 可以包含多个对象的草稿，但同一对象不得同时属于多个活动 Proposal。这样优先避免并行修改和审核冲突；后续如需并行实验，另建原型决策。
+- 同一逻辑对象（节点或边）可以从同一 FormalRevision 派生多个并行候选版本；每个候选属于独立 Proposal/candidate branch，候选内容不可原地修改，也不能覆盖其他 Proposal 的候选。一个 Proposal 可以包含多个对象的草稿，但一个候选方案内必须保持对象和依赖的一致性。正式化时只能选择一个完整候选方案，冲突由 Proposal 预审和 diff/dry-run 标记。
 - 节点和边使用 logical_id 与 version_id 区分稳定对象和具体版本，并通过 derived_from、supersedes 等关系追踪版本来源。
 - 草稿提交、审核和正式化是生命周期转换；内容字段不可变，但状态可以按受控流程从 draft 转为 submitted、formal、rejected 或 superseded。
 - Proposal 是多个草稿节点和边的审核单元，默认整体批准或整体拒绝，避免只正式化节点而留下未正式化的依赖边。
@@ -42,3 +42,7 @@ tags: [wayfinder:grilling, mapping, proposal, ai4science]
 **2026-10-17T08:28:32Z**
 
 本决策被「Research Mapping 与 LLM-Wiki 统一提案治理内核」更新：不再采用“同一逻辑对象全局只能有一个活动草稿”的限制。Research Mapping 与 Wiki 均允许从同一 Formal Revision 派生多个并行 Proposal/candidate branch；每个候选版本不可变，创建 Merge Request Buffer 后固定 candidate head，最终由 Project Owner 选择一个完整方案正式化。领域实现和冲突检测仍然独立。
+
+## Review conclusion (2026-10-18)
+
+并行候选只发生在隔离的 Proposal/candidate branch 中，不能覆盖其他候选；同一对象的冲突由预审和 diff/dry-run 暴露，正式化仍只能选择一个完整候选。普通查询和正式调度继续只读取当前 Formal MappingRevision，研究人员不需要理解分支或 Commit。后续统一治理规则已覆盖早期“单活动草稿”的限制。

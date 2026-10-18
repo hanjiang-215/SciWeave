@@ -1,6 +1,6 @@
 # 动态科研协作平台
 
-本术语表定义 AI4Sci 动态科研协作平台的核心领域词汇，统一 Wayfinder 需求地图、产品规格和后续实现中的概念边界。
+本术语表定义 SciWeave 动态科研协作平台的核心领域词汇，统一 Wayfinder 需求地图、产品规格和后续实现中的概念边界。
 
 ## 研究图与任务
 
@@ -70,7 +70,11 @@
 
 **MCP Submission（MCP 提交）**：端侧 Agent 通过标准化 MCP 工具提交任务结果、失败报告或 Proposal 的行为；它是平台接收 Agent 变更的统一入口，不等于正式批准。
 
-**Central Agent（中央 Agent）**：负责调度、注册信息维护以及 Proposal 的格式、依赖、权限和影响范围预审的 Agent；它不替代研究负责人进行科研内容判断和最终批准。
+**Central Agent（中央 Agent）**：负责调度、注册信息维护以及 Proposal 的格式、依赖、权限和影响范围预审的 Agent；它不替代研究负责人进行科研内容判断和最终批准。首版中，任何正式 Mapping 或正式科研结果发布都必须由 Project Owner 明确批准。
+
+**Execution Record（执行记录）**：对任务执行开始、暂停、重试、失败、完成和人工接管等运行过程的结构化记录。Execution Record 可以由 Central Agent 调度和追加，但不等于正式 Research Mapping 变更，也不单独授予科研结果正式地位。
+
+**AuditEvent（审计事件）**：对受控提交、调度、执行、预审、审核、批准、驳回和正式化等操作的不可变过程记录。AuditEvent 至少说明操作者、操作类型、目标、基准版本、结果、时间、原因以及关联的 Proposal 或任务标识，用于按任务、提案、正式版本或时间重建责任链。
 
 **Personal Agent（Personal Agent）**：研究人员使用自己的 harness 配置的 Agent，通过 MCP、Skills、系统提示词和 Hooks 接入科研协作平台。
 
@@ -80,7 +84,7 @@
 
 **Mapping Revision（Mapping 版本）**：Research Mapping 在版本化存储中的一个具体版本。FormalRevision 是已经通过负责人审核、可供正式查询的版本；TerminusDB Commit 是其底层存储版本，两者通过平台治理记录关联。
 
-**Formal Mapping（正式 Mapping）**：单一物理 Research Mapping 中由当前最新 FormalRevision 形成的查询投影；草稿节点和草稿边可以共存于同一物理图，但不属于正式投影。
+**Formal Mapping（正式 Mapping）**：产品层唯一 Research Mapping 在当前 FormalRevision 上形成的正式查询投影。存储层可以有一个 formal branch 和多个 Proposal candidate branch；candidate branch 不是第二张研究图，普通查询和正式调度只读取 FormalRevision。
 
 **TerminusDB Commit（TerminusDB 提交）**：TerminusDB 中记录一次图状态变化的存储版本；它可以对应草稿或正式数据，只有经过平台治理和负责人批准并关联到 FormalRevision 的 Commit 才能作为正式 Mapping 的版本依据。
 
@@ -88,7 +92,7 @@
 
 **Trace（执行痕迹）**：对提交、执行、失败、审核、批准和路线变化等过程事件的记录；它解释 Mapping 如何变成当前状态，但不替代 Mapping 本身。
 
-**Mapping Status（Mapping 状态）**：TaskNode 或 Dependency Edge 在治理流程中的生命周期状态，例如 `draft`、`approved`、`rejected`、`superseded` 和 `invalidated`；状态决定对象能否出现在正式视图或参与正式调度。
+**Mapping Status（Mapping 状态）**：TaskNode 或 Dependency Edge 版本的治理状态。首版版本状态使用 `candidate`、`formal`、`superseded`、`rejected`、`invalidated`；`ready`、`running`、`awaiting_acceptance` 等属于任务运行投影或 Execution Record，不得与版本状态混用。
 
 **Formal Mapping View（正式 Mapping 视图）**：只展示已批准且有效的 TaskNode 和 Dependency Edge 的查询视图，用于正式进度、依赖判断和任务调度；它不是独立物理图。
 
@@ -97,3 +101,28 @@
 **Proposal Preview（提案预览）**：将 Proposal 的结构化变更应用到当前正式 Mapping 后生成的临时视图，用于负责人查看结构 Diff 和影响分析。
 
 **ChangeSet（变更集）**：Proposal 中描述新增、修改、废弃或恢复节点和边的结构化操作集合；它是生成草稿预览和正式提交的机器可读依据。
+
+## 首版状态归属
+
+| 对象 | 研究人员看到的操作 | 首版状态 | 正式化条件 |
+| --- | --- | --- | --- |
+| TaskNode/DependencyEdge 版本 | 查看路线草稿、比较路线、查看正式路线 | `candidate`、`formal`、`superseded`、`rejected`、`invalidated` | 通过 Proposal 和 Project Owner 的 Formal Publication Review |
+| Mapping Buffer Submission | 提交、补充、查看退回原因 | `received`、`owner_review`、`accepted`、`rejected` | TaskNode Owner 接纳后才能进入 Central Agent 预审 |
+| Mapping Proposal | 查看路线变更、影响和审核意见 | `draft`、`candidate`、`mr_ready`、`stale`、`conflict`、`merged`、`rejected`、`abandoned` | 创建新的 Formal MappingRevision |
+| Execution Record | 执行、重试、转交、人工接管、补充结果 | `queued`、`running`、`succeeded`、`awaiting_acceptance`、`supplement_requested`、`needs_revision`、`accepted`、`rejected`、`failed`、`cancelled` | 首版不单独发布“正式科研结论”；结果接纳后可作为后续任务输入或受控资源引用 |
+| TaskNode 运行投影 | 查看“待执行、执行中、待补充、已接纳、需调整路线” | `not_ready`、`ready`、`in_progress`、`awaiting_acceptance`、`accepted`、`blocked`、`route_change_required` | 由正式 Mapping 和 Execution Record 计算，不覆盖版本状态 |
+
+## 面向研究人员的首版操作语言
+
+普通用户不需要理解数据库分支或 Commit。首版界面和帮助文案应优先使用以下操作：
+
+1. 创建项目并邀请成员，指定 Project Owner 和每个任务的 TaskNode Owner。
+2. 创建任务路线，填写目标、完成条件、输入、预期输出和需要人工判断的环节。
+3. 选择负责人或 Agent 执行任务，查看任务是否“待执行”以及前置条件是否满足。
+4. 提交结果和证据，查看“执行记录”和“证据来源”，必要时补充材料、重试、转交或请求人工接管。
+5. TaskNode Owner 接受、要求补充、要求重做或拒绝结果；被拒绝结果不会消失，仍可在审计记录中查看。
+6. 只有路线、依赖、任务目标或激活条件发生变化时，才点击“创建路线变更草稿”，查看 Diff 和影响范围。
+7. Project Owner 查看完整候选、影响范围和审核意见后，选择“批准为正式路线”或“驳回并说明原因”。
+8. 研究人员在正式路线、任务进度和审计时间线中查看结果；候选路线不会混入正式查询或正式调度。
+
+这些操作映射到内部的 MCP Submission、Execution Record、Proposal、Formal MappingRevision 和 AuditEvent，但技术对象不应成为普通研究工作流的前置知识。
