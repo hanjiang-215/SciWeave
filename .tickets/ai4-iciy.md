@@ -2,7 +2,7 @@
 id: ai4-iciy
 status: closed
 deps: []
-links: []
+links: [ai4-xup8]
 created: 2026-10-18T14:03:44Z
 type: task
 priority: 1

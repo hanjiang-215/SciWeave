@@ -2,7 +2,7 @@
 id: ai4-saug
 status: closed
 deps: [ai4-9f7i]
-links: []
+links: [ai4-xup8]
 created: 2026-10-16T00:37:54Z
 type: research
 priority: 1

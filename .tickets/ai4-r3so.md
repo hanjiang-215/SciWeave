@@ -2,7 +2,7 @@
 id: ai4-r3so
 status: closed
 deps: [ai4-ebqx, ai4-u3rs]
-links: [ai4-m0vt, ai4-xrxw]
+links: [ai4-m0vt, ai4-xrxw, ai4-xup8]
 created: 2026-10-16T13:42:18Z
 type: grilling
 priority: 1

@@ -2,7 +2,7 @@
 id: ai4-x3nx
 status: closed
 deps: []
-links: [ai4-ru15]
+links: [ai4-ru15, ai4-xup8]
 created: 2026-10-18T14:03:32Z
 type: epic
 priority: 1
