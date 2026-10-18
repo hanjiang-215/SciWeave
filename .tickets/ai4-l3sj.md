@@ -6,7 +6,7 @@ links: []
 created: 2026-10-18T14:54:50Z
 type: task
 priority: 1
-parent: ai4-xup8  # Research Mapping 与 Wiki 领域数据模型和持久化规格地图
+parent: ai4-56iu  # Wiki 持久化模型分支
 tags: [wayfinder:grilling]
 ---
 # LLM-Wiki 文档与资源引用持久化字段模型

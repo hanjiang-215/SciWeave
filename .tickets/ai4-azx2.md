@@ -1,7 +1,7 @@
 ---
 id: ai4-azx2
 status: open
-deps: [ai4-t5zl, ai4-mjku, ai4-l3sj]
+deps: [ai4-yl2o, ai4-56iu]
 links: []
 created: 2026-10-18T14:54:50Z
 type: task
