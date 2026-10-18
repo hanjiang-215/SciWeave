@@ -13,12 +13,13 @@ tags: [wayfinder:map]
 ## Design
 
 ## Destination
-形成可交给实现规划的 Research Mapping 与 LLM-Wiki 领域数据模型和持久化规格，明确 TaskNode/Dependency Edge 等对象的具体字段、候选治理的 SQLite 结构化元数据，以及它们与 TerminusDB 正式/候选版本的关联。
+形成可交给实现规划的 SciWeave 核心协作领域规格：明确 Research Mapping 与 LLM-Wiki 的数据模型和持久化规则，并逐步厘清消息队列协作、Agent 套件接入和端侧 Agent 的职责与交互边界。
 
 ## Notes
-领域：版本化 Research Mapping 与 LLM-Wiki。
+领域：版本化 Research Mapping、LLM-Wiki，以及多人和多 Agent 协作能力（消息协作、Agent 套件、端侧 Agent）。
 遵循既有领域决策：两个领域治理语义可共用，但 MCP、存储、校验和审计边界独立。
-本地图聚焦领域对象、字段含义、约束和存储归属；具体 API、算法实现和产品代码不在目标内。已完成的产品决策与 TerminusDB 行为验证作为输入，不重新讨论。
+地图按并列分支逐步收敛：Mapping/Wiki 持久化规格；消息协作语义；Agent 套件职责边界；端侧 Agent 角色与治理边界。新增分支目前仅建立讨论入口，保持开放、未认领，不代表已决定方案。
+具体 API、算法实现、消息队列产品和部署架构不在当前目的范围内。
 
 ## Decisions so far
 
