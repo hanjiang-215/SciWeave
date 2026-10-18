@@ -62,6 +62,11 @@
 - *(governance)* Define SciWeave central agent audit
 - *(product)* Refine SciWeave planning map
 - *(product)* Complete SciWeave planning review
+- *(changelog)* Record SciWeave planning review
+- *(dependencies)* Drop personal email from dependency provenance
+- *(product)* Refine first-stage mapping specifications
+- *(product)* Complete ticket consistency review
+- *(fer)* Record ticket review verification
 
 ### ⚙️ Miscellaneous Tasks
 
@@ -77,3 +82,4 @@
 - *(fer)* Restore native ticket filenames
 - *(fer)* Use native filename for ai4-wzdh
 - *(fer)* Assign tickets to SciWeave
+- *(fer)* Record pull request 6 for SciWeave planning review
