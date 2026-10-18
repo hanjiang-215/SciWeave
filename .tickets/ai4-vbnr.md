@@ -29,7 +29,7 @@ tags: [wayfinder:grilling, product, ai4science]
 
 ## Answer
 
-SciWeave 首版采用“中央 Agent 负责协调，Project Owner 负责所有正式事实发布”的人工控制边界。Central Agent 保持为一个 Agent，通过独立的 Mapping 管理 MCP 和 Wiki 管理 MCP 处理两个隔离领域；它不获得替代人工批准的权限。
+SciWeave 首版采用“中央 Agent 负责协调，Project Owner 负责 Formal Mapping 路线正式发布”的人工控制边界。Central Agent 保持为一个 Agent，通过独立的 Mapping 管理 MCP 和 Wiki 管理 MCP 处理两个隔离领域；它不获得替代人工批准的权限。首版不单独发布“正式科研结论”，任务结果由 TaskNode Owner 接纳并通过 Execution Record 和 Resource Reference 追溯。
 
 ### Central Agent 可以自动完成的工作
 
@@ -44,7 +44,7 @@ SciWeave 首版采用“中央 Agent 负责协调，Project Owner 负责所有�
 ### 必须由 Project Owner 人工批准的工作
 
 - 任何会改变 Formal Mapping 拓扑、任务目标、完成条件、依赖语义或路线激活条件的变更；
-- 任何把 Agent 或研究人员输出提升为项目正式共享科研结果的操作；
+- 首版中任何改变 Formal Mapping 路线、依赖、任务目标或激活条件的正式发布操作；首版不单独建立“正式科研结论”对象，任务结果由 TaskNode Owner 接纳并通过 Execution Record 和 Resource Reference 追溯；
 - 任何路线回滚、恢复、废弃后重新启用或基准版本变化后的正式化；
 - 任何 Central Agent 标记为冲突、过期、影响范围不明或违反治理规则的候选。
 
@@ -56,4 +56,8 @@ SciWeave 首版采用“中央 Agent 负责协调，Project Owner 负责所有�
 
 普通执行失败可由 Central Agent 重试、转交或请求人工接管；如果失败改变了研究假设、任务前置条件或路线，则必须提交 Mapping Proposal。审计查询能够按任务、Proposal、Formal MappingRevision 或时间顺序重建“谁在什么基准上做了什么、结果如何、谁批准了正式变化”。
 
-首版不引入复杂的风险评分或自动发布等级：是否进入正式事实只有一个明确规则，即必须经过 Project Owner 的人工批准。并行候选、自动冲突解决和跨域审计聚合属于后续能力。
+首版不引入复杂的风险评分或自动发布等级：是否进入 Formal Mapping 正式路线只有一个明确规则，即必须经过 Project Owner 的人工批准。并行候选、自动冲突解决和跨域审计聚合属于后续能力。
+
+## Review conclusion (2026-10-18)
+
+责任边界已与首版统一：Central Agent 负责调度、格式/依赖/影响预审、重试、转交和留痕；TaskNode Owner 负责结果接纳；Project Owner 只对改变 Formal Mapping 路线的完整候选进行正式发布审核。首版不单独建立正式科研结论对象，结果通过 Execution Record 和 Resource Reference 追溯。普通研究人员在任务、证据和审核界面中完成工作，不需要操作 MCP、TerminusDB 或分支。

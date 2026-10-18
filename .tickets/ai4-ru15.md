@@ -1,6 +1,6 @@
 ---
 id: ai4-ru15
-status: in_progress
+status: closed
 deps: []
 links: []
 created: 2026-10-16T00:37:28Z
@@ -32,13 +32,13 @@ tags: [wayfinder:map, product, ai4science]
 - [TerminusDB candidate branch 状态、只读归档与正式查询边界](ai4-2sdn.md)：TerminusDB 12.0.8 的 branch 只提供存储分支创建、写入和删除，不提供 Proposal 状态、只读或归档元数据；候选 Commit 不代表已批准，平台必须在结构化记录中保存 selected/not_selected/rejected/abandoned、审计和写入控制。一个正式版本可以派生多个 candidate branch，提交 Merge Request 后锁定 candidate head；普通查询只读取 formal branch 的当前 Formal WikiRevision，审计查询才读取候选分支、Commit、Diff 和治理记录，物理删除只能作为受控存储清理。
 - [研究变更 Proposal / PR 治理](ai4-dy2x.md)：SciWeave 首版只将 Research Mapping 的路线结构变化纳入 Proposal / PR 闭环；任务执行状态、运行日志和普通进度记录不改变正式 Mapping，不单独创建 Proposal。首版采用单候选演示路径，中央 Agent 预审，项目负责人正式发布，候选和驳回记录保留审计；LLM-Wiki 与跨域原子正式化暂不进入首版。
 - [通用平台的第一阶段产品范围](ai4-ay0e.md)：SciWeave 首版以 Research Mapping 驱动的科研任务闭环为唯一主线，覆盖项目入口、任务依赖、人员/Agent 执行、数字证据引用、Mapping Proposal、Project Owner 人工审核和执行审计；平台保持场景中立，通过可替换示例场景验证跨场景复用。LLM-Wiki 完整治理、复杂资源模型、并行候选、跨域写入、真实设备控制和复杂权限暂缓。
-- [中央协调 Agent 与审计体系](ai4-vbnr.md)：首版由一个 Central Agent 负责调度、格式和影响范围预审、失败重试与执行留痕；Mapping 与 Wiki 仍通过独立管理 MCP 隔离。任何 Formal Mapping 或正式科研结果发布都必须由 Project Owner 明确批准，审计事件追加保留，失败改变路线时必须进入 Mapping Proposal。
+- [中央协调 Agent 与审计体系](ai4-vbnr.md)：首版由一个 Central Agent 负责调度、格式和影响范围预审、失败重试与执行留痕；Mapping 与 Wiki 仍通过独立管理 MCP 隔离。任何 Formal Mapping 路线正式发布都必须由 Project Owner 明确批准；首版不单独发布“正式科研结论”，任务结果由 TaskNode Owner 接纳并通过 Execution Record 和 Resource Reference 追溯，失败改变路线时必须进入 Mapping Proposal。
 - [Research Mapping 与 LLM-Wiki 统一提案治理内核](ai4-3nru.md)：Map 与 Wiki 共享 Buffer、Proposal、candidate branch、candidate head lock、Merge Request Buffer、diff/dry-run 和 Formal Revision 的治理语义，但分别实现独立 MCP、Buffer、校验器、TerminusDB、Revision 和审计链；允许并行 Proposal，最终只能选择一个完整方案正式化，不支持跨域 Proposal 或跨域原子正式化。
 
 ## Not yet specified
 
 - 首版默认科研示例场景、最小数字证据、SciencePal 承载方式、失败或路线调整脚本和最终验收证据，继续由 [SciWeave 默认科研示例场景与验证证据](ai4-aaff.md) 决定；当前只确定选择标准和验证闭环，尚未替用户选择具体学科。
-- [固定 TerminusDB 验证服务版本并同步说明](ai4-5j2j.md) 是实现准备任务，负责把已验证的 TerminusDB 12.0.8 固定到本地 Compose 并同步说明，不把实现准备误写成新的产品架构结论。
+- [固定 TerminusDB 验证服务版本并同步说明](ai4-5j2j.md) 已完成：已将验证过的 TerminusDB 12.0.8 固定到本地 Compose 并同步说明；这只是实现准备证据，不是新的产品架构结论。
 - 中央节点服务 raw 存储的版本、哈希、访问权限、容量阈值、备份、保留和删除规则，仍未确定；该项不阻塞首版数字证据 Demo，可在资源服务实现前另行收敛。
 
 ## 已收敛的首版领域规格
@@ -49,6 +49,25 @@ tags: [wayfinder:map, product, ai4science]
 
 上述三个工单只规定产品和领域规则，不规定数据库列、API 参数、消息队列或模型选择；它们现在可以作为首版规格设计和实现工单的输入。
 
+## 面向科研人员的首版闭环
+
+首版以研究人员熟悉的任务操作为主，不要求用户理解 MCP、TerminusDB、branch 或 Commit：
+
+1. Project Owner 创建一个科研项目，邀请成员，给每个 TaskNode 指定任务节点负责人。
+2. 研究人员创建任务路线，填写目标、完成条件、输入、预期输出、证据要求和需要人工判断的环节。
+3. Central Agent 根据正式路线和前置条件安排人员或 Agent 执行，研究人员可以查看任务状态和负责人。
+4. 执行者提交结果摘要、证据引用和失败说明；系统支持补充材料、重试、转交和人工接管。
+5. TaskNode Owner 接受、要求补充、要求重做或拒绝结果；结果接纳后可以作为后续任务输入或受控资源引用。
+6. 只有任务目标、依赖、前置条件或路线激活条件发生变化时，才创建“路线变更草稿”；系统展示影响范围和受影响任务。
+7. Project Owner 查看完整候选和影响说明，批准为正式路线或驳回并留下原因；候选内容不会进入正式查询或正式调度。
+8. 研究人员可以按任务、路线变更或时间查看审计时间线，不需要阅读数据库内部版本细节。
+
+首版不单独发布“正式科研结论”对象：任务结果通过 Execution Record 和 Resource Reference 追溯，TaskNode Owner 负责结果接纳；只有改变 Formal Mapping 的结构化路线变化才需要 Project Owner 的 Formal Publication Review。LLM-Wiki 的完整正式化属于后续阶段。
+
+## 需求地图完成边界
+
+本需求地图的宏观产品边界、首版功能范围、Research Mapping、执行模型和 Mapping Proposal 规格已经完成。`ai4-aaff` 仍作为独立的示例场景与参赛证据工单保持开放，不阻塞宏观需求地图关闭；raw 存储治理也属于后续实现准备，不改变首版产品边界。
+
 ## Out of scope
 
 - 当前阶段不确定具体编程语言、框架、数据库、消息中间件或部署方案。
@@ -57,7 +76,12 @@ tags: [wayfinder:map, product, ai4science]
 
 ## Acceptance Criteria
 
-完成宏观需求地图；每个一级功能域都有明确的产品决策票；明确当前范围、未决问题和暂不涉及的实现细节。
+- [x] 完成宏观需求地图；每个一级功能域都有明确的产品决策票。
+- [x] 明确 Research Mapping、任务执行、Proposal、资源引用、审核和审计的首版范围。
+- [x] 明确单一逻辑 Research Mapping 与 formal branch/candidate branch 的关系，避免把候选分支误解为第二张研究图。
+- [x] 明确 LLM-Wiki 完整治理、并行候选、真实设备控制和复杂权限不属于首版必需交付物。
+- [x] 给出不依赖代码基础的研究人员首版操作闭环和角色边界。
+- [x] 明确当前范围、后续待定事项和不进入当前阶段的实现细节。
 
 **2026-10-16T05:28:22Z**
 
@@ -85,4 +109,4 @@ Gitee Pull Request #6 已创建：https://gitee.com/qi-yueran/ai4science/pulls/6
 
 **2026-10-18T08:28:55Z**
 
-已完成本轮四项规格收敛：ai4-r3so、ai4-m0vt、ai4-xrxw 已形成可用于规格设计和实现的首版领域规则并关闭；本总工单继续开放，待 ai4-aaff 默认科研场景和 ai4-5j2j TerminusDB 固定版本完成后再评估关闭。
+已完成本轮规格收敛：ai4-r3so、ai4-m0vt、ai4-xrxw 已形成可用于规格设计和实现的首版领域规则并关闭；ai4-5j2j 的 TerminusDB 版本固定与文档同步也已完成。唯一仍开放的后续工单是 ai4-aaff，它负责选择具体示例场景和参赛验证证据，不阻塞本需求地图关闭。

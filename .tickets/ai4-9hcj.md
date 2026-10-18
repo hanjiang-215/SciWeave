@@ -23,7 +23,7 @@ tags: [wayfinder:prototype, terminusdb, mapping, ai4science]
 
 **2026-10-16T03:41:02Z**
 
-已添加本地 TerminusDB Compose 配置：dockers/service/terminusdb/compose.yaml，以及手动启动、查看日志、停止和清理说明：dockers/service/terminusdb/README.md。配置使用 terminusdb/terminusdb-server:latest、6363 端口和 ai4sci-terminusdb-data 持久化卷；未执行 Docker 命令，未提交真实凭据。首次验证后需要根据实际镜像行为固定版本 tag，并回写验证结果。
+已添加本地 TerminusDB Compose 配置：dockers/service/terminusdb/compose.yaml，以及手动启动、查看日志、停止和清理说明：dockers/service/terminusdb/README.md。最初配置曾使用 terminusdb/terminusdb-server:latest、6363 端口和 ai4sci-terminusdb-data 持久化卷；本轮验证后已由 `ai4-5j2j` 固定为 terminusdb/terminusdb-server:12.0.8，并同步更新说明。历史验证未提交真实凭据。
 
 **2026-10-16T04:16:17Z**
 
@@ -44,3 +44,7 @@ tags: [wayfinder:prototype, terminusdb, mapping, ai4science]
 尚未确认：HTTP/CLI 创建候选分支的正确参数和分支工作区行为；多次 branch create 尝试均未成功，错误显示参数被解析为 main 或远程仓库路径。该问题另建后续验证票。
 
 初步判断：TerminusDB 可以承担 Mapping 的 Schema、TaskNode、DependencyEdge、Commit、History 和 Diff 存储；Agent 可以通过 MCP 封装 HTTP 文档提交，但每次提交会直接产生 Commit，因此“草稿/待审核变更”必须由平台侧 Proposal 状态或独立候选数据库/分支承载。原生 reset 不满足不可变审计要求，回滚策略需要平台补充保护。
+
+## Review conclusion (2026-10-18)
+
+该原型验证已足以支撑首版存储边界：TerminusDB 负责版本、历史和差异的底层记录，平台负责 Buffer、Proposal、TaskNode Owner 接纳、Project Owner Formal Publication Review 和不可覆盖的 AuditEvent。候选分支行为由 `ai4-2alw` 补充，固定镜像和复现命令由 `ai4-5j2j` 维护；本票据不把数据库 Commit 误认为业务审批。

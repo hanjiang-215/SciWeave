@@ -80,6 +80,26 @@ Proposal 状态不可通过覆盖历史记录回退。被拒绝、过期、冲�
 
 Merge Request Buffer 使用 `draft`、`submitted`、`conflict`、`stale`、`approved`、`rejected`、`merged` 状态。它只保存治理请求和候选引用，不重复保存 Mapping 正文。一个 Merge Request Buffer 只允许产生一个 Formal MappingRevision。
 
+### 状态转换的触发者和结果
+
+| 当前状态 | 触发者 | 条件 | 下一状态和写入权 |
+| --- | --- | --- | --- |
+| `received` | 平台 | 提交格式可读取 | `owner_review`；原提交只读 |
+| `owner_review` | TaskNode Owner | 归属、完成条件和证据边界通过 | `accepted`；不写 Formal Mapping |
+| `owner_review` | TaskNode Owner | 归属错误、证据不足或不属于当前任务 | `rejected`；保留原因，须新提交 |
+| `accepted` | Central Agent | 结构、权限、依赖和基准版本通过 | `central_pre_review` 后创建候选 |
+| `central_pre_review` | Central Agent | 预审通过 | Proposal 进入 `candidate`，候选分支可写 |
+| `central_pre_review` | Central Agent | 结构错误、权限不足、基准过期或影响范围不明 | Proposal `stale`/`conflict`/`abandoned`；必须修订为新候选 |
+| `candidate` | 提交者或 Central Agent | 形成可审查的 candidate head | `mr_ready`；锁定 head，不能继续写入 |
+| `mr_ready` | 平台 | Diff、影响预览、基准和审批记录可验证 | Merge Request `submitted`，等待 Project Owner |
+| `mr_ready` | 平台 | 基准前进或 dry-run 冲突 | Proposal 和 Merge Request `stale`/`conflict`；不得正式化 |
+| `submitted` | Project Owner | 选择完整候选并明确批准 | Merge Request `approved`，执行受控正式化 |
+| `submitted` | Project Owner | 不接受候选 | Merge Request `rejected`，Proposal `rejected`，候选只读 |
+| `approved` | 平台 | 正式分支推进成功并创建 Formal MappingRevision | Merge Request `merged`，Proposal `merged` |
+| `approved` | 平台 | 正式化存储或关联失败 | 保留 `approved` 审批事件，标记正式化失败并阻止正式查询；由平台重试同一锁定候选，不重新请求审批 |
+
+`approved` 只表示 Project Owner 已批准；只有新的 Formal MappingRevision 已成功创建并与候选 head、正式 Commit 和审核事件关联，才允许进入 `merged`。任何状态变更都追加 AuditEvent，不能通过覆盖记录恢复或伪造转换。
+
 ## 并发、锁定和不可变性
 
 - 每个 Proposal 记录 `base_formal_revision_id`、`candidate_branch_id`、当前 `candidate_head` 和候选 Commit 列表。
@@ -108,7 +128,7 @@ Diff 是负责人审核的解释材料，不是正式批准本身。影响预览
 - Proposal Preview 必须带有 `proposal_id`，只读取该 Proposal 的候选内容，并明确显示基准版本和候选状态。
 - 正式调度只允许读取当前 Formal MappingRevision；节点和所有相关边必须属于该版本，满足前置阻塞条件，输入和正式证据引用可用，且没有未完成的人工判断点。
 - Central Agent 可以执行已批准候选的存储推进，但必须先验证 Project Owner 的批准事件、候选 head、基准版本、冲突检查和影响预览结果。
-- 未批准、被拒绝、未选中、过期、冲突或废弃候选不得进入正式查询、正式调度或正式科研结果发布。
+- 未批准、被拒绝、未选中、过期、冲突或废弃候选不得进入正式查询或正式调度；首版也不把这些候选发布为独立的正式科研结论。
 
 ## 审核责任边界
 

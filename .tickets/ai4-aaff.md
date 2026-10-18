@@ -1,7 +1,7 @@
 ---
 id: ai4-aaff
 status: open
-deps: [ai4-ay0e]
+deps: [ai4-ay0e, ai4-r3so, ai4-m0vt, ai4-xrxw, ai4-vbnr]
 links: []
 created: 2026-10-17T14:58:26Z
 type: prototype
@@ -33,7 +33,7 @@ tags: [wayfinder:prototype, product, sciencepal, ai4science]
 
 - 默认场景应选择哪一条公开、稳定、可预加载的科研数据闭环，才能在 3—5 分钟内同时展示路线图、SciencePal 核心使用、证据引用和人工判断，而不是只展示静态页面？
 - 首版演示的“最小数字证据卡”需要哪些不可删字段（来源、版本或快照标识、指标、单位、提取时间、定位信息、哈希或访问说明），哪些完整 `ResourceVersion` 治理能力可以明确留到后续实现？
-- 哪一步由 SciencePal 承载为核心科研工作，哪一步必须由研究人员接管；TaskNode Owner 的结果接纳审核和 Project Owner 的正式科研结果发布审核如何在脚本中分别可见？
+- 哪一步由 SciencePal 承载为核心科研工作，哪一步必须由研究人员接管；TaskNode Owner 的结果接纳审核与 Project Owner 的 Formal Mapping 路线正式发布审核如何在脚本中分别可见？首版不单独建立正式科研结论对象。
 - 演示中的失败应如何区分普通重试/转交/人工接管与必须改变研究路线的失败，才能证明 Mapping Proposal 不是普通运行日志？
 - 3—5 分钟视频、5 页以内说明和原创/资源声明分别由哪些验收证据证明，并如何在不泄露真实凭据或受限数据的前提下复现？
 
@@ -43,9 +43,9 @@ tags: [wayfinder:prototype, product, sciencepal, ai4science]
 - [ ] 提供初始 Research Mapping：TaskNode、Dependency Edge、负责人/Agent、输入输出、完成条件和至少一个数字 Resource Reference。
 - [ ] 提供可访问的最小数字数据或证据包，并记录来源、版本标识、访问限制、许可证和替代数据方案。
 - [ ] 定义最小数字证据卡的字段、与完整 `ResourceVersion` 治理的边界，以及从证据卡回到可核验资源的路径。
-- [ ] 定义一条 3—5 分钟可复现的演示脚本：任务执行、结果提交、数字证据引用、TaskNode 负责人审核、失败或路线调整、Mapping Proposal、Diff/影响预览以及 Project Owner 批准或驳回。
+- [ ] 定义一条 3—5 分钟可复现的演示脚本：任务执行、结果提交、数字证据引用、TaskNode Owner 结果接纳、失败或路线调整、Mapping Proposal、Diff/影响预览以及 Project Owner 批准或驳回。
 - [ ] 明确 SciencePal 实际承载的核心 Agent、任务流程或结果审核环节，并说明人工接管点；SciencePal 不能只用于展示文案。
-- [ ] 在脚本中明确区分 TaskNode Owner 的草稿/结果接纳审核与 Project Owner 的正式科研结果发布审核，不能以一次批准替代两者。
+- [ ] 在脚本中明确区分 TaskNode Owner 的结果接纳审核与 Project Owner 的 Formal Mapping 路线正式发布审核；首版不以一次批准替代两者，也不新增独立的“正式科研结论”对象。
 - [ ] 证明演示只依赖通用 TaskNode、Dependency Edge、Execution Record、Resource Reference 和 Mapping Proposal，不新增领域专属核心对象。
 - [ ] 记录一次成功路径和一次失败/驳回路径的可观察证据，包括执行记录、审计时间线、Proposal 状态和 Formal MappingRevision 结果（如批准）。
 - [ ] 提供不超过 5 页的说明材料及原创性、第三方资源、数据来源和许可证声明；不得提交真实凭据或受限数据。

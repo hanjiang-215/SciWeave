@@ -47,15 +47,22 @@ queued → running → succeeded → awaiting_acceptance → accepted
                   ├→ handoff_required → handed_off
                   ├→ human_takeover
                   └→ cancelled
+
+awaiting_acceptance → supplement_requested → awaiting_acceptance
+                    ├→ needs_revision → queued
+                    └→ rejected
 ```
 
 规则如下：
 
-- `retry` 不是状态，而是从 `failed` 或可重试的 `cancelled` 记录创建新的子 Execution Record，并通过 `retry_of` 关联原记录。
+- `retry` 不是状态，而是从 `failed`、`needs_revision` 或可重试的 `cancelled` 记录创建新的子 Execution Record，并通过 `retry_of` 关联原记录。
+- `supplement_requested` 表示 TaskNode Owner 认为结果缺少数据、说明或证据；提交者可以补充 MCP Submission，补充内容必须关联原 Execution Record。
+- `needs_revision` 表示结果本身需要重新执行或修改，通常创建新的 Execution Record；原记录保持不可变。
+- `rejected` 表示当前结果未被接纳。被拒绝的结果仍可作为审计证据，不能作为后续任务的正式输入；重新执行必须创建新的 Execution Record。
 - `handoff_required` 表示当前执行主体不能继续；转交后创建新的 Execution Record，通过 `handoff_of` 关联原记录，原记录保持不可变。
 - `human_takeover` 表示人员接管当前任务；接管前后的操作者、原因和时间必须分别审计。
 - `succeeded` 只表示执行过程产生了可提交结果，不表示结果已经被科研负责人接纳。
-- `accepted` 只表示 TaskNode Owner 完成第一阶段结果接纳；需要进入正式科研事实或改变 Formal Mapping 时仍需 Project Owner 审核。
+- `accepted` 只表示 TaskNode Owner 完成第一阶段结果接纳。首版不另设“正式科研结论”对象；结果可以作为后续任务输入或受控资源引用，只有它引起 Formal Mapping 变化时才需要 Project Owner 审核 Proposal。
 - 失败记录不可删除或覆盖；更正通过新的 Submission 或新的 Execution Record 表达。
 
 ## 执行主体和责任
@@ -65,9 +72,9 @@ queued → running → succeeded → awaiting_acceptance → accepted
 | 研究人员 | 执行任务、提交结果、判断证据、接管失败任务 | 不能绕过正式审核直接修改 Formal Mapping |
 | Personal Agent | 代表研究人员执行被授权的结构化工作、提交结果或失败报告 | 不能自行接纳结果或正式发布 |
 | Task Agent | 执行边界明确、可重复的任务并提交结果 | 不能改变任务路线或批准科研事实 |
-| TaskNode Owner | 检查结果、证据和完成条件，接纳或退回结果 | 不能代替 Project Owner 正式发布路线变更 |
+| TaskNode Owner | 检查结果、证据和完成条件，接纳、要求补充、退回或拒绝结果 | 不能代替 Project Owner 批准 Formal Mapping 路线变更 |
 | Central Agent | 检查前置条件、创建调度、重试、转交、记录执行和预审提交 | 不能代替人工科研判断和正式批准 |
-| Project Owner | 批准正式科研结果和 Formal MappingRevision | 不直接修改候选正文；应选择经过审查的完整候选 |
+| Project Owner | 批准正式 Research Mapping 路线变更 | 首版不直接修改候选正文，也不另建独立的“正式科研结论”对象 |
 
 ## MCP Submission 最小关系
 
@@ -105,10 +112,11 @@ MCP Submission 只能进入受控 Buffer 或 Execution Record。它不能直接�
 
 ## 两阶段审核边界
 
-1. Execution Record 进入 `awaiting_acceptance` 后，由 TaskNode Owner 检查完成条件、结果摘要、证据引用和失败说明，可以接受、退回或要求补充。
-2. 被接纳的结果可以作为后续任务的正式输入候选，但不自动成为项目正式科研结论。
-3. 改变 Formal Mapping、发布正式科研结果或恢复/废弃路线，必须进入 Mapping Proposal，并由 Project Owner 进行 Formal Publication Review。
-4. 每一步都追加 AuditEvent，至少关联操作者、Execution Record、MCP Submission、TaskNode 版本和结果。
+1. Execution Record 进入 `awaiting_acceptance` 后，由 TaskNode Owner 检查完成条件、结果摘要、证据引用和失败说明，可以接受、要求补充、要求重做或拒绝。
+2. 补充材料通过新的 MCP Submission 关联原 Execution Record；重新执行通过新的 Execution Record 关联 `retry_of` 或 `revision_of`。
+3. 被接纳的结果可以作为后续任务的输入或受控资源引用，但首版不单独创建“正式科研结论”对象。
+4. 改变 Formal Mapping、恢复/废弃路线或改变依赖语义，必须进入 Mapping Proposal，并由 Project Owner 进行 Formal Publication Review。
+5. 每一步都追加 AuditEvent，至少关联操作者、Execution Record、MCP Submission、TaskNode 版本和结果。
 
 ## Acceptance Criteria
 

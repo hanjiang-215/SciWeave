@@ -1,6 +1,6 @@
 # 项目依赖清单
 
-更新日期：2026-10-16
+更新日期：2026-10-18
 
 ## 结论
 
@@ -19,6 +19,8 @@
 | 任务跟踪 | fer | 管理需求、任务、状态和依赖关系 | 已初始化 `.tickets/`；本机已安装 `fer` 0.1.3，可读写全部工单 |
 | 构建工具链 | Rust（rustup / cargo） | 从源码编译 `fer` 和 `gitee`，二者当前无 Windows 预编译产物 | 本机已安装 rustup 1.29.1、rustc/cargo 1.99.1（`stable-x86_64-pc-windows-msvc`） |
 | 创作平台 | SciencePal | 赛事作品的主要创作平台 | 文档中声明为外部平台；尚未接入代码或 API |
+| 本地验证服务 | TerminusDB Server 12.0.8 / Store 0.19.8 | 验证 Research Mapping 的 Schema、版本、分支、差异和正式化前存储行为 | 已固定本地 Compose 镜像；仅用于开发验证，不是生产部署结论 |
+| 容器前置条件 | Docker Desktop / Docker Compose | 启动本地 TerminusDB 验证服务 | 本机需安装并启动 Docker；版本暂不作为产品运行时约束 |
 | 仓库协作 | gitee-cli（命令名：`gitee`） | 在 Gitee 远程仓库上执行仓库协作和 Pull Request 操作 | 本机已安装 `gitee` 0.7.1（源码构建）；尚未登录，创建 PR 仍需先认证 |
 | 运行时依赖 | `@codemeall/harness-wiki` | 维护 LLM Wiki / Harness Wiki 的 skill-first 工具 | 已在 `package.json` 声明 `^0.3.2`；按锁文件安装验证通过 |
 
@@ -35,6 +37,15 @@
   - `corepack pnpm test` 退出码 1：`test` 脚本目前是占位符 `echo "Error: no test specified" && exit 1`，仓库尚无真实测试。
   - 安装后 pnpm 提示 `Agent skills awaiting approval: @codemeall/harness-wiki`，本次未执行 `pnpm approve`。
   - `npm` 本机可用（`11.9.0`），但在仓库目录内执行会被 `devEngines` 拦截并报 `EBADDEVENGINES`，查询 registry 需在仓库目录之外执行。
+
+### TerminusDB 本地验证服务
+
+- **来源**：官方 Docker 镜像 `terminusdb/terminusdb-server:12.0.8`；本项目在 `dockers/service/terminusdb/compose.yaml` 中固定该版本。
+- **用途**：验证 Research Mapping 的 Schema、TaskNode、Dependency Edge、Commit、History、Diff、candidate branch、rebase 和冲突行为；不作为首版科研人员直接使用的数据库界面。
+- **版本约束**：TerminusDB Server 12.0.8；`ai4-9hcj` 和 `ai4-2alw` 实测的 TerminusDB Store 0.19.8。
+- **许可证或使用限制**：本仓库不重新分发镜像；镜像及其依赖的许可证以官方发行说明为准。该 Compose 仅用于本地开发验证，不是生产部署方案。TerminusDB 的 branch、Commit 和 rebase 不代表 Project Owner 审核，Proposal、Formal MappingRevision 和 AuditEvent 由平台层维护。
+- **安装与验证**：需要 Docker Desktop 和 Docker Compose；在仓库根目录执行 `docker compose -f dockers/service/terminusdb/compose.yaml up -d`，使用 `docker compose ... ps` 查看容器，使用 `curl -i http://127.0.0.1:6363/` 检查端口。历史验证使用本地临时数据库，验证完成后已清理。
+- **凭据限制**：历史验证使用 `admin:root` 仅用于隔离的 localhost 临时容器；共享或生产环境必须按官方说明设置安全密码，密码、令牌和 `.env` 文件不得提交。
 
 ### `@codemeall/harness-wiki` 依赖记录
 

@@ -51,6 +51,14 @@ tags: [wayfinder:grilling, mapping, domain-model, ai4science]
 | 来源与治理 | `derived_from`、`proposal_id`、`lifecycle_state`、`formal_revision_id` | 遵循与 TaskNode 相同的候选/正式边界 |
 | 元数据 | `created_by`、`created_at`、`source_submission_id` | 用于提交和审计追踪 |
 
+### DependencyEdge 的调度规则
+
+- `information`：表示目标任务需要源任务产出的信息；只有在 `required_outputs` 被标记为必需时才阻塞，否则可以先执行并在结果中声明缺失信息。
+- `blocking`：目标任务必须等待源任务满足 `blocks_until`，否则保持 `not_ready` 或 `blocked`。
+- `conditional`：由 `activation_condition` 判断是否激活；条件无法判断时不得自动调度，转为人工判断或补充信息。
+- `alternative`：表示多个候选前置路线中的替代关系；首版采用“任一满足明确条件的路线即可继续”，条件必须在边上写明，不能由 Agent 自行猜测。
+- `route_change_trigger` 只表示失败或证据何时需要建议路线变化，不会自动修改 Formal Mapping；确认路线变化后必须创建 Mapping Proposal。
+
 DependencyEdge 不保存执行日志、错误详情、资源正文或完整结果摘要。错误和运行结果进入 Execution Record，资源通过 Resource Reference 关联，路线变化通过 Proposal 的 ChangeSet 表达。
 
 ## 版本和状态约束
