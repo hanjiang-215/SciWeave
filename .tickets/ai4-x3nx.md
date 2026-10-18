@@ -1,6 +1,6 @@
 ---
 id: ai4-x3nx
-status: open
+status: closed
 deps: []
 links: [ai4-ru15]
 created: 2026-10-18T14:03:32Z
@@ -22,11 +22,10 @@ tags: [wayfinder:map]
 
 ## Decisions so far
 
+- [正式版本前进后候选重放与冲突审核规则](ai4-iciy.md)：候选完整状态保存在 TerminusDB，SQLite 保存治理元数据；中央 Agent 对同一正式基准上的有效候选整体进行语义分析并生成方案，PO 查看完整材料后通过专用 MCP 选择或要求生成新候选；正式化成功后逐项记录来源提交的处置并通知提交者，原提交保留且不因混合而复用。
+
 ## Not yet specified
-- 一项候选正式化后，其他基于旧正式版本的候选如何处理。
-- 中央审核怎样区分可无损重放、冲突和语义不确定，结构化摘要需呈现哪些信息。
-- 重放后的候选是否需要重新审核、哪些变更应作为不可拆分的整体。
-- 这些规则如何覆盖 Research Mapping 与 Wiki，以及首版与后续能力的边界。
+
 
 ## Out of scope
 - TerminusDB API、冲突检测算法实现和存储清理机制的具体技术设计。

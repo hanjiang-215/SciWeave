@@ -36,6 +36,10 @@
 
 **Candidate Resolution（候选解决版本）**：Agent 针对多个冲突 candidate branch 生成的新候选版本。它可以选择某个候选、综合多个候选或放弃部分修改，但不能改写其他提交者的原始 candidate branch 或 Commit。综合多个来源形成的新候选结果称为 `blended`，必须拥有自己的不可变 candidate Commit。
 
+**Partially Blended Submission（部分混合提交）**：来源提交的一部分变更被纳入新的混合候选时，该来源提交的处理结果。原始提交保留为历史记录，不再作为后续正式化的输入；若要继续提交未纳入的内容，需创建新的提交。
+
+**Candidate Disposition（候选处置结果）**：PO 对审核池中来源提交在正式化方案中的处理结果，包括完整采用（`selected`）、与其他来源组合（`blended`）、部分纳入混合候选（`partially blended`）或放弃（`abandoned`）。该结果对应一个已选定并成功正式化的完整候选方案。
+
 **Draft Acceptance Review（草稿接纳审核）**：端侧 Agent 提交修改后进行的第一阶段审核。Research Mapping 变更由相关 TaskNode 负责人审核；LLM-Wiki 变更由 Wiki Curator、Resource Owner 或文档负责人审核。审核通过后，Buffer 中的变更才可以分别写入对应的 TerminusDB candidate branch，形成 WikiRevision 或 Mapping Revision 草稿；该审核不代表内容已经成为正式科研事实。
 
 **Formal Publication Review（正式发布审核）**：草稿转为正式版本前，由项目负责人进行的第二阶段审核。只有审核通过并更新 Formal WikiRevision 或 Formal Mapping Revision 指针后，内容才能进入正式查询和正式调度。
