@@ -21,17 +21,9 @@
 - *(wayfinder)* Record TerminusDB behavior
 - *(wayfinder)* Define mapping draft and formal views
 - *(changelog)* Record project changes
-- *(rules)* Add file and naming convention rule
 - *(wiki)* Record TerminusDB-Wiki governance direction
 - *(changelog)* Record TerminusDB-Wiki governance
 - *(changelog)* Record pull request metadata
-- *(rules)* Include project manifests in root file list
-- *(dependencies)* Record Node.js, pnpm and harness-wiki dependency
-- *(dependencies)* Sync human-facing copy with authoritative ledger
-- *(dependencies)* Record local install of git-cliff, fer and gitee
-- *(dependencies)* Sync human-facing copy with authoritative ledger
-- *(changelog)* Record toolchain installation
-- *(changelog)* Record toolchain installation commits
 - *(mapping)* Define single graph draft lifecycle
 - *(terminusdb)* Record candidate branch validation
 - *(mapping)* Add node edge field model ticket
@@ -55,6 +47,14 @@
 - *(governance)* Align mapping and wiki proposals
 - *(fer)* Use native ticket filenames
 - *(changelog)* Record governance and ticket updates
+- *(rules)* Add file and naming convention rule
+- *(rules)* Include project manifests in root file list
+- *(dependencies)* Record Node.js, pnpm and harness-wiki dependency
+- *(dependencies)* Sync human-facing copy with authoritative ledger
+- *(dependencies)* Record local install of git-cliff, fer and gitee
+- *(dependencies)* Sync human-facing copy with authoritative ledger
+- *(changelog)* Record toolchain installation
+- *(changelog)* Record toolchain installation commits
 - *(rules)* Align ticket filename rule with native fer naming
 - *(changelog)* Record develop merge and ticket naming alignment
 - *(product)* Name the platform SciWeave
@@ -67,6 +67,16 @@
 - *(product)* Refine first-stage mapping specifications
 - *(product)* Complete ticket consistency review
 - *(fer)* Record ticket review verification
+- *(changelog)* Record ticket review
+- *(product)* Integrate zhanyunfei changes
+- *(dependencies)* Consolidate dev environment record (ai4-ljg3)
+- *(wayfinder)* Chart candidate governance map
+- *(wayfinder)* Resolve candidate governance rules
+- *(wayfinder)* Open persistence schema map
+- *(wayfinder)* Split mapping and wiki schema branches
+- *(wayfinder)* Scope wiki work to content model
+- *(wayfinder)* Add agent and messaging branches
+- *(wayfinder)* Claim agent decision branches
 
 ### ⚙️ Miscellaneous Tasks
 
@@ -77,9 +87,10 @@
 - *(terminusdb)* Add local compose service
 - *(fer)* Record Gitee pull request
 - *(fer)* Record Gitee pull request
+- *(fer)* Restore native ticket filenames
+- *(merge)* Sync develop before PR review integration
 - *(fer)* Record toolchain installation
 - *(fer)* Record toolchain installation commits
-- *(fer)* Restore native ticket filenames
 - *(fer)* Use native filename for ai4-wzdh
 - *(fer)* Assign tickets to SciWeave
 - *(fer)* Record pull request 6 for SciWeave planning review
