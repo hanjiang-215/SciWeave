@@ -54,3 +54,7 @@ tags: [dependencies, setup, toolchain]
 **遗留风险**：`gitee auth status` 仍为 `Not authenticated`，创建目标为 `develop` 的 Pull Request 不可执行，需要先在本机完成 `gitee auth` 才能验证 PR 流程；已记录在 `docs/DEPENDENCIES.md` 的「当前缺失项」第 7 条。
 
 **后续观察**：`CHANGELOG.md` 中存在重复条目（例如 `docs(dependencies): Sync human-facing copy` 与 `chore(fer): Record Gitee pull request` 各出现两次），来自分支合并后的历史重复，属于 git-cliff 对合并分支不做去重的既有行为，不是本次引入。
+
+**2026-10-18T12:33:43Z**
+
+后续说明（2026-10-18）：本工单验收时同步维护 docs/DEPENDENCIES.md 与面向人副本，是当时的完成事实；该双份维护做法现由 ai4-ljg3 的单一事实来源决定取代。当前仅 docs/DEPENDENCIES.md 作为依赖与开发环境信息来源。

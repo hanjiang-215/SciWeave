@@ -51,3 +51,9 @@ TerminusDB 本地验证服务已固定为 `terminusdb/terminusdb-server:12.0.8`�
 ## Review conclusion (2026-10-18)
 
 固定版本、服务说明、权威依赖清单和面向人的依赖副本已经互相一致；本票据只提供可复现的开发验证前提，不把 TerminusDB 变成科研人员入口，也不把 branch、Commit 或 rebase 当作业务审批。
+
+## Notes
+
+**2026-10-18T12:33:43Z**
+
+后续说明（2026-10-18）：本工单记录的依赖副本同步是当时完成工作的历史事实；该维护方式现由 ai4-ljg3 的单一事实来源决定取代。当前依赖与开发环境信息统一查阅 docs/DEPENDENCIES.md。

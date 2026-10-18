@@ -1,18 +1,25 @@
-# 项目依赖清单
+# 开发环境与 vibe coding 依赖记录
+
+> 本文记录开发者进行 vibe coding、运行仓库开发工具和本地验证所需的环境与依赖，不代表产品已确定的技术选型。应用包的实际声明以 `package.json` 与 `pnpm-lock.yaml` 为准；产品运行时、框架和部署架构仍须由项目决策确认。
 
 更新日期：2026-10-18
 
-## 结论
+## 定位与结论
 
-当前仓库已确定应用技术栈为 Node.js + pnpm，并在 `package.json` 中声明了首个运行时依赖 `@codemeall/harness-wiki`，锁文件 `pnpm-lock.yaml` 已提交。仓库目前仍没有应用源码入口、测试框架和 CI 配置，因此除该依赖外的运行时依赖尚未确定，不得在技术栈进一步确认前臆造。
+此清单面向开发与验证环境，包含开发工具、仓库协作工具、本地验证服务及仓库包清单中实际声明的包。安装或使用某项工具，不等同于将其选为产品技术栈。
 
-开发工具链方面，原先缺失的三个命令已在本机补齐：`git-cliff` 2.14.2、`fer` 0.1.3 和 `gitee` 0.7.1，变更日志生成、工单管理和 Gitee 协作的规范动作已可实际执行。`gitee` 尚未登录，因此创建 Pull Request 仍不可用。
+当前仓库尚无应用源码入口、真实测试框架或 CI 配置，产品技术栈和生产部署架构尚未确定。`package.json` 当前声明包管理器为 `pnpm@12.11.2`，并在 `dependencies` 中声明 `@codemeall/harness-wiki@^0.3.2`；这些是仓库清单中的事实，不足以证明 Node.js + pnpm 已被决策为产品架构。该包用于维护 LLM Wiki / Harness Wiki 的开发知识库工具流程，其被列入 `dependencies` 是包清单现状，不应据此推断它是最终产品运行时依赖。实际安装版本以 `pnpm-lock.yaml` 为准。
 
-## 已确认依赖
+开发环境记录方面，本机曾补齐 `git-cliff` 2.14.2、`fer` 0.1.3 和 `gitee` 0.7.1。`gitee` 尚未登录，因此创建 Pull Request 仍需认证。
+
+
+## 开发环境与仓库声明项
+
+下表记录开发工具、本地验证服务和仓库包清单中的声明，不构成产品架构选型。
 
 | 类别 | 依赖 | 用途 | 状态 |
 | --- | --- | --- | --- |
-| 运行时 | Node.js | 运行 pnpm 和后续应用代码 | 本机验证版本 v24.14.0 |
+| 开发运行环境 | Node.js | 运行 pnpm 及仓库开发工具 | 本机验证版本 v24.14.0；不代表已选定为产品运行时 |
 | 包管理 | pnpm | 声明依赖、生成并校验锁文件 | 已在 `package.json` 声明 `pnpm@12.11.2`；本机需通过 `corepack pnpm` 调用 |
 | 版本控制 | Git | 分支、提交和协作 | 已配置 |
 | 变更日志 | git-cliff | 根据 Conventional Commits 生成 `CHANGELOG.md` | 已配置 `cliff.toml` 并已生成 `CHANGELOG.md`；本机已安装 `git-cliff` 2.14.2 |
@@ -22,12 +29,12 @@
 | 本地验证服务 | TerminusDB Server 12.0.8 / Store 0.19.8 | 验证 Research Mapping 的 Schema、版本、分支、差异和正式化前存储行为 | 已固定本地 Compose 镜像；仅用于开发验证，不是生产部署结论 |
 | 容器前置条件 | Docker Desktop / Docker Compose | 启动本地 TerminusDB 验证服务 | 本机需安装并启动 Docker；版本暂不作为产品运行时约束 |
 | 仓库协作 | gitee-cli（命令名：`gitee`） | 在 Gitee 远程仓库上执行仓库协作和 Pull Request 操作 | 本机已安装 `gitee` 0.7.1（源码构建）；尚未登录，创建 PR 仍需先认证 |
-| 运行时依赖 | `@codemeall/harness-wiki` | 维护 LLM Wiki / Harness Wiki 的 skill-first 工具 | 已在 `package.json` 声明 `^0.3.2`；按锁文件安装验证通过 |
+| 仓库声明包 | `@codemeall/harness-wiki` | 维护 LLM Wiki / Harness Wiki 的开发知识库流程 | 当前在 `package.json` 的 `dependencies` 声明 `^0.3.2`；按锁文件安装验证通过，不据此认定为产品运行时选型 |
 
-### 技术栈与包管理记录（Node.js + pnpm）
+### 仓库包管理与开发运行环境记录（Node.js + pnpm）
 
 - **来源**：提交 `1f920aa` 引入 `package.json`、`pnpm-lock.yaml` 和 `.cursor/skills/ref/harness-wiki/SKILL.md`。
-- **用途**：Node.js 是当前选定的应用运行时；pnpm 是当前选定的包管理器，依赖必须通过它在 `package.json` 中声明，并提交 `pnpm-lock.yaml`。
+- **用途**：Node.js 当前用于运行 pnpm 和仓库开发工具；pnpm 是仓库当前声明的包管理器，用于按 `package.json` 管理仓库包并维护 `pnpm-lock.yaml`。这仅描述仓库开发环境，不构成产品运行时或包管理架构的决策。
 - **版本约束**：`package.json` 声明 `"packageManager": "pnpm@12.11.2"`，并通过 `devEngines.packageManager` 要求同名同版本、`onFail` 为 `download`。`pnpm@12.11.2` 在 registry 中存在（查询时最新为 `12.14.0`）；升级需重新验证安装和锁文件。Node.js 本机验证版本为 `v24.14.0`。
 - **许可证或使用限制**：以 pnpm 发行包或上游仓库许可证为准。本机 npm/pnpm 使用的 registry 为 `registry.npmmirror.com`（依据安装与查询输出中的 tarball 地址）。
 - **安装与验证**：
@@ -47,7 +54,7 @@
 - **安装与验证**：需要 Docker Desktop 和 Docker Compose；在仓库根目录执行 `docker compose -f dockers/service/terminusdb/compose.yaml up -d`，使用 `docker compose ... ps` 查看容器，使用 `curl -i http://127.0.0.1:6363/` 检查端口。历史验证使用本地临时数据库，验证完成后已清理。
 - **凭据限制**：历史验证使用 `admin:root` 仅用于隔离的 localhost 临时容器；共享或生产环境必须按官方说明设置安全密码，密码、令牌和 `.env` 文件不得提交。
 
-### `@codemeall/harness-wiki` 依赖记录
+### `@codemeall/harness-wiki` 仓库声明包记录
 
 - **来源**：由提交 `1f920aa` 引入，声明在 `package.json` 的 `dependencies` 中；包来自 npm registry（本机镜像为 `registry.npmmirror.com`）。仓库中的 `.cursor/skills/ref/harness-wiki/SKILL.md` 与依赖同名、由同一提交引入，提供该 wiki 的初始化和维护流程。
 - **用途**：skill-first 的 LLM Wiki / Harness Wiki 脚手架与维护工具，用于初始化、写入、查询和检查 markdown 知识库。产品侧只参考它的 raw/source/entity/concept/synthesis 内容组织方式，不采用它的 MCP 或存储实现（见 `.tickets/ai4-saug.md`）。
@@ -137,7 +144,7 @@
 
 以下项目在后续阶段必须补齐：
 
-1. 应用源码入口和最小可运行验证；目前仓库只有规则、文档和一个运行时依赖。
+1. 应用源码入口和最小可运行验证；目前仓库只有开发文档、规则和仓库包清单中的开发工具包，产品技术栈仍未决。
 2. 真实测试：`test` 脚本仍是占位符，需补充测试框架和用例。
 3. 构建和 CI 验证配置。
 4. 运行所需环境变量名称、示例文件和安全说明；真实凭据不得提交。
@@ -147,7 +154,7 @@
 
 ## 补齐要求
 
-- 先在 fer 任务中确认技术栈和验收标准，再添加具体依赖。
+- 先在 fer 任务中确认产品技术决策和验收标准，再添加具体的应用依赖。
 - 每个依赖必须说明用途、版本约束、来源和验证方式。
 - 安装后必须生成并提交锁文件；缓存、构建产物、凭据和本地环境文件不得提交。
 - 添加依赖后至少执行安装检查、测试或等价的最小可运行验证，并把结果回写 fer。
