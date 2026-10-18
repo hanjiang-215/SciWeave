@@ -9,18 +9,22 @@ priority: 1
 parent: ai4-56iu  # Wiki 持久化模型分支
 tags: [wayfinder:grilling]
 ---
-# LLM-Wiki 文档与资源引用持久化字段模型
+# LLM-Wiki 内容模型与资源引用字段设计
 
-明确 LLM-Wiki 正式文档、资源引用和候选版本在 TerminusDB 中的具体领域存储模型。
+明确 Wiki 内容对象、页面元数据和资源引用的具体领域字段、关系与约束，供后续实现规格使用。
 
 ## Design
 
 ## Question
-WikiDocument、WikiRevision、Resource、ResourceVersion、Resource Reference 及其 Formal WikiRevision/candidate 关联，分别需要哪些具体字段、标识和关系？请明确不可变版本、引用完整性、资源版本定位、治理状态与正式查询边界。
+WikiDocument、WikiRevision、Resource、ResourceVersion、RawArtifact 与 Resource Reference 分别应承载哪些内容字段和关系？请明确：
+- Wiki 文档分类、稳定身份、标题/描述/正文及来源信息分别属于哪个对象；
+- 页面元数据与版本内容如何组织，哪些字段是文档级信息、哪些属于单个 WikiRevision；
+- Resource、ResourceVersion、RawArtifact 和 Resource Reference 的内容职责及引用关系；
+- 正式引用如何指向不可变 WikiRevision 或 ResourceVersion，以及字段约束和引用完整性要求。
 
 ## Notes
-以 ai4-saug、ai4-36ek、ai4-2sdn、ai4-zewm 和 ai4-iciy 的已决领域规则为输入；保持 Wiki 与 Research Mapping 的存储和治理记录隔离。此票讨论领域持久化模型，不讨论 API 或实现代码。
+Wiki 的 Proposal、candidate branch、candidate Commit、Formal WikiRevision 指针和审核生命周期已经由既有决策确定：沿用统一提案治理语义，同时保持 Wiki 领域隔离。本票只决定内容对象与资源引用的字段模型，不重新讨论版本治理状态机、候选正式化规则、API 或代码实现。
 
 ## Acceptance Criteria
 
-形成 Wiki 领域持久化对象、字段、关系和约束清单；明确正式/候选版本边界、资源引用指向和历史可追溯要求；以文档修改、引用变化和候选正式化场景检查模型完整性。
+形成 Wiki 内容对象、版本正文/元数据、资源对象与资源引用的字段和关系清单；说明字段定义、归属、约束和正式版本引用方式；以新增文档、修订内容、变更引用和正式查询场景检查模型一致性。
