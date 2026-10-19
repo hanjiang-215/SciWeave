@@ -28,7 +28,9 @@ tags: [wayfinder:grilling]
 
 **2026-10-19T07:06:23Z**
 
-Resolution（2026-10-19）：Gateway MVP 采用 Python 常驻进程作为平台入口，首版使用 Python 标准库 HTTP 入口与 `sqlite3` 持久化，避免在最小闭环阶段新增 Web 框架依赖。Gateway 的公共 seam 是 Owner Command 提交、Execution 查询和取消请求；认证首版使用本地开发令牌配置，不能写入仓库。
+Resolution（2026-10-19）：Gateway MVP 采用 Python 常驻进程作为平台入口，首版使用 MCP（Streamable HTTP）入口与 `sqlite3` 持久化，避免在最小闭环阶段引入额外 Web 框架依赖。Gateway 的公共 seam 是 Owner Command 提交、Execution 查询、取消请求和健康检查；认证首版使用本地开发令牌配置，不能写入仓库。
+
+> 修订（2026-10-19）：原 Resolution 写的入口是“Python 标准库 HTTP”。Owner 通道改为 MCP 后，标准库 HTTP 保留为回环健康检查与测试 seam，Owner 主通道是 MCP 工具调用。原因见 [Owner 通道与上游交接队列物理隔离](ai4-353s.md) 的 2026-10-19 决策修订。
 
 核心对象与状态：TaskSession 按 task_node_id 固定一个受平台生成的 session_id，状态为 active、waiting、cancelled、failed、completed；OwnerCommand 以 idempotency_key 唯一，状态为 accepted、running、succeeded、failed、cancelled；ExecutionRecord 每次实际 Worker 尝试一条不可变记录，状态为 created、running、waiting、succeeded、failed、cancelled；AuditEvent 追加记录命令接收、状态迁移、Worker 创建/退出、运行时结果和错误摘要。重复 idempotency_key 返回原命令和执行结果，不创建第二次执行。
 

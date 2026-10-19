@@ -37,3 +37,7 @@ tags: [implementation, gateway]
 **2026-10-19T08:53:34Z**
 
 关联 Gitee Pull Request #9：https://gitee.com/qi-yueran/ai4science/pulls/9（目标 develop）。实现提交：fde2564；目录与 uv 迁移提交：e5c64b2。
+
+**2026-10-19T20:16:00Z**
+
+后续修订说明：本票实现的 HTTP 公共 seam（`/health`、`POST /v1/commands`、`GET /v1/executions/{id}`）保留为回环调试与测试入口。Owner 主通道改为 MCP（Streamable HTTP）后，同一批领域操作需要以 MCP 工具形式暴露：`submit_owner_command`、`query_execution`、`cancel_execution`、`list_pending`、`health`。已实现的 SQLite 事务、幂等和审计逻辑可直接复用，不需要重写。MCP 工具层由后续实现票覆盖。

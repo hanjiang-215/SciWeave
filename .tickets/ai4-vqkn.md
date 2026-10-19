@@ -22,3 +22,5 @@ tags: [implementation, gateway]
 - [ ] 支持 accepted、running、succeeded、failed、cancelled 状态迁移，并拒绝非法迁移。
 - [ ] 状态迁移追加 AuditEvent，错误摘要不包含凭据。
 - [ ] 关闭并重新创建 Gateway 后可以读取既有 TaskSession、ExecutionRecord 和 AuditEvent，不自动重做已失败执行。
+
+> 入口修订（2026-10-19）：Owner 通道改为 MCP（Streamable HTTP）。MCP 客户端重试可能重复发送同一次工具调用，因此幂等键需要在 MCP 工具层显式传入，不能依赖传输层去重。字段名与回环 HTTP 端点保持一致，仍为 `idempotency_key`。背景见 [Owner 通道与上游交接队列物理隔离](ai4-353s.md)。
