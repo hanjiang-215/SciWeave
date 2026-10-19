@@ -1,8 +1,7 @@
 ---
 description: 项目依赖声明、版本约束和凭据安全规范
-alwaysApply: true
+alwaysApply: false
 ---
-
 # 项目依赖规范
 
 1. 开始实现前先阅读 `docs/DEPENDENCIES.md`，确认当前依赖清单和缺失项。

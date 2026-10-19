@@ -6,6 +6,7 @@ links: []
 created: 2026-10-18T15:06:41Z
 type: task
 priority: 1
+assignee: zhanyunfei
 parent: ai4-56iu  # Wiki 持久化模型分支
 tags: [wayfinder:grilling]
 ---
