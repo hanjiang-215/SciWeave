@@ -33,3 +33,7 @@ tags: [implementation, gateway]
 **2026-10-19T08:04:24Z**
 
 审查修复与提交：修复并发幂等检查的事务/锁边界，补充 JSON 对象校验，测试改为只通过 HTTP seam 验证，移除误加的宽泛 tests/ 忽略规则。代码审查后提交 fde2564（feat(gateway): add command persistence seam）。
+
+**2026-10-19T08:53:34Z**
+
+关联 Gitee Pull Request #9：https://gitee.com/qi-yueran/ai4science/pulls/9（目标 develop）。实现提交：fde2564；目录与 uv 迁移提交：e5c64b2。

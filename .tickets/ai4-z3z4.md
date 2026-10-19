@@ -57,3 +57,9 @@ Research Mapping MCP、依赖图、Agent Kit/Skills/Hooks、ZIP 交付、跨服�
 - [ ] 固定 session_id 能在新的 Worker 中恢复。
 - [ ] 失败、取消、串行化和 Gateway 重启读取行为有自动化验证。
 - [ ] 规格未引入 MCP 领域逻辑、Agent Kit 或 ZIP 交付。
+
+## Notes
+
+**2026-10-19T08:53:34Z**
+
+关联 Gitee Pull Request #9：https://gitee.com/qi-yueran/ai4science/pulls/9（目标 develop）。PR 包含 Gateway MVP 基础闭环、技术栈约束与实现路线图；后续实现票仍按依赖图推进。

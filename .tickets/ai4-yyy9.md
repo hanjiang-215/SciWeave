@@ -43,3 +43,7 @@ tags: [wayfinder:map]
 **2026-10-19T07:06:23Z**
 
 2026-10-19 前沿推进：Gateway MVP 状态模型与端口边界已完成决策。首版采用 Python 标准库 HTTP + sqlite3、本地进程调度和 fast-agent Runtime Adapter；固定 session_id、专属持久 home、connection scope、session history，默认关闭 compaction；不接 EventBus、Redpanda、领域 MCP、A2A Human Input 或真实模型。地图已达到 `/to-spec` 交接条件。
+
+**2026-10-19T08:53:34Z**
+
+关联 Gitee Pull Request #9：https://gitee.com/qi-yueran/ai4science/pulls/9（目标 develop）。Gateway MVP 地图、决策票、技术规格和实现任务已进入 PR。
