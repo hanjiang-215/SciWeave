@@ -128,6 +128,14 @@
   - `gitee auth status` 输出 `Not authenticated`，说明本机尚未登录，创建 Pull Request 之前仍需先完成认证；认证凭据不得提交到仓库。
   - 直连 `github.com` 的可用性在本机不稳定（本仓库自身的 Gitee 远程不受影响），后续按需改用镜像或 `ssh_origin`。
 
+## Gateway MVP Python 运行环境
+
+- **来源**：Python 标准库（本机使用 Python 3.12 验证）；测试使用标准库 `unittest`，不新增产品运行时包。
+- **用途**：Gateway MVP 的 HTTP 入口、SQLite 持久化、令牌校验和基础集成测试。
+- **版本约束**：Python 3.12 或兼容的 Python 3.11+；`sqlite3`、`http.server`、`unittest` 使用 Python 标准库。
+- **许可证或使用限制**：Python 按 Python Software Foundation License 发布；本项目不重新分发 Python。
+- **安装和验证**：无需额外安装；在仓库根目录执行 `PYTHONPATH=sci-weave python3 -m unittest discover -s sci-weave/gateway/tests -v`，当前 Gateway 基础测试通过。
+
 ## 本机环境现状
 
 原先缺失的三个工具已在本机补齐，规范动作的阻塞已解除：

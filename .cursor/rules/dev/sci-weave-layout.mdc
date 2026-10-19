@@ -1,0 +1,11 @@
+---
+description: SciWeave 产品源码目录布局
+alwaysApply: false
+---
+# SciWeave 源码目录布局
+
+- 产品源码统一放在仓库根目录的 `sci-weave/` 下。
+- 不同功能使用 `sci-weave/<功能名>/` 独立子目录；Gateway 使用 `sci-weave/gateway/`。
+- 功能目录应包含自身的实现、测试和运行说明；不要把产品源码放入 `drafts/`。
+- 共享协议和基础设施只有在被两个以上功能实际使用时，才放入 `sci-weave/` 下的共享目录。
+- 功能新增依赖必须先在 fer ticket 中记录用途、版本、来源和验证方式，并通过项目选定的依赖清单声明。
