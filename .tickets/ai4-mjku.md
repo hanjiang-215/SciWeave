@@ -6,6 +6,7 @@ links: []
 created: 2026-10-18T14:54:50Z
 type: task
 priority: 1
+assignee: zhanyunfei
 parent: ai4-yl2o  # Research Mapping 持久化模型分支
 tags: [wayfinder:grilling]
 ---
