@@ -97,6 +97,7 @@
 - *(architecture)* Define SciWeave stack conventions
 - *(dependencies)* Remove machine-specific records
 - *(gateway)* Add MVP implementation roadmap
+- *(changelog)* Update gateway roadmap history
 
 ### 🚜 Refactor
 
@@ -126,3 +127,4 @@
 - *(tracker)* Close Redpanda deployment task
 - *(tracker)* Close stack conventions task
 - *(tracker)* Close dependency docs task
+- *(tracker)* Link gateway MVP pull request
