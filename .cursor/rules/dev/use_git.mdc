@@ -1,9 +1,6 @@
 ---
 description: 项目 Git 分支、提交、远程和 PR 协作规范
-alwaysApply: true
----
-
-# Git 开发规范
+alwaysApply: false
 
 ## 开始工作前
 

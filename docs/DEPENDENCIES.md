@@ -62,6 +62,14 @@
 - **许可证**：MIT（依据 registry 元数据 `license = 'MIT'`）。
 - **安装与验证**：`corepack pnpm install --frozen-lockfile` 安装成功并输出 `+ @codemeall/harness-wiki 0.3.2`；安装位置为 `node_modules/@codemeall/harness-wiki`。
 
+### uv
+
+- **来源**：Astral `uv`，本机验证版本 `0.11.24`。
+- **用途**：读取 Python 子项目的 `pyproject.toml`，解析和锁定依赖，创建子项目虚拟环境，并运行测试或项目脚本。
+- **版本约束**：项目统一使用 uv；每个 Python 子项目提交自己的 `uv.lock`。uv 不替代 `pyproject.toml`，后者仍是 Python 项目元数据和依赖声明的标准文件。
+- **许可证或使用限制**：以 uv 官方发行说明和许可证为准；本仓库不提交 uv 二进制文件。
+- **安装和验证**：本机执行 `uv --version` 输出 `uv 0.11.24`；Gateway 执行 `uv lock`、`uv sync` 和 `uv run python -m unittest discover -s tests -v` 通过。
+
 ### gitee-cli 依赖记录
 
 - **来源**：项目协作规则 `.cursor/rules/dev/use_gitee.mdc`；当前使用 Gitee 仓库 `qi-yueran/ai4science`。
@@ -127,14 +135,6 @@
   - `gitee --version` 输出 `gitee 0.7.1`；`gitee pr create --help` 输出包含 `--repo`、`--head`、`--base`、`--title` 等参数，与规则中的 `gitee pr create --base develop` 一致。
   - `gitee auth status` 输出 `Not authenticated`，说明本机尚未登录，创建 Pull Request 之前仍需先完成认证；认证凭据不得提交到仓库。
   - 直连 `github.com` 的可用性在本机不稳定（本仓库自身的 Gitee 远程不受影响），后续按需改用镜像或 `ssh_origin`。
-
-## Gateway MVP Python 运行环境
-
-- **来源**：Python 标准库（本机使用 Python 3.12 验证）；测试使用标准库 `unittest`，不新增产品运行时包。
-- **用途**：Gateway MVP 的 HTTP 入口、SQLite 持久化、令牌校验和基础集成测试。
-- **版本约束**：Python 3.12 或兼容的 Python 3.11+；`sqlite3`、`http.server`、`unittest` 使用 Python 标准库。
-- **许可证或使用限制**：Python 按 Python Software Foundation License 发布；本项目不重新分发 Python。
-- **安装和验证**：无需额外安装；在仓库根目录执行 `PYTHONPATH=sci-weave python3 -m unittest discover -s sci-weave/gateway/tests -v`，当前 Gateway 基础测试通过。
 
 ## 本机环境现状
 

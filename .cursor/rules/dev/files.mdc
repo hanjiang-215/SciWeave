@@ -1,13 +1,10 @@
 ---
 description: 项目文件与目录的归属、命名和提交边界规范
-alwaysApply: true
----
-
-# 文件规范
+alwaysApply: false
 
 ## 目录归属
 
-1. 规则文件放在 `.cursor/rules/`，必须使用 `.mdc` 后缀；frontmatter 必须包含 `description`，需要对所有会话生效的规则同时设置 `alwaysApply: true`。规则按主题拆分成独立文件，例如 Git、Gitee、fer、依赖、文件规范各自一份，不要把无关规则堆进同一个文件。
+1. 规则文件放在 `.cursor/rules/`，必须使用 `.mdc` 后缀；frontmatter 必须包含 `description`。只有对每个会话都必需的规则设置 `alwaysApply: true`；目录、语言、Git、依赖、发布等专项规则设置 `alwaysApply: false`，由相关任务或文件上下文加载。规则按主题拆分成独立文件，例如 Git、Gitee、fer、依赖、文件规范各自一份，不要把无关规则堆进同一个文件。
 2. 工程技能放在 `.cursor/skills/<分类>/<技能名>/`，入口文件固定为 `SKILL.md`；技能自带的辅助文件和脚本放在该技能目录内，不要散落到仓库其他位置。
 3. fer 工单放在 `.tickets/`，一个工单一个文件，不要把多个工单合并到同一个文件里。
 4. 项目技术文档放在 `docs/`，`docs/` 是权威版本。

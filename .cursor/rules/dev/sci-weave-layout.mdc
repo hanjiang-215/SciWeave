@@ -1,11 +1,16 @@
 ---
-description: SciWeave 产品源码目录布局
+description: SciWeave 子项目目录、配置和环境变量规范
+globs: sci-weave/**
 alwaysApply: false
 ---
-# SciWeave 源码目录布局
 
-- 产品源码统一放在仓库根目录的 `sci-weave/` 下。
-- 不同功能使用 `sci-weave/<功能名>/` 独立子目录；Gateway 使用 `sci-weave/gateway/`。
-- 功能目录应包含自身的实现、测试和运行说明；不要把产品源码放入 `drafts/`。
-- 共享协议和基础设施只有在被两个以上功能实际使用时，才放入 `sci-weave/` 下的共享目录。
-- 功能新增依赖必须先在 fer ticket 中记录用途、版本、来源和验证方式，并通过项目选定的依赖清单声明。
+# SciWeave 子项目规范
+
+- 每个子项目使用 `sci-weave/<可表达部署角色的项目目录名>/`；服务和 MCP 使用 Python，前端 Web 使用 Vue。
+- Python 源码只放在 `sci-weave/<子项目>/src/`，测试只放在 `sci-weave/<子项目>/tests/`；不得把产品源码放入 `drafts/`。
+- Python 子项目使用 `src/main.py` 作为唯一启动入口；业务模块放在 `src/<简洁模块名>/`，项目目录名与模块名可以不同。
+- 每个 Python 子项目在根目录提供 `pyproject.toml`，声明 Python 版本、依赖、测试和工具配置；依赖锁文件随所选工具提交。
+- 环境变量仅从 `sci-weave/<子项目>/.env` 读取；仓库只提交 `.env.example`，不得提交真实 `.env`。
+- `uv` 运行时应使用 `uv run --env-file .env ...` 读取环境变量；源代码不负责读取 `.env` 文件本身。
+- 文件路径、监听地址、端口、令牌和服务地址必须用环境变量配置；源代码、测试和文档不得硬编码部署路径或端口。测试可以使用回环地址与系统分配的临时端口 `0`，但不得依赖固定部署端口。
+- 共享代码仅在至少两个子项目实际复用时放入 `sci-weave/` 的共享目录。
