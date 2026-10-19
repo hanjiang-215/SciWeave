@@ -50,13 +50,16 @@ tags: [wayfinder:grilling]
 普通正式查询从每个 WikiDocument 的当前正式版本指针读取 WikiRevision，只返回其完整正文、版本元数据和 Resource Reference；不读取草稿或 candidate branch。引用解析必须使用 Reference 中记录的精确 WikiRevision / ResourceVersion ID，不得静默改指目标文档或资源的最新版本。被引用的历史正式 WikiRevision 可以作为明确的历史引用目标解析，但不能替代其所属文档的当前正式查询结果。ResourceVersion 当前不可访问时仍返回引用和不可用提示；候选治理与 Proposal 预览沿用既有规则并保持明确的草稿上下文。
 
 ## Question
+
 WikiDocument、WikiRevision、Resource、ResourceVersion、RawArtifact 与 Resource Reference 分别应承载哪些内容字段和关系？请明确：
+
 - Wiki 文档分类、稳定身份、标题/描述/正文及来源信息分别属于哪个对象；
 - 页面元数据与版本内容如何组织，哪些字段是文档级信息、哪些属于单个 WikiRevision；
 - Resource、ResourceVersion、RawArtifact 和 Resource Reference 的内容职责及引用关系；
 - 正式引用如何指向不可变 WikiRevision 或 ResourceVersion，以及字段约束和引用完整性要求。
 
 ## Notes
+
 Wiki 的 Proposal、candidate branch、candidate Commit、Formal WikiRevision 指针和审核生命周期已经由既有决策确定：沿用统一提案治理语义，同时保持 Wiki 领域隔离。本票只决定内容对象与资源引用的字段模型，不重新讨论版本治理状态机、候选正式化规则、API 或代码实现。
 
 ## Scenario Validation
