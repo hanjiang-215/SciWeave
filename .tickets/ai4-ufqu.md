@@ -53,3 +53,9 @@ tags: [wayfinder:grilling]
 **2026-10-19T03:40:53Z**
 
 子决策“fast-agent-mcp 历史保存、恢复与上下文隔离验证”已完成：复用每 TaskNode 固定 Harness 会话；不引入 SQLite 用于模型记忆；Gateway 控制稳定 session_id 与调用串行化。详见 docs/fast-agent-mcp上下文管理调研.md。
+
+**2026-10-19T05:47:44Z**
+
+Wayfinder 前沿结论（2026-10-19）：Q1-Q8 已确认，Q8 采用 A2A Human Input 交互而不是默认邮件往返。Personal Harness（Codex）是 Task Owner 控制的 A2A 客户端和审核客户端，不运行平台 Worker、不承载服务器端 Hook，也不直接管理 Task Agent 会话。Task Agent 使用 fast-agent-mcp + TaskNode 模板；平台/Gateway 负责身份授权、Owner Command、消息编排、审计、Buffer、Execution Record 和会话键，短生命周期 Worker 负责一次受控 loop。Task Owner 只能管理执行投影和提交，不得通过运行期指令修改 TaskNode 目标、依赖、激活条件或正式路线；Task Agent 只能读取正式数据并创建受控 Buffer Submission，不能直接写正式 Mapping/Wiki、审核决定或下游交接。
+
+Q8-Q10 修正：A2A 可返回 Task Agent 最终文字回复；fast-agent A2A 已验证 INPUT_REQUIRED/后续输入恢复和取消，但默认 human_input=True 是本地 UI 回调，远程 Codex 需要 Gateway 显式桥接。Owner 指令先鉴权、持久化、幂等确认和审计；普通指令在 TaskNode 激活后执行，暂停/取消可优先生效。每个 TaskNode 至少配置一名 Owner；自动执行需要人工输入时指向该 Owner，不存在无 Owner 节点。
