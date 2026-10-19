@@ -1,8 +1,14 @@
 ## [unreleased]
 
+### 🚀 Features
+
+- *(infrastructure)* Add local Redpanda compose service
+- *(gateway)* Add command persistence seam
+
 ### 🐛 Bug Fixes
 
 - *(rules)* Correct stale paths and add missing rule description
+- *(tracker)* Correct dependency docs commit reference
 
 ### 📚 Documentation
 
@@ -67,6 +73,7 @@
 - *(product)* Refine first-stage mapping specifications
 - *(product)* Complete ticket consistency review
 - *(fer)* Record ticket review verification
+- *(changelog)* Record ticket review
 - *(product)* Integrate zhanyunfei changes
 - *(dependencies)* Consolidate dev environment record (ai4-ljg3)
 - *(wayfinder)* Chart candidate governance map
@@ -76,6 +83,28 @@
 - *(wayfinder)* Scope wiki work to content model
 - *(wayfinder)* Add agent and messaging branches
 - *(wayfinder)* Claim agent decision branches
+- *(changelog)* Record Wayfinder planning updates
+- *(changelog)* Omit external review note
+- *(wayfinder)* Record queue collaboration draft (ai4-te1v)
+- *(wayfinder)* Link branches to PR 8
+- *(research)* Assess fast-agent context management
+- *(wayfinder)* Define task agent review flow
+- *(runtime)* Assess task agent integration
+- *(messaging)* Record collaboration queue draft
+- *(wayfinder)* Record task agent collaboration decisions
+- *(wayfinder)* Add dashboard visibility frontier
+- *(wayfinder)* Clarify dashboard read-only boundary
+- *(architecture)* Define SciWeave stack conventions
+- *(dependencies)* Remove machine-specific records
+- *(gateway)* Add MVP implementation roadmap
+
+### 🚜 Refactor
+
+- *(gateway)* Adopt uv src layout
+
+### 🧪 Testing
+
+- *(a2a)* Record input recovery validation
 
 ### ⚙️ Miscellaneous Tasks
 
@@ -93,3 +122,7 @@
 - *(fer)* Use native filename for ai4-wzdh
 - *(fer)* Assign tickets to SciWeave
 - *(fer)* Record pull request 6 for SciWeave planning review
+- *(fer)* Assign persistence tickets to zhanyunfei
+- *(tracker)* Close Redpanda deployment task
+- *(tracker)* Close stack conventions task
+- *(tracker)* Close dependency docs task
