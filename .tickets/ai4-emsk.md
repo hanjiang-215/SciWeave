@@ -1,6 +1,6 @@
 ---
 id: ai4-emsk
-status: open
+status: closed
 deps: []
 links: []
 created: 2026-10-19T06:25:18Z
@@ -27,3 +27,7 @@ dockers/service/redpanda/compose.yaml 可由 Docker Compose 配置校验通过�
 **2026-10-19T06:28:56Z**
 
 实现事实：新增 dockers/service/redpanda/compose.yaml 和 README.md，固定镜像 redpandadata/redpanda:v24.3.7，提供 Kafka API、Schema Registry、Pandaproxy、Admin API 本机端口，并使用命名卷 ai4sci-redpanda-data。验证命令：docker compose -f dockers/service/redpanda/compose.yaml config，退出码 0。按要求未执行 docker compose build、up、镜像拉取或容器启动。待提交。
+
+**2026-10-19T06:29:56Z**
+
+提交完成：a2e53ac（feat(infrastructure): add local Redpanda compose service）。工作区已清洁。
