@@ -1,6 +1,12 @@
 # SciWeave Gateway MVP
 
-这是 Gateway 的最小 HTTP 与 SQLite 闭环。当前版本只负责接收 Owner Command、保存平台状态并提供执行查询；Worker 调度和 `fast-agent-mcp` Runtime Adapter 由后续工单实现。
+这是 Gateway 的最小闭环。当前版本只负责接收 Owner Command、保存平台状态并提供执行查询；Worker 调度和 `fast-agent-mcp` Runtime Adapter 由后续工单实现。
+
+## 入口演进
+
+当前已实现的是 HTTP 公共 seam（`/health`、`POST /v1/commands`、`GET /v1/executions/{id}`）。按 `.tickets/ai4-353s.md` 的 2026-10-19 决策修订，**Owner 主通道将改为 MCP（Streamable HTTP）**：Task Owner 的 harness（Codex、Cursor 等）在 `mcp_servers` 中注册 Gateway 地址与令牌，Gateway 作为 MCP server 暴露 `submit_owner_command`、`query_execution`、`cancel_execution`、`list_pending`、`health` 五个工具。
+
+已有 HTTP 端点保留为回环健康检查、本地调试和测试 seam；底层 SQLite 事务、幂等与审计逻辑不需要重写。MCP 工具层由后续实现票覆盖。
 
 ## 目录
 
@@ -13,7 +19,7 @@ pyproject.toml    # Python 项目、依赖和启动命令声明
 .env.example      # 可提交的环境变量示例
 ```
 
-`gateway` 是简洁的 Python 业务模块名；`sci-weave/gateway` 是项目目录。后续若增加“端侧 Agent Gateway”等子项目，可使用更具体的项目目录名，同时保留符合职责的模块名。
+`gateway` 是简洁的 Python 业务模块名；`sci-weave/gateway` 是项目目录。该目录后续将并入多进程角色的 task-agent 项目组，届时业务模块名保持不变。
 
 ## 配置与运行
 
@@ -39,7 +45,7 @@ uv run --env-file .env sciweave-gateway
 - `SCIWEAVE_GATEWAY_HOST`：监听地址。
 - `SCIWEAVE_GATEWAY_PORT`：监听端口。
 
-## HTTP seam
+## HTTP seam（回环调试与测试）
 
 从 `.env` 读取地址、端口和令牌后，可以执行：
 
@@ -68,4 +74,4 @@ cd sci-weave/gateway
 uv run python -m unittest discover -s tests -v
 ```
 
-当前不包含 Worker、真实 `fast-agent-mcp` 调用、领域 MCP、消息队列或 A2A。
+当前不包含 Worker、真实 `fast-agent-mcp` 调用、领域 MCP 或消息队列；MCP 工具层尚未实现。
