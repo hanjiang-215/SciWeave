@@ -1,8 +1,7 @@
 ---
 description: 项目 Gitee 仓库协作规范
-alwaysApply: true
+alwaysApply: false
 ---
-
 本项目使用 Gitee 作为远程仓库平台，仓库地址如下：
 
 - HTTPS：`https://gitee.com/qi-yueran/ai4science.git`

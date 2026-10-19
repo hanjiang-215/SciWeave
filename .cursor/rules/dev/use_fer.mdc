@@ -1,9 +1,6 @@
 ---
 description: 使用 fer 作为项目 issue tracker 管理需求、任务和开发状态
-alwaysApply: true
----
-
-# fer Issue Tracker 规范
+alwaysApply: false
 
 ## 基本原则
 
