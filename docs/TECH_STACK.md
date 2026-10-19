@@ -6,13 +6,15 @@
 
 | 范围 | 技术 | 约束与用途 |
 | --- | --- | --- |
-| 后端服务 | Python + uv | Gateway、调度服务、领域服务和 MCP Server 统一使用 Python 开发；每个 Python 子项目以 `pyproject.toml` 声明元数据和依赖，使用 uv 解析、同步、运行并提交 `uv.lock`。 |
-| MCP | Python | MCP Server 与 MCP 客户端适配统一使用 Python；具体 SDK、版本和权限模型由对应 fer ticket 确定后写入子项目依赖清单。 |
+| 后端服务 | Python + uv | Gateway、调度服务、领域服务和 MCP Server 统一使用 Python 开发；每个 Python 子项目以 `pyproject.toml` 声明元数据和依赖，使用 uv 解析、同步和运行。依赖锁文件按下面的“项目组”规则提交：独立子项目提交自身 `uv.lock`，同一项目组的多个子项目提交组级唯一 `uv.lock`。 |
+| MCP | Python | MCP Server 与 MCP 客户端适配统一使用 Python。Owner 侧接入采用 **Streamable HTTP** 传输：Gateway 作为 MCP server，Task Owner 的 harness（Codex、Cursor 等）作为 MCP client 注册地址与令牌。HTTP 回环端点仅用于健康检查、本地调试和测试 seam，不作为 Owner 主通道。具体 SDK 版本由对应 fer ticket 确定后写入子项目依赖清单。 |
 | Web 前端 | Vue | 浏览器端 Web 应用统一使用 Vue；具体 Vue 版本、构建工具、状态管理和组件库由前端实现 ticket 确定。 |
 | 服务状态存储 | SQLite（MVP） | Gateway MVP 使用 Python 标准库 `sqlite3` 保存平台执行状态；不用于替代 fast-agent 的运行时会话文件。 |
 | Agent 运行时 | fast-agent-mcp | Gateway 后续通过 Runtime Adapter 接入；具体版本和锁定方式由 `ai4-o806` 决定。 |
 
 ## 子项目结构
+
+只有一个部署角色的服务使用独立子项目：
 
 ```text
 sci-weave/<子项目>/
@@ -21,19 +23,43 @@ sci-weave/<子项目>/
 │   └── <模块名>/        # 产品业务代码
 ├── tests/             # 自动化测试
 ├── pyproject.toml     # Python 项目和工具配置（Python 子项目）
+├── uv.lock            # 独立子项目提交自身锁文件
 ├── .env             # 本地环境变量，不提交
 └── .env.example     # 环境变量名称和示例值，可提交
 ```
 
+同一部署单元包含多个进程角色时使用项目组，组内每个角色仍是独立子项目：
+
+```text
+sci-weave/<项目组>/
+├── pyproject.toml     # uv workspace 根配置
+├── uv.lock            # 组级唯一锁文件
+├── .env             # 组级共享变量，不提交
+├── .env.example
+├── Dockerfile         # 构建与部署文件属于项目组
+├── compose.yaml
+├── README.md
+└── <子项目>/           # 每个进程角色一个子项目
+    ├── src/main.py
+    ├── tests/
+    ├── pyproject.toml
+    ├── .env
+    └── .env.example
+```
+
 - 服务和 MCP 子项目必须遵守上述 Python 结构；项目目录名表达部署角色，`src/<模块名>/` 使用简洁职责名。
-- `pyproject.toml` 是 Python 标准项目配置，不绑定管理工具；本项目统一使用 uv 读取该配置、生成并提交 `uv.lock`、同步环境与运行项目。
+- 项目组只做组织，不承载源码；`Dockerfile`、`compose.yaml` 和组级锁文件放在项目组根目录。
+- 组级 `.env` 放跨角色共享变量，子项目 `.env` 放角色专属变量；两处都只提交 `.env.example`。
+- 组内被至少两个子项目复用的代码放项目组共享目录，由子项目以 path 依赖引用；只通过进程边界传递的契约不建共享包。
+- `pyproject.toml` 是 Python 标准项目配置，不绑定管理工具；本项目统一使用 uv 读取该配置、生成锁文件、同步环境与运行项目。
 - 前端 Vue 子项目使用自身的 `package.json`、锁文件、`src/` 和测试目录；真实 `.env` 同样不得提交。
 - 所有路径、监听地址、端口、令牌、数据库位置和外部服务地址通过环境变量提供，不能硬编码进源码或测试。
 - 新增或升级依赖前，必须先有 fer ticket，随后在子项目清单和锁文件中声明，并在对应 ticket 回写来源、用途、许可证和验证结果。
 
 ## 已确定工具
 
-- Python 子项目统一使用 uv 管理虚拟环境、依赖同步、命令执行与 `uv.lock`；`pyproject.toml` 仍是工具无关的 Python 项目配置。
+- Python 子项目统一使用 uv 管理虚拟环境、依赖同步、命令执行与锁文件；`pyproject.toml` 仍是工具无关的 Python 项目配置。
+- 同一项目组的多个 Python 子项目使用 uv workspace，由组级 `pyproject.toml` 声明成员，组级提交唯一 `uv.lock`。
 
 ## 未确定项
 
