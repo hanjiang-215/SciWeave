@@ -158,7 +158,7 @@ def make_handler(app: GatewayApplication):
     return Handler
 
 
-def serve(app: GatewayApplication, host: str = "127.0.0.1", port: int = 8080) -> None:
+def serve(app: GatewayApplication, host: str, port: int) -> None:
     server = ThreadingHTTPServer((host, port), make_handler(app))
     try:
         server.serve_forever()
