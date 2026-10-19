@@ -1,6 +1,6 @@
 ---
 id: ai4-aaff
-status: open
+status: in_progress
 deps: [ai4-ay0e, ai4-r3so, ai4-m0vt, ai4-xrxw, ai4-vbnr]
 links: []
 created: 2026-10-17T14:58:26Z
@@ -21,32 +21,87 @@ tags: [wayfinder:prototype, product, sciencepal, ai4science]
 场景选择必须同时满足以下约束：
 
 - 使用公开、可访问、合规且体量可控的数字数据或证据，不依赖真实个人信息、私有账号、现场设备或不稳定的外部服务；
-- 能在 5—10 分钟演示中形成 3—6 个有明确依赖的 TaskNode，并至少包含一个人员判断点和一个 Agent/SciencePal 可稳定执行的结构化步骤；
+- 能在 3—5 分钟参赛演示中形成 3—6 个有明确依赖的 TaskNode，并至少包含一个人员判断点和一个 Agent/SciencePal 可稳定执行的结构化步骤；
 - 能提供可核验的输入、预期输出、来源或版本标识，使结果可以通过 Resource Reference 追溯；
 - 能注入一次可观察的执行失败、证据不足或前置条件不满足，并明确区分普通重试/转交与必须改变路线的 Mapping Proposal；
 - 能用同一套通用字段表达初始路线、执行记录、结果审核、路线 Diff、Project Owner 决策和正式化结果；
 - 不把生物、材料、健康或其他学科概念写入平台核心对象，场景专属内容只存在于示例数据、任务说明、Agent 能力和验收脚本中。
 
-场景决策以“可运行性、证据可追溯性、失败可演示性、SciencePal 可承载性、跨场景替换成本”作为评估维度。参赛交付还必须满足：SciencePal 实际承载核心科研能力；主视频控制在 3—5 分钟；说明文档不超过 5 页；提交物明确原创性、第三方资源、数据来源和许可证声明。未完成评估前保留候选，不在需求地图或术语表中把某个学科写成默认事实。
+场景决策以“可运行性、证据可追溯性、失败可演示性、SciencePal 可承载性、跨场景替换成本”作为评估维度。参赛交付还必须满足：SciencePal 实际承载核心科研能力；主视频控制在 3—5 分钟；说明文档不超过 5 页；提交物明确原创性、第三方资源、数据来源和许可证声明。场景仅是可替换的验证夹具，不在需求地图或术语表中把某个学科写成产品默认事实。
 
-## 需要多人讨论的问题
+## 已选场景与数据依据（2026-10-19）
 
-- 默认场景应选择哪一条公开、稳定、可预加载的科研数据闭环，才能在 3—5 分钟内同时展示路线图、SciencePal 核心使用、证据引用和人工判断，而不是只展示静态页面？
-- 首版演示的“最小数字证据卡”需要哪些不可删字段（来源、版本或快照标识、指标、单位、提取时间、定位信息、哈希或访问说明），哪些完整 `ResourceVersion` 治理能力可以明确留到后续实现？
-- 哪一步由 SciencePal 承载为核心科研工作，哪一步必须由研究人员接管；TaskNode Owner 的结果接纳审核与 Project Owner 的 Formal Mapping 路线正式发布审核如何在脚本中分别可见？首版不单独建立正式科研结论对象。
-- 演示中的失败应如何区分普通重试/转交/人工接管与必须改变研究路线的失败，才能证明 Mapping Proposal 不是普通运行日志？
-- 3—5 分钟视频、5 页以内说明和原创/资源声明分别由哪些验收证据证明，并如何在不泄露真实凭据或受限数据的前提下复现？
+**主演示场景：UCI Iris 经典分类复现。** 演示要解决的不是“发现新的植物学结论”，而是科研团队如何让一项小型分析从可追溯输入、Agent 执行、方法复核、证据接纳到正式路线变更都可复现、可审计。选择 Iris 是因为它足够经典且大众熟悉、数据量小、结构简单、能离线固定；UCI 官方记录为 150 条、4 个连续数值特征、3 类目标、无缺失，提供约 4.4 KB 的数据文件，数据集 DOI 为 `10.24432/C56C76`。该数据明确采用 CC BY 4.0，演示应署名并链接许可。来源和逐条核验结果记录在 [赛事数据集调研](../humans/competition/AI4Science%20演示数据集调研.md)。
+
+**替换验证场景：NOAA Mauna Loa 月度 CO₂ 序列。** 作为不同数据形态（时间序列）的替换测试，不作为 SciWeave 的第二个产品默认方向。替换验证关注时间字段、ppm 单位、数据质量/缺测标记、站点与来源说明及随时间更新的输入快照；NOAA 官方说明该序列可因质量控制而小幅修订，并记录火山活动期间观测地点变化。NOAA 官方页面鼓励引用来源，但本次核查未发现明确的标准许可证或竞赛提交/再分发条件；在取得进一步许可依据前，不把数据副本打包进参赛作品，也不把它作为必须提交的演示数据。详见同一调研文档。
+
+**最小初始 Research Mapping：**
+
+- `T1 固定并检查输入`：执行者为 SciencePal Agent；输入为 UCI Iris 官方 CSV；检查来源/DOI/许可证记录、固定快照哈希、150 行、4 个指定特征列、目标列、3 类各 50 条及缺失值；输出为数据检查记录及输入 Resource Reference。缺列、类别计数不符或来源快照哈希不符时失败，不生成分析结果。
+- `T2 执行基线分类`：依赖 `T1`，由 SciencePal 实际读取数据并执行预先固定的分类方法和评估设置；输出至少包括方法/工具版本、随机种子或确定性设置、数据划分、指标、混淆矩阵及结果文件引用。具体模型、软件版本和参数必须在真实运行前固定并写入执行记录，当前不得声称已运行验证。
+- `T3 研究人员复核并接纳`：依赖 `T2`，由 TaskNode Owner 检查方法、结果和来源引用是否完整；可接纳结果或要求补充/重做。该接纳只处理任务结果，不批准正式路线变更。
+
+**路线变更演示：** 初始 `T1 → T2 → T3` 路线先运行基线。针对 150 条小样本的评估稳定性，TaskNode Owner 可要求加入独立的分层交叉验证步骤 `T4`，形成 `T1 → T2 → T4 → T3`；该节点及依赖变化必须提交 Mapping Proposal，展示 Diff 和影响预览，再由 Project Owner 批准或驳回。批准后才新增 Formal MappingRevision；TaskNode Owner 仍须单独接纳补充结果。具体交叉验证折数、重复次数及接受阈值须在演示执行前固定，并随执行记录公开。
+
+**失败与提案边界：** 使用一份仅供失败注入的临时副本移除目标列，预期 `T1` 检查失败、留下 Execution Record 且不产出可引用结果；恢复从官方来源固定的输入后普通重试成功，这种数据/运行恢复本身不创建 Proposal。只有改变正式路线、依赖、完成条件或评估步骤时才创建 Proposal。一个可选驳回分支可由 Project Owner 驳回尚未验证的路线候选；驳回理由和审计事件保留，候选不得进入正式查询或正式调度。
+
+**最小数字证据卡：** 数据集名称与 DOI/官方 URL、许可证与署名、获取时间、输入快照 SHA-256、行数/字段与预处理、执行者及工具/版本、参数与随机种子、指标名称/值/单位、输出文件定位与哈希、TaskNode/Execution Record 标识。首版可用引用到固定输入和输出载体的轻量证据卡，不因此宣称已实现完整 `ResourceVersion` 或资源存储治理。
+
+**SciencePal 硬门槛和可替换边界：** SciencePal 必须在真实平台中承担 `T1` 的数据检查和/或 `T2` 的分析执行，并产生实际可检查的输出；仅由它写解释文案不合格。现阶段尚无 SciencePal 运行链接、执行记录或实演证据，因此该场景决策不等于验收完成。替换为 NOAA 时只需替换数据快照/许可说明、字段校验、分析步骤和指标；TaskNode、Dependency Edge、Execution Record、Resource Reference、TaskNode Owner 结果接纳及 Project Owner Proposal 审核语义均不变。
+
+## 已收敛的设计决策与待补证据
+
+场景和最小流程已在上方收敛；以下问题不是再选学科的讨论项，而是实施演示前仍须补齐的明确条件：
+
+- 真实运行时固定的分析方法、工具/模型版本、数据划分、随机性控制、指标和完成阈值，以及怎样留存输入/输出快照。
+- SciencePal 的可访问项目/工作流、实际运行输出和可检查的执行记录；只有平台真实承担核心数据检查或分析执行才满足赛事要求。
+- 录制并计时的 3—5 分钟演示视频、5 页以内项目说明、原创性与第三方资源声明，以及获批/驳回的实际可观察治理轨迹。
+- 是否需要把 UCI 数据及生成输出物理打包进作品；如打包，保留 CC BY 4.0 署名与许可链接。NOAA 数据只在用途条件经核实后作为可选替换实测，不作为当前提交的必要依赖。
+
+当前不新增产品核心领域对象、不决定应用运行时或持久化技术。科学分析具体结果必须在真实运行后报告，不能把预期值写成已验证事实。
 
 ## Acceptance Criteria
 
-- [ ] 明确一个默认科研示例场景、目标科研痛点、适用角色和可替换边界，并说明选择依据。
-- [ ] 提供初始 Research Mapping：TaskNode、Dependency Edge、负责人/Agent、输入输出、完成条件和至少一个数字 Resource Reference。
-- [ ] 提供可访问的最小数字数据或证据包，并记录来源、版本标识、访问限制、许可证和替代数据方案。
-- [ ] 定义最小数字证据卡的字段、与完整 `ResourceVersion` 治理的边界，以及从证据卡回到可核验资源的路径。
-- [ ] 定义一条 3—5 分钟可复现的演示脚本：任务执行、结果提交、数字证据引用、TaskNode Owner 结果接纳、失败或路线调整、Mapping Proposal、Diff/影响预览以及 Project Owner 批准或驳回。
-- [ ] 明确 SciencePal 实际承载的核心 Agent、任务流程或结果审核环节，并说明人工接管点；SciencePal 不能只用于展示文案。
-- [ ] 在脚本中明确区分 TaskNode Owner 的结果接纳审核与 Project Owner 的 Formal Mapping 路线正式发布审核；首版不以一次批准替代两者，也不新增独立的“正式科研结论”对象。
-- [ ] 证明演示只依赖通用 TaskNode、Dependency Edge、Execution Record、Resource Reference 和 Mapping Proposal，不新增领域专属核心对象。
-- [ ] 记录一次成功路径和一次失败/驳回路径的可观察证据，包括执行记录、审计时间线、Proposal 状态和 Formal MappingRevision 结果（如批准）。
+- [x] 明确一个主演示科研场景、一个不同数据形态的可替换验证场景、目标科研痛点、适用角色和可替换边界，并说明选择依据。
+- [ ] 提供可执行的初始 Research Mapping：逐个 TaskNode 明确依赖、负责人/Agent、输入输出及完成条件，并绑定至少一个数字 Resource Reference。当前仅有流程草图，尚缺锁定的分析参数和可运行数据/产物。
+- [ ] 提供提交可复现的最小数字数据/证据包，并记录来源、版本或快照哈希、访问限制、许可证和替代数据方案；调研已核实官方来源与许可证，但快照尚未固定为交付物。
+- [x] 定义最小数字证据卡的字段、与完整 `ResourceVersion` 治理的边界，以及从证据卡回到官方资源和执行产物的路径。
+- [ ] 提供并实际计时一条 3—5 分钟可复现的演示脚本：SciencePal 执行、结果提交、数字证据引用、TaskNode Owner 结果接纳、失败或路线调整、Mapping Proposal、Diff/影响预览以及 Project Owner 批准或驳回。
+- [ ] 提供 SciencePal 实际承载核心 Agent/任务的运行链接、输出及执行记录，并说明人工接管点；SciencePal 不能只用于展示文案。
+- [x] 在设计中区分 TaskNode Owner 的结果接纳审核与 Project Owner 的 Formal Mapping 路线正式发布审核；首版不以一次批准替代两者，也不新增独立的“正式科研结论”对象。
+- [x] 确认所选样例只用通用 TaskNode、Dependency Edge、Execution Record、Resource Reference 和 Mapping Proposal 表达，不把学科对象加入平台核心模型。
+- [ ] 记录一次真实成功路径和一次失败/驳回路径的可观察证据，包括执行记录、审计时间线、Proposal 状态和 Formal MappingRevision 结果（如批准）；当前仅定义预期行为。
 - [ ] 提供不超过 5 页的说明材料及原创性、第三方资源、数据来源和许可证声明；不得提交真实凭据或受限数据。
-- [ ] 给出将同一闭环替换到另一科研场景时需要替换的配置和数据清单，证明核心流程不依赖当前示例学科。
+- [x] 给出将同一闭环替换到 NOAA 时间序列时需要替换的数据、来源/许可说明、字段校验、分析步骤和指标，并确认治理流程不变；这是设计边界说明，实际跨场景运行仍是验收的一部分。
+
+## Notes
+
+**2026-10-19T03:02:26Z**
+
+> *This was generated by AI during triage.*
+
+**无效备注：** 此条原始备注因 PowerShell 编码错误无法可靠读取，已作废；不得将其解释为产品决策或验收证据。有效内容见下方 2026-10-19T03:07:48Z 更正备注。
+
+**2026-10-19T03:07:48Z**
+
+> *This was generated by AI during triage.*
+
+**编码更正（UTF-8）：** 时间戳为 `2026-10-19T03:02:26Z` 的上一条备注因 PowerShell 编码错误显示为问号乱码，现标记为无效；不得将其解释为有效的产品决议或验收证据。本条更正取代该乱码内容。
+
+**已确认的产品边界：** SciWeave 面向跨学科科研工作者及其科研团队。产品核心保持学科中立，不把任何单一专业设为默认场景。本工单仍需选定一个具体、可替换的演示场景，以验证通用核心，并证明替换场景不会改变核心模型。
+
+**本演示的目标用户：** 规划并执行科研任务的团队成员；负责接纳任务结果的 TaskNode Owner；以及负责批准或驳回 Research Mapping 正式路线变更的 Project Owner。SciencePal 必须实际承担核心科研步骤，不能只展示说明文案。
+
+**状态与下一步：** 本工单继续保持 `in_progress`。验收尚未完成，包括场景选择、可核验数据/证据、可复现演示流程、SciencePal 参与证据及参赛材料。完成并附上这些证据后再考虑关闭。
+
+**2026-10-19T03:48:59Z**
+
+> *This was generated by AI during triage.*
+
+**场景决策与验收更新（2026-10-19）：** 选定 UCI Iris（CC BY 4.0，须署名）为赛事主演示输入，选定 NOAA Mauna Loa 月度 CO₂ 作为可替换的时间序列验证夹具；产品仍然场景中立。依据、官方链接和许可限制已写入 `humans/competition/AI4Science 演示数据集调研.md`。补充了最小 TaskNode 流程、证据卡、失败注入和 Proposal/双层审核设计，并将已完成的规格项与未完成的实测交付分开勾选。
+
+**状态仍为 `in_progress`，不关闭。** 当前无 SciencePal 实际运行链接/输出、固定并交付的数据快照、可复现且计时的赛事脚本、真实成功和失败/驳回审计轨迹，也没有 5 页内说明和原创/资源声明；这些均是未勾选的验收条件。SciencePal 实际承载核心任务是赛事硬门槛。下一步固定方法/工具版本和参数，取得 SciencePal 运行证据并完成以上提交材料后再复验。
+
+**2026-10-19T04:10:45Z**
+
+> *This was generated by AI during triage.* Correction: the competition dataset table now labels UCI Iris as the primary demo scenario and NOAA Mauna Loa monthly CO2 as the replacement validation scenario. Comparative wording now states that the product remains domain-neutral. No acceptance criterion was newly checked; ai4-aaff remains in_progress because SciencePal execution evidence, fixed deliverables, a timed demo, audit traces, and submission materials are still missing.

@@ -24,3 +24,9 @@ alwaysApply: false
 2. 拆分 ticket 时使用垂直切片：每个 ticket 都应能独立验证，并明确 `Blocked by` 关系；未经确认不关闭父 issue。
 3. 使用 triage 流程向 fer 发布评论或 issue 时，遵循该技能要求的 AI 生成免责声明；评论应包含可验证的事实和明确的下一步。
 4. 不为同一需求重复创建 issue；发现重复项时关联已有 issue，并在 fer 中说明合并理由。
+
+## Engineering Skill Configuration
+
+- fer 的项目级工作流、目录与状态约定见 `docs/agents/issue-tracker.md`。
+- 运行分诊前读取 `docs/agents/triage-labels.md`，按该文件映射 fer 标签。
+- 领域术语和架构决策的读取约定见 `docs/agents/domain.md`。
