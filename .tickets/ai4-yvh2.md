@@ -82,4 +82,6 @@ PDF 等原件仅以 Wiki 资源卡记录定位、哈希、媒体类型、来源�
 
 ## Notes
 
+**2026-10-20 Revision：** “上游收集器不得绕过 Gateway 直接创建 Worker”中的 Gateway 现明确为 **Task Agent Gateway 组件组**，不是单一进程。`gateway/ingest` 与 `gateway/mcp` 是组件组内的独立子项目；二者均可在共享 SQLite 中为同一 `task_node_id` 原子取得执行租约后启动 `worker` 子项目。它们必须共同遵守组件组的状态机、审计和串行化约束，未取得租约不得启动第二个 Worker。组件组外的队列消费者、收集器或客户端不得启动 Worker。该修订保留“不得绕过 Gateway”的边界，并取代本票中“上游收集器只能交给 Gateway、不得直接创建 Worker”的单进程理解；租约崩溃恢复与上游终态放行规则继续由 [Task Agent 项目组三角色部署与双入口调度边界](ai4-6fb7.md) 收敛。
+
 **2026-10-20 Resolution：** 以上结论由 TaskNode Owner 与本次 Wayfinder 讨论确认。MVP 的调用者身份仍只有本地开发令牌，不能伪装为已完成每个 TaskNode 的 Owner 授权校验；多人身份和授权绑定保留为后续范围。

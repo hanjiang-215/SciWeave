@@ -16,7 +16,7 @@ tags: [wayfinder:grilling, task-agent, gateway]
 
 ## Design
 
-已确认：task-agent 是总项目组；gateway 是组件组，含 mcp 与 ingest 两个独立 Python 子项目；worker 是独立短生命周期子项目。mcp 接收 Codex 的 MCP 调用，ingest 消费正式上游交接；二者不共享代码，但可共享 SQLite。二者均可在原子租约保护下启动同一个 worker 子项目；上游交接驱动的首轮优先，Owner 命令可先持久化为 blocked。统一 health 接口分项报告 MCP 和消息队列状态；正式交付内容写未来领域 Buffer，本票不设计 Buffer。
+已确认：`task-agent` 是总项目组；`gateway` 是组件组，含 `mcp` 与 `ingest` 两个独立 Python 子项目；`worker` 是独立短生命周期子项目。`mcp` 接收 Codex 的 MCP 调用，`ingest` 消费正式上游交接；二者不共享代码，但可共享 SQLite。Task Agent Gateway 组件组是唯一 Worker 启动与串行化边界：`mcp` 与 `ingest` 都可在共享 SQLite 中为同一 `task_node_id` 原子取得执行租约后启动同一个 `worker` 子项目，未取得租约不得启动第二个 Worker；组件组外的队列消费者或客户端不得启动 Worker。上游交接驱动的首轮优先，Owner 命令可先持久化为 `blocked`。统一 health 接口分项报告 MCP 和消息队列状态；正式交付内容写未来领域 Buffer，本票不设计 Buffer。
 
 ## Acceptance Criteria
 
