@@ -65,6 +65,11 @@ ai4-mjku = { module = "mapping", summary = "定义 Research Mapping 侧候选提
 ai4-t5zl = { module = "mapping", summary = "把 TaskNode 与 DependencyEdge 领域字段落成可持久化对象、约束和关系模型" }
 ai4-yl2o = { module = "mapping", summary = "汇总 Research Mapping 图对象字段与 SQLite 候选治理记录的整体持久化规格" }
 ai4-wglb = { module = "mapping", summary = "界定 Gateway 阶段 Research Mapping MCP 只读依赖图适配的最小范围（当前地图外）" }
+ai4-6ljq = { module = "mapping", summary = "组织 Mapping 正式查询、候选治理、审阅和跨存储恢复实现切片" }
+ai4-mqtq = { module = "mapping", summary = "实现以 SQLite 正式指针和精确 TerminusDB Commit 为依据的 Mapping 查询" }
+ai4-6s53 = { module = "mapping", summary = "打通 Mapping 变更校验、隔离候选快照、幂等提交与审计记录" }
+ai4-z0lb = { module = "mapping", summary = "实现 Mapping 候选差异影响预览、固定版本审阅和冲突检查" }
+ai4-1qyc = { module = "mapping", summary = "按既定双存储成功边界实现 Mapping 正式化、对账和失败恢复" }
 ai4-xup8 = { module = ["mapping", "wiki", "agent"], summary = "收敛 Mapping/Wiki 数据模型与持久化规则，并厘清消息、套件和端侧 Agent 边界" }
 ai4-c2t7 = { module = ["agent", "mapping"], summary = "定义 Task Agent 初始化读取 TaskNode、负责人、必要上游与配置版本的最小查询契约" }
 
@@ -75,6 +80,12 @@ ai4-l3sj = { module = "wiki", summary = "定义 Wiki 内容对象、页面元数
 ai4-hkdz = { module = "wiki", summary = "定义 Wiki 侧候选提交、Proposal 与正式化元数据的 SQLite 记录模型" }
 ai4-2sdn = { module = "wiki", summary = "验证 TerminusDB 分支能否保存治理状态、设置只读归档，以及平台需自持哪些状态" }
 ai4-56iu = { module = "wiki", summary = "汇总 Wiki 内容对象与 SQLite 候选治理记录的整体持久化规格" }
+ai4-orpg = { module = "wiki", summary = "组织 Wiki 规格前置、正式查询、候选提交审阅及跨存储恢复实现" }
+ai4-7xtf = { module = "wiki", summary = "明确 ResourceVersion 正式引用审核依据及 Wiki 跨存储正式化和恢复规则" }
+ai4-vczt = { module = "wiki", summary = "实现资源版本授权审核、资格状态与撤回审计，供 Wiki 候选和正式化校验使用" }
+ai4-91tk = { module = "wiki", summary = "实现正式 WikiRevision 查询及精确版本资源引用解析与异常隔离" }
+ai4-txhf = { module = "wiki", summary = "实现 Wiki 单文档及完整资源引用接纳、候选版本与 Proposal 提交" }
+ai4-jdjx = { module = "wiki", summary = "实现 Wiki 候选冲突审阅、Owner 决策、正式化及失败恢复" }
 
 # ---- 提案治理与审计 ----
 ai4-x3nx = { module = ["governance", "mapping", "wiki"], summary = "确定正式基线前进时，其他候选如何保留、重放、语义分析、审核和处置" }

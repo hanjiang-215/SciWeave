@@ -6,13 +6,13 @@ links: []
 created: 2026-10-16T14:32:58Z
 type: task
 priority: 2
-assignee: SciWeave
+assignee: hanjiang
 parent: ai4-5vru
 tags: [dependencies, setup, toolchain]
 ---
 # 补齐本机缺失的三个开发工具（git-cliff / fer / gitee）
 
-在 feature/zhanyunfei 的 Windows 开发机上补齐 docs/DEPENDENCIES.md「本机环境现状」中记录的三个缺失工具，使变更日志生成、工单管理和 Gitee PR 协作的规范动作可以实际执行。
+在 Windows 开发机上补齐 docs/DEPENDENCIES.md「本机环境现状」中记录的三个缺失工具，使变更日志生成、工单管理和 Gitee PR 协作的规范动作可以实际执行。
 
 ## Acceptance Criteria
 
@@ -42,7 +42,7 @@ tags: [dependencies, setup, toolchain]
 
 ## 提交与推送
 
-分支 feature/zhanyunfei 已推送到 `origin`，推送范围 `a9b4593..131df11`，共 4 个提交：
+变更已推送到 `origin`，推送范围 `a9b4593..131df11`，共 4 个提交：
 
 - `fd4384e` docs(dependencies): record local install of git-cliff, fer and gitee
 - `1ea43d3` docs(dependencies): sync human-facing copy with authoritative ledger
@@ -58,3 +58,7 @@ tags: [dependencies, setup, toolchain]
 **2026-10-18T12:33:43Z**
 
 后续说明（2026-10-18）：本工单验收时同步维护 docs/DEPENDENCIES.md 与面向人副本，是当时的完成事实；该双份维护做法现由 ai4-ljg3 的单一事实来源决定取代。当前仅 docs/DEPENDENCIES.md 作为依赖与开发环境信息来源。
+
+**2026-10-20**
+
+负责人转交：原负责人为 SciWeave（团队占位名）。经项目所有者确认，本票实际属主为 hanjiang，故先转交给 hanjiang 后更新工单中的开发者身份名称。

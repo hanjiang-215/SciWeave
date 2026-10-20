@@ -4,11 +4,16 @@
 
 **范围**：TaskNode/依赖边模型、草稿与正式视图、提案生命周期、TerminusDB 验证与持久化
 
-**统计**：共 11 张 · 活跃 1（open 1 / in_progress 0） · 已关闭 10 · 地图 1
+**统计**：共 16 张 · 活跃 6（open 6 / in_progress 0） · 已关闭 10 · 地图 2
 
 ## 工单层级
 
 - [ai4-xup8](../../../.tickets/ai4-xup8.md) **Research Mapping 与 Wiki 领域数据模型和持久化规格地图** — 收敛 Mapping/Wiki 数据模型与持久化规则，并厘清消息、套件和端侧 Agent 边界 `epic` `map` `P1` `open` `hanjiang`
+  - [ai4-6ljq](../../../.tickets/ai4-6ljq.md) **Research Mapping 持久化实现地图** — 组织 Mapping 正式查询、候选治理、审阅和跨存储恢复实现切片 `epic` `map` `P1` `open` `hanjiang`
+    - [ai4-1qyc](../../../.tickets/ai4-1qyc.md) **Mapping 正式化与失败恢复纵向实现** — 按既定双存储成功边界实现 Mapping 正式化、对账和失败恢复 `feature` `P1` `open` `hanjiang` · 阻塞于 [ai4-z0lb](../../../.tickets/ai4-z0lb.md)（open）
+    - [ai4-6s53](../../../.tickets/ai4-6s53.md) **Mapping 候选提交与校验纵向实现** — 打通 Mapping 变更校验、隔离候选快照、幂等提交与审计记录 `feature` `P1` `open` `hanjiang` · 阻塞于 [ai4-mqtq](../../../.tickets/ai4-mqtq.md)（open）
+    - [ai4-mqtq](../../../.tickets/ai4-mqtq.md) **Mapping 正式版本查询纵向实现** — 实现以 SQLite 正式指针和精确 TerminusDB Commit 为依据的 Mapping 查询 `feature` `P1` `open` `hanjiang`
+    - [ai4-z0lb](../../../.tickets/ai4-z0lb.md) **Mapping 候选差异与审阅纵向实现** — 实现 Mapping 候选差异影响预览、固定版本审阅和冲突检查 `feature` `P1` `open` `hanjiang` · 阻塞于 [ai4-6s53](../../../.tickets/ai4-6s53.md)（open）
   - [ai4-yl2o](../../../.tickets/ai4-yl2o.md) **Research Mapping 持久化模型分支** — 汇总 Research Mapping 图对象字段与 SQLite 候选治理记录的整体持久化规格 `epic` `P1` `closed` `hanjiang`
     - [ai4-mjku](../../../.tickets/ai4-mjku.md) **Research Mapping 候选治理 SQLite 结构化记录模型** — 定义 Research Mapping 侧候选提交、Proposal 与正式化元数据的 SQLite 记录模型 `task` `P1` `closed` `hanjiang`
     - [ai4-t5zl](../../../.tickets/ai4-t5zl.md) **Research Mapping TaskNode 与 Dependency Edge 持久化字段模型** — 把 TaskNode 与 DependencyEdge 领域字段落成可持久化对象、约束和关系模型 `task` `P1` `closed` `hanjiang`

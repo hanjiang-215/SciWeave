@@ -13,5 +13,5 @@
 - [ai4-w333](../../../.tickets/ai4-w333.md) **统一 SciWeave 子项目技术栈与目录规范** — 统一 Python/Vue 技术栈、子项目目录、环境变量配置和规则适用范围 `chore` `P1` `closed` `Frank Qi`
 - [ai4-5j2j](../../../.tickets/ai4-5j2j.md) **固定 TerminusDB 验证服务版本并同步说明** — 把 TerminusDB 与 Store 镜像从 latest 固定到已验证版本并同步依赖文档 `task` `P2` `closed` `SciWeave` · 上级 [ai4-ru15](../../../.tickets/ai4-ru15.md)（产品与需求）
 - [ai4-5vru](../../../.tickets/ai4-5vru.md) **盘点并补齐项目依赖** — 盘点运行时、开发工具、外部服务和文档依赖，补齐包管理清单与验证命令 `task` `P2` `closed` `SciWeave`
-  - [ai4-wzdh](../../../.tickets/ai4-wzdh.md) **补齐本机缺失的三个开发工具（git-cliff / fer / gitee）** — 安装并验证 git-cliff、fer、gitee 三个缺失工具，使规范动作可执行 `task` `P2` `closed` `SciWeave`
+  - [ai4-wzdh](../../../.tickets/ai4-wzdh.md) **补齐本机缺失的三个开发工具（git-cliff / fer / gitee）** — 安装并验证 git-cliff、fer、gitee 三个缺失工具，使规范动作可执行 `task` `P2` `closed` `hanjiang`
 - [ai4-ljg3](../../../.tickets/ai4-ljg3.md) **归一化开发依赖文档为唯一事实来源** — 把 docs/DEPENDENCIES.md 定为开发工具依赖的唯一事实来源并清理副本 `chore` `P2` `closed` `SciWeave`

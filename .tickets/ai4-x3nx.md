@@ -36,4 +36,4 @@ tags: [wayfinder:map]
 
 **2026-10-20T07:44:05Z**
 
-负责人转交（2026-10-20）：原负责人 Frank Qi。按项目所有者指示，产品与需求、Research Mapping、LLM-Wiki 模块的工单负责人统一为 hanjiang（即 zhanyunfei）；本票同时归属 Research Mapping 与 LLM-Wiki，因此一并转交。
+负责人转交（2026-10-20）：原负责人 Frank Qi。按项目所有者指示，产品与需求、Research Mapping、LLM-Wiki 模块的工单负责人统一为 hanjiang；本票同时归属 Research Mapping 与 LLM-Wiki，因此一并转交。
