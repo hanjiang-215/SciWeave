@@ -1,2 +1,0 @@
-[console_scripts]
-sciweave-task-agent-gateway-ingest = gateway_ingest.cli:main

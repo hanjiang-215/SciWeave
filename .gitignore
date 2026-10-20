@@ -14,9 +14,12 @@ tmp/
 cache/
 *.cache
 
-# 虚拟环境
+# 虚拟环境和 Python 构建产物
 .venv
 node_modules/
+*.egg-info/
+__pycache__/
+*.py[cod]
 
 # fast-agent 运行时产物（会话与锁，可再生成）
 .fast-agent/sessions/

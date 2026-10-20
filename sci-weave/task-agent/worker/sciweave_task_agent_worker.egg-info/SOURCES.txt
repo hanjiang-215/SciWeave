@@ -1,7 +1,0 @@
-README.md
-pyproject.toml
-sciweave_task_agent_worker.egg-info/PKG-INFO
-sciweave_task_agent_worker.egg-info/SOURCES.txt
-sciweave_task_agent_worker.egg-info/dependency_links.txt
-sciweave_task_agent_worker.egg-info/entry_points.txt
-sciweave_task_agent_worker.egg-info/top_level.txt

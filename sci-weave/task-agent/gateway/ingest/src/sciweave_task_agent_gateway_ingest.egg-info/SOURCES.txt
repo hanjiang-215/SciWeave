@@ -1,9 +1,0 @@
-README.md
-pyproject.toml
-src/gateway_ingest/__init__.py
-src/gateway_ingest/cli.py
-src/sciweave_task_agent_gateway_ingest.egg-info/PKG-INFO
-src/sciweave_task_agent_gateway_ingest.egg-info/SOURCES.txt
-src/sciweave_task_agent_gateway_ingest.egg-info/dependency_links.txt
-src/sciweave_task_agent_gateway_ingest.egg-info/entry_points.txt
-src/sciweave_task_agent_gateway_ingest.egg-info/top_level.txt
