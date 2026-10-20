@@ -142,6 +142,7 @@ Research Mapping MCP、依赖图、领域 Buffer 设计、Agent Kit/Skills/Hooks
 - [ ] `review_execution` 可审计地接纳、返修、驳回或人工接管，且接纳不产生领域草稿或 outbox。
 - [ ] 固定 `session_id` 能在新的 Worker 中恢复；失败、取消、审核、串行化和 Gateway 重启读取行为有自动化验证。
 - [ ] 同一健康计算逻辑分别报告 MCP 与消息队列状态，不将未配置队列伪装为可用。
+- [ ] 现有 HTTP/SQLite MVP 无行为变更地迁入 `sci-weave/task-agent/gateway/mcp`；项目组使用唯一组级 `uv.lock`，`gateway/ingest` 与 `worker` 仅建立独立、可安装的角色骨架。
 - [ ] 规格未引入领域对象正文、领域 MCP 逻辑、Agent Kit 或 ZIP 交付。
 
 ## Notes
