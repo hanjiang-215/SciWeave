@@ -87,7 +87,7 @@ class GatewayApplication:
             self._audit(connection, "owner_command_received", task_node_id, command_id, execution_id, now)
             self._audit(connection, "execution_queued", task_node_id, command_id, execution_id, now)
         if self.test_runtime_enabled:
-            threading.Thread(target=self._run_test_worker, args=(execution_id,), daemon=True).start()
+            self._schedule_test_worker(execution_id)
         return {
             "command_id": command_id,
             "execution_id": execution_id,
@@ -96,6 +96,9 @@ class GatewayApplication:
             "execution_status": "queued",
             "duplicate": False,
         }
+
+    def _schedule_test_worker(self, execution_id: str) -> None:
+        threading.Thread(target=self._run_test_worker, args=(execution_id,), daemon=True).start()
 
     def _run_test_worker(self, execution_id: str) -> None:
         now = utc_now()
@@ -143,6 +146,14 @@ class GatewayApplication:
             connection.execute("DELETE FROM worker_leases WHERE execution_id = ?", (execution_id,))
             self._audit(connection, event_type, execution["task_node_id"], execution["command_id"], execution_id, finished_at)
             self._audit(connection, "worker_lease_released", execution["task_node_id"], execution["command_id"], execution_id, finished_at)
+            next_execution = connection.execute(
+                """SELECT execution_id FROM execution_records
+                   WHERE task_node_id = ? AND status = 'queued'
+                   ORDER BY created_at, execution_id LIMIT 1""",
+                (execution["task_node_id"],),
+            ).fetchone()
+        if next_execution is not None:
+            self._schedule_test_worker(next_execution["execution_id"])
 
     def query_execution(self, execution_id: str) -> dict[str, Any] | None:
         row = self.store.get_execution(execution_id)

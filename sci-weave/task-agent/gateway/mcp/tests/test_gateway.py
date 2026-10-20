@@ -12,6 +12,28 @@ from pathlib import Path
 from typing import Any
 
 from gateway.app import create_app, make_handler
+from gateway.runtime import RuntimeOutcome
+
+
+class BlockingRuntime:
+    def __init__(self) -> None:
+        self.started = threading.Event()
+        self.release = threading.Event()
+        self.requests: list[str] = []
+        self.lock = threading.Lock()
+
+    def run(self, request):
+        with self.lock:
+            self.requests.append(request.execution_id)
+            self.started.set()
+        self.release.wait(timeout=2)
+        return RuntimeOutcome("awaiting_acceptance", result_summary="blocked runtime completed")
+
+    def resume(self, request):
+        return self.run(request)
+
+    def cancel(self, execution_id):
+        return RuntimeOutcome("cancelled", error_summary="cancelled")
 
 
 class GatewayMcpTests(unittest.TestCase):
@@ -202,6 +224,48 @@ class GatewayMcpTests(unittest.TestCase):
                 return execution
             time.sleep(0.02)
         self.fail(f"execution {execution_id} did not reach {expected_status}")
+
+    def submit(self, task_node_id: str, idempotency_key: str) -> str:
+        status, response = self.mcp_call(
+            "tools/call",
+            {
+                "name": "submit_owner_command",
+                "arguments": {
+                    "task_node_id": task_node_id,
+                    "command": "inspect",
+                    "idempotency_key": idempotency_key,
+                },
+            },
+        )
+        self.assertEqual(status, 200)
+        return self.tool_result(response)["execution_id"]
+
+    def test_same_task_node_waits_for_existing_worker_lease(self) -> None:
+        runtime = BlockingRuntime()
+        self.app.set_runtime(runtime)
+        first = self.submit("shared-node", "first")
+        self.assertTrue(runtime.started.wait(timeout=1))
+        second = self.submit("shared-node", "second")
+        time.sleep(0.05)
+        self.assertEqual(runtime.requests, [first])
+
+        runtime.release.set()
+        self.wait_for_execution(first, "awaiting_acceptance")
+        self.wait_for_execution(second, "awaiting_acceptance")
+
+    def test_different_task_nodes_receive_independent_worker_leases(self) -> None:
+        runtime = BlockingRuntime()
+        self.app.set_runtime(runtime)
+        first = self.submit("node-one", "node-one-key")
+        self.assertTrue(runtime.started.wait(timeout=1))
+        second = self.submit("node-two", "node-two-key")
+        deadline = time.monotonic() + 1
+        while time.monotonic() < deadline and len(runtime.requests) < 2:
+            time.sleep(0.01)
+        self.assertCountEqual(runtime.requests, [first, second])
+        runtime.release.set()
+        self.wait_for_execution(first, "awaiting_acceptance")
+        self.wait_for_execution(second, "awaiting_acceptance")
 
     def test_test_runtime_completes_queued_execution_through_a_short_lived_worker(self) -> None:
         self.app.enable_test_runtime()
