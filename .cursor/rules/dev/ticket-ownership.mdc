@@ -1,0 +1,36 @@
+---
+description: fer ticket 的属人修改权：行动前确认身份，只有 assignee 可修改该 ticket
+globs: .tickets/**
+alwaysApply: false
+---
+
+# Ticket 属人修改权
+
+## 行动前先确认身份
+
+1. 修改任何 `.tickets/ai4-*.md` 之前，先确认当前操作者是谁：读取该 ticket 的 `assignee`，并与当前分支 `feature/<开发者>`、`git config user.name` 核对；三者无法明确对应时，停下来向用户询问“本次以哪位开发者的身份操作”，不要猜测。
+2. 身份结论只在本次会话内有效。切换任务、切换 ticket 或出现新的开发者名字时重新确认，不要沿用上一次的判断。
+3. 本规则不预设开发者名单、姓名写法或分支约定。具体人和别名以 fer 中的 `assignee`、`git config user.name` 和当前分支为准；仓库里不写入固定人员清单。
+
+## 只有 assignee 可以修改
+
+1. 有负责人时，`assignee` 必须恰好一个，值是可识别的具体个人，不能是 `SciWeave`、`Team`、`TBD` 等团队名或占位符。
+2. 只有 `assignee` 对应的开发者可以修改该 ticket 的正文、`status`、`deps`、`links`、验收标准和 Notes。
+3. 当前身份不是 `assignee` 时，不要直接编辑该文件。改为以下方式之一：
+   - 通过 Gitee PR 评论或 fer 评论提出事实与建议；
+   - 新建一张关联 ticket 承载自己的问题或决策，并在其中链接原票；
+   - 请用户先把 `assignee` 转交给自己，再修改。
+4. 转交时先改 `assignee`，再改内容；在 Notes 里记录转交原因、时间和原负责人。
+5. 地图票（`wayfinder:map`）同属独占：其 Decisions so far 只能由该地图的 `assignee` 更新。子票由不同 owner 推进时，子票 owner 把结论回写在子票里，由地图 owner 转载索引。
+6. 未认领的票（`assignee` 为空）可被任何身份认领：先写入自己为 `assignee`，再开始修改。
+
+## 并发与冲突
+
+1. 开始编辑前重新读取该 ticket 的最新内容，确认没有他人刚写入的修订块。
+2. 发现他人的修改与自己结论冲突时，不要覆盖或删除对方内容；在 Notes 追加带日期的修订说明，写明推翻哪一条、依据是什么，并保留原文。
+3. 关闭、重开或拆分他人负责的票属于越权操作，按第 2 节的三种方式提出。
+
+## 与实现改动的关系
+
+1. 本规则只约束 ticket 文档的修改权，不约束代码归属；代码改动仍按 Git 规范走 `feature/<开发者>` 分支和 PR。
+2. ticket 的 `assignee` 表达“谁负责裁决这张票的内容”，不等于“谁必须亲自实现它”。实现可在 `assignee` 同意下由他人完成，并把结果回写到该票。

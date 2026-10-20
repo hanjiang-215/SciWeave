@@ -24,3 +24,9 @@ tags: [wayfinder:grilling]
 **2026-10-19T05:47:44Z**
 
 Wayfinder 前沿结论（2026-10-19）：与端侧 Agent 的协作通道保持分离。Owner 的补充、返修、重试、暂停、取消和 Human Input 通过 A2A Gateway；上游审核通过后的单次 TaskNode 交接通过消息队列和上游收集器。A2A 可向 Owner 返回实时最终文字回复或 INPUT_REQUIRED 状态；上游自动执行完成后，结果写入 Buffer/Execution Record，并只向该 TaskNode Owner 发送一次邮件提醒，邮件不承载任务事实或审核决定。每个 TaskNode 至少有一名 Owner；上游交接只有在必要消息收齐且 Dependency Edge 激活后才触发下游执行。
+
+**2026-10-19T20:19:00Z**
+
+修订（2026-10-19）：上一条中“Owner ... 通过 A2A Gateway”已作废。Owner 通道改为 MCP（Streamable HTTP），因为主流 harness 均未内置 A2A 客户端；Human Input 改由 `query_execution` 返回 `waiting` 与问题文本表达，不再使用 A2A `INPUT_REQUIRED`。
+
+本票的实质结论不变，且只涉及上游一侧：**上游 TaskNode 审核通过后的单次交接通过消息队列和上游收集器，与 Owner 通道物理隔离**。这条不受协议修订影响。

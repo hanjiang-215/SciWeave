@@ -13,22 +13,15 @@ SciWeave 首版应将 `fast-agent-mcp` 作为**受外围 Worker 调用的 Task A
 推荐形态：
 
 ```text
-上游交接收集器 / Task Owner 消息处理器
-                 │
-                 ▼
-         SciWeave Worker（调度、授权、审计、上下文）
-                 │
-                 ▼
-       fast-agent Harness API（一个受控执行会话）
-                 │
-                 ▼
-      结构化执行结果 → Buffer → Hook/邮件提醒 Owner
+Task Owner 的 harness ──MCP(Streamable HTTP)──→ Gateway（常驻）──spawn──→ Worker ──→ fast-agent Harness API
+上游交接收集器 ────────消息队列──────────────────┘
 ```
 
 - TaskNode 模板映射为 fast-agent 的 Agent 定义：固定基础 instruction、指定模型、按任务授权 MCP server、工具过滤和受审查的 Skills/Hooks。
 - Worker 在调用前完成消息收集、Dependency Edge 激活判断、版本检查、上下文拼装、运行超时和审计；fast-agent 只执行一个已激活的 Task Agent loop。
-- Agent 只能使用只读 MCP 和提交 Buffer 的 MCP；邮件通知由 Worker 在写入 Buffer 后发送，不能让 Agent 直接以邮件正文代替受控提交。
-- 首版不应以 A2A 承载平台内部队列。A2A 适合后续把受控 Agent 能力暴露给外部 Agent；其 `context_id` 可映射到运行时会话，但它不替代 TaskNode 依赖、Buffer 或审核治理。
+- Agent 只能使用只读 MCP 和提交 Buffer 的 MCP；通知由 Worker 在写入 Buffer 后发出，不能让 Agent 直接以邮件正文代替受控提交。
+- Task Owner 通过 MCP 而不是 A2A 接入：Codex CLI、Cursor、Claude Code 对外扩展面只有 MCP，未内置 A2A 客户端。
+- 首版不应以 A2A 承载平台内部队列。A2A 面向 Agent 间协作，可在后续用于把受控 Agent 能力暴露给外部 Agent；它不替代 TaskNode 依赖、Buffer 或审核治理。
 
 ## 第一方能力证据
 
@@ -73,7 +66,7 @@ fast-agent 会从默认技能目录发现 `SKILL.md`；发现有效 Skill 后，
 
 源码例子表明 A2A 适配器可把 A2A `context_id` 映射到 `AgentRequest.session_id`，并把运行结果回传为协议 artifact。它适合后续给外部 Personal Agent 提供受治理的协议入口。
 
-首版内部不采用 A2A：平台消息队列要处理上游收集、Owner 消息时序、重复投递、激活条件与审计，而 A2A 示例只做请求到 Agent 调用的适配。
+首版内部不采用 A2A，Owner 也不采用：主流 harness（Codex CLI、Cursor、Claude Code）没有内置 A2A 客户端，只有 MCP。Owner 侧改用 MCP（Streamable HTTP），Gateway 作为 MCP server；平台消息队列仍负责上游收集、重复投递、激活条件与审计。
 
 ## 建议的 TaskNode Agent Profile
 
@@ -104,10 +97,10 @@ fast-agent 会从默认技能目录发现 `SKILL.md`；发现有效 Skill 后，
 | SciWeave 概念 | fast-agent 对应责任 | 责任边界 |
 | --- | --- | --- |
 | 上游 TaskNode 交接 | Worker 在调用前收集与验证 | 不交给 Agent 自行等待或聚合 |
-| Task Owner 消息 | Worker 形成下一 loop 的请求 | 不与上游交接隐式混合 |
+| Task Owner 消息 | 经 Gateway MCP 工具进入 Worker 下一 loop 的请求 | 不与上游交接隐式混合 |
 | 执行 loop | 一次 Harness 调用或受控 session turn | 输出必须回写 Execution Record |
-| 结果审核 | Buffer + Owner 的 Codex MCP 调用 | 不由 Agent 自行接受 |
-| 邮件提醒 | Worker 的通知适配器 | 不作为审核或领域事实来源 |
+| 结果审核 | Buffer + Owner 的 harness 经 MCP 调用 | 不由 Agent 自行接受 |
+| 通知提醒 | Worker 的通知适配器 | 不作为审核或领域事实来源 |
 | 跨 Agent 协议 | 后续可选 A2A adapter | 不替代内部队列与治理 |
 
 ## 后续验证

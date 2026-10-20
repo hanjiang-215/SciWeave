@@ -59,3 +59,14 @@ tags: [wayfinder:grilling]
 Wayfinder 前沿结论（2026-10-19）：Q1-Q8 已确认，Q8 采用 A2A Human Input 交互而不是默认邮件往返。Personal Harness（Codex）是 Task Owner 控制的 A2A 客户端和审核客户端，不运行平台 Worker、不承载服务器端 Hook，也不直接管理 Task Agent 会话。Task Agent 使用 fast-agent-mcp + TaskNode 模板；平台/Gateway 负责身份授权、Owner Command、消息编排、审计、Buffer、Execution Record 和会话键，短生命周期 Worker 负责一次受控 loop。Task Owner 只能管理执行投影和提交，不得通过运行期指令修改 TaskNode 目标、依赖、激活条件或正式路线；Task Agent 只能读取正式数据并创建受控 Buffer Submission，不能直接写正式 Mapping/Wiki、审核决定或下游交接。
 
 Q8-Q10 修正：A2A 可返回 Task Agent 最终文字回复；fast-agent A2A 已验证 INPUT_REQUIRED/后续输入恢复和取消，但默认 human_input=True 是本地 UI 回调，远程 Codex 需要 Gateway 显式桥接。Owner 指令先鉴权、持久化、幂等确认和审计；普通指令在 TaskNode 激活后执行，暂停/取消可优先生效。每个 TaskNode 至少配置一名 Owner；自动执行需要人工输入时指向该 Owner，不存在无 Owner 节点。
+
+**2026-10-19T20:18:00Z**
+
+协议修订（2026-10-19）：Owner 通道由 A2A 改为 MCP（Streamable HTTP）。上一条“Personal Harness（Codex）是 A2A 客户端”的前提不成立——Codex CLI、Cursor、Claude Code 的对外扩展面只有 MCP，均未内置 A2A 客户端。修订后：
+
+- Task Owner 的 harness 是 **MCP 客户端**，在 `mcp_servers` 注册 Gateway 地址与令牌。
+- Gateway 是 **MCP server**，暴露 `submit_owner_command`、`query_execution`、`cancel_execution`、`list_pending`、`health`。
+- `INPUT_REQUIRED` 不再经 A2A 状态表达，改为 `query_execution` 返回 `waiting` 加问题文本，Owner 用同一 `execution_id` 续接。
+- 上游 TaskNode 交接仍走消息队列，与本次修订无关。
+
+详见 [Owner 通道与上游交接队列物理隔离](ai4-353s.md) 的决策修订记录。

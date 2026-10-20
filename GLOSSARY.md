@@ -20,11 +20,11 @@
 
 **WikiDocument（Wiki 文档）**：LLM-Wiki 中一个具有稳定逻辑身份的文档对象，例如来源文档、实体、概念或综合内容。WikiDocument 的正文通过多个 WikiRevision 版本保存；更新文档不会覆盖已有正式版本。只有当前 Formal WikiRevision 才能作为正式查询结果。
 
-**WikiRevision（Wiki 文档版本）**：WikiDocument 的一次不可变内容版本，包含 Markdown 正文、页面元数据、来源引用、创建者、创建时间、基础版本、Proposal 关联和治理状态。草稿版本可以在 Proposal 预览中查看，但正式 MCP 查询只返回最新 Formal WikiRevision。
+**WikiRevision（Wiki 文档版本）**：WikiDocument 的一次完整、不可变页面快照，包含分类、标题、可选描述、Markdown 正文、创建信息和可选基准版本；它拥有该版本完整的结构化 Resource Reference 关系。Proposal、候选/正式状态和正式版本指针是关联的治理事实，不是页面正文。正式查询只返回当前 Formal WikiRevision。
 
 **Formal WikiRevision（正式 Wiki 版本）**：已经通过 Proposal 整体审核并被平台正式查询指针选中的 WikiRevision。TerminusDB Commit 只记录存储变化，不能单独证明 WikiRevision 已经正式批准。
 
-**Wiki Metadata（Wiki 页面元数据）**：随 WikiRevision 展示的页面描述信息，例如文档类型、标题、文档标识、版本标识、状态和时间。Metadata 可以出现在 Markdown frontmatter 中，但 Proposal 状态、正式版本指针、资源版本关系、审计记录和访问权限等治理事实以 TerminusDB 的结构化记录为准。
+**Wiki Metadata（Wiki 页面元数据）**：描述单个 WikiRevision 的页面信息，例如分类（`source`、`entity`、`concept` 或 `synthesis`）、标题、可选描述、文档 ID、版本 ID 和创建时间。可在 Markdown frontmatter 中呈现这些描述信息；Proposal 状态、当前正式版本指针、结构化资源引用、审计记录和访问权限等治理事实以 LLM-Wiki 的结构化记录为准。
 
 **Formal Query（正式查询）**：只读取当前 Formal WikiRevision、正式 Resource Reference 和正式资源版本的查询能力。正式查询不读取草稿或 candidate branch 当前状态。
 
@@ -52,11 +52,11 @@
 
 **Resource（科研资源）**：可被本科研项目发现、引用、处理或复用的对象，可以是数字对象、文字内容、计算结果、研究假设、Agent 输出、Skill、MCP 能力或实物；资源不要求必须是文本或计算机可存储对象。
 
-**ResourceVersion（资源版本）**：同一 Resource 在特定时间、来源或内容状态下的不可变版本。正式引用应精确指向 ResourceVersion，以避免资源后续变化悄悄改变历史科研事实。
+**ResourceVersion（资源版本）**：同一 Resource 在特定时间、来源或内容状态下的不可变版本，保存来源/外部版本标识、记录与生成信息、处理方式及可访问性观察。正式引用必须精确指向 ResourceVersion，以避免资源后续变化悄悄改变历史科研事实。
 
 **RawArtifact（原始资源载体）**：ResourceVersion 对应的文件、数据集、代码快照、实验材料或其他可访问载体的记录；它描述载体的位置、完整性和可访问性，不等于资源本身。
 
-**Resource Reference（资源引用）**：LLM-Wiki 中指向某个科研资源或其 ResourceVersion 的结构化记录，而不是资源本体。记录至少包括资源类型、外部定位或实物处理信息、版本标识、来源任务、创建者、生成时间、输入资源、治理状态、被引用的 Wiki 文档或研究结论，以及资源可访问性状态。Resource Reference 可以引用数字对象、研究假设、Agent 输出、Skill、MCP 能力或实物；项目初始化阶段用于管理项目本身的基础 Skill 和 MCP 能力不作为本项目科研资源纳入引用空间。
+**Resource Reference（资源引用）**：LLM-Wiki 中由一个 WikiRevision 拥有的结构化版本引用，必须精确指向一个 WikiRevision 或 ResourceVersion，不能只指向可变的 WikiDocument、Resource 或“最新版本”。引用保存其角色、来源任务弱引用和可选正文定位；资源定位、来源、生成信息和处理方式由目标 ResourceVersion/RawArtifact 提供，引用本身不复制资源本体或建立独立治理状态机。
 
 **Resource Handling Mode（资源处理模式）**：描述 Agent 或研究人员如何处理被引用资源。Wiki 文档和可直接读取的 raw 资源可以直接查询；实物或其他无法直接读取的资源需要指派研究人员完成观察、实验、测量或其他处理，并将处理结果作为新的可追溯资源或 Wiki 内容提交。
 

@@ -3,17 +3,14 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "sciweave-gateway"
+name = "sciweave-task-agent-worker"
 version = "0.1.0"
-description = "SciWeave Gateway MVP"
+description = "SciWeave Task Agent fast-agent-mcp worker role"
 requires-python = ">=3.11"
 dependencies = []
 
 [project.scripts]
-sciweave-gateway = "main:main"
-
-[tool.setuptools]
-py-modules = ["main"]
+sciweave-task-agent-worker = "task_agent_worker.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

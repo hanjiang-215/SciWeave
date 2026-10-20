@@ -14,6 +14,8 @@ tags: [implementation, gateway, runtime]
 
 让已持久化的 Owner Command 进入短生命周期 Worker 执行流程：Gateway 通过 Runtime Adapter 调用一次运行时，按 task_node_id 串行化执行，记录 Worker 生命周期，并支持查询、失败和取消。首版使用测试 Runtime 验证调度器，不接入领域 MCP、Redpanda 或 A2A。
 
+> 入口修订（2026-10-19）：Owner 通道改为 MCP（Streamable HTTP）。本票的调度器与 Runtime Adapter 不依赖入口协议，实现时按 MCP 工具层传入的 Owner Command 处理即可。见 [Owner 通道与上游交接队列物理隔离](ai4-353s.md)。
+
 ## Acceptance Criteria
 
 - [ ] Owner Command 可以触发一个短生命周期本地 Worker。

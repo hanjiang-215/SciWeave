@@ -11,7 +11,7 @@
 - 本地验证服务及其容器运行前提；
 - 根目录中已有的开发工具包。
 
-Python 服务、MCP、Vue 前端及其业务依赖不在本文定义；它们必须由对应子项目的 `pyproject.toml`、`uv.lock`、`package.json` 和锁文件声明。
+Python 服务、MCP、Vue 前端及其业务依赖不在本文定义；它们必须由对应子项目的 `pyproject.toml`、`uv.lock`、`package.json` 和锁文件声明。同一项目组的多个 Python 子项目共享组级 `uv.lock`。
 
 ## 通用依赖清单
 
@@ -30,7 +30,7 @@ Python 服务、MCP、Vue 前端及其业务依赖不在本文定义；它们必
 
 1. 每个工具、服务或包都必须有明确用途、来源、许可证或使用限制，以及可复现验证方式。
 2. 新增开发依赖或本地验证服务前，先在 fer 中创建或更新对应任务；不要把技术决策只留在聊天记录中。
-3. 依赖通过所属项目的清单和锁文件声明。根目录 Node 工具使用 `package.json` 与 `pnpm-lock.yaml`；Python 子项目使用 `pyproject.toml` 与 `uv.lock`；Vue 子项目使用自身的 `package.json` 与锁文件。
+3. 依赖通过所属项目的清单和锁文件声明。根目录 Node 工具使用 `package.json` 与 `pnpm-lock.yaml`；独立 Python 子项目使用自身 `pyproject.toml` 与 `uv.lock`；同一项目组的 Python 子项目使用各自 `pyproject.toml` 和组级唯一 `uv.lock`；Vue 子项目使用自身的 `package.json` 与锁文件。
 4. 开发工具的具体安装方式由使用者的操作系统和组织安全策略决定；不得将机器特定的安装步骤、代理、路径、版本输出或凭据写入本文件。
 5. 真实令牌、密码、`.env`、缓存、日志、虚拟环境和构建产物不得提交。只提交环境变量名称和 `.env.example`。
 6. 完成依赖变更后，运行相关的安装、测试或构建验证，并将命令和结果回写对应 fer 任务。
@@ -38,6 +38,6 @@ Python 服务、MCP、Vue 前端及其业务依赖不在本文定义；它们必
 ## 验证入口
 
 - 根目录 Node 依赖：`corepack pnpm install --frozen-lockfile`。
-- Python 子项目：在子项目目录执行 `uv sync`，再执行该子项目 README 中声明的测试命令。
+- Python 子项目：独立子项目在其目录执行 `uv sync`；项目组在其根目录执行 `uv sync`，再执行对应子项目 README 中声明的测试命令。
 - 本地服务：按对应 `dockers/service/<服务名>/README.md` 启动和验证。
 - 变更日志：按 `cliff.toml` 运行 `git cliff --config cliff.toml --output CHANGELOG.md`。
