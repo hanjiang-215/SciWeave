@@ -27,6 +27,7 @@ tags: [wayfinder:map]
 - [Owner 通道与上游交接队列物理隔离](ai4-353s.md)：Owner 的 Codex 通过 MCP 调用常驻 Gateway；上游 TaskNode 交接通过消息队列和上游收集器。A2A 不用于 Owner 通道，因为主流 harness 均未内置 A2A 客户端。
 - [执行与接纳状态机融合及 Owner 审核工具边界](ai4-yvh2.md)：Gateway 归入 `sci-weave/task-agent` 项目组；同一 TaskNode 串行、跨 TaskNode 可并发。MCP 与上游交接汇入 Gateway，使用 `blocked`、`queued`、`running`、`waiting`、`awaiting_acceptance` 等状态及 `review_execution` 完成可审计审核；接纳不自动创建领域草稿。
 - [Task Agent 项目组三角色部署与双入口调度边界](ai4-6fb7.md)：`mcp`、`ingest` 与短生命周期 `worker` 构成 Task Agent 项目组；两种入口通过共享 SQLite 持久化包、原子执行租约和稳定排序串行调度，健康按组件实际可用性聚合。Mapping 初始化查询另由受阻塞子票收敛。
+- [Gateway MCP 对外协议版本、鉴权与错误契约](ai4-zfz9.md)：最小 MCP v1 使用本地 Bearer 令牌与配置 Caller，区分 HTTP/JSON-RPC 与工具业务错误；OwnerCommand 仅留痕，ExecutionRecord 是唯一工作流状态机，领域 Buffer 保持开放且不自动创建。
 
 ## Not yet specified
 

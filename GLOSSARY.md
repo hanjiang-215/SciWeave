@@ -82,6 +82,8 @@
 
 **AuditEvent（审计事件）**：对受控提交、调度、执行、预审、审核、批准、驳回和正式化等操作的不可变过程记录。AuditEvent 至少说明操作者、操作类型、目标、基准版本、结果、时间、原因以及关联的 Proposal 或任务标识，用于按任务、提案、正式版本或时间重建责任链。
 
+**Caller（调用者）**：向 Gateway 发起 MCP 请求且已通过 Gateway 当前身份校验的请求来源。最小闭环阶段，Caller 由启动配置中的本地开发令牌和调用者标识确定，并作为 OwnerCommand 和 AuditEvent 的操作者记录；它不自动证明调用者是 Task Node Owner，也不授予领域治理权限。
+
 **Personal Agent（Personal Agent）**：研究人员使用自己的 harness 配置的 Agent，通过 MCP、Skills、系统提示词和 Hooks 接入科研协作平台。
 
 **Task Agent（任务 Agent）**：平台支持的轻量化、可配置 Agent，用于执行边界明确、重复、耗时或结构化的科研任务；它不是平台自研的通用 harness。
