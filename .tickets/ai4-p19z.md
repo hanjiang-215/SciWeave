@@ -30,4 +30,3 @@ Task Owner 可通过带本地 Bearer 令牌的 MCP Streamable HTTP 提交命令�
 - [ ] 缺失或无效令牌返回 HTTP 401 且不创建任务事实；协议错误与工具业务错误保持规定边界。
 - [ ] 无令牌回环探针仅返回状态和 API 版本，认证 MCP `health` 报告规定的分项健康。
 - [ ] 自动化测试仅经 MCP 和最小 HTTP 健康接缝验证。
-

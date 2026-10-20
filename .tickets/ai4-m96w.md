@@ -30,4 +30,3 @@ tags: [implementation, task-agent, ready-for-agent]
 - [ ] Worker 生命周期、租约领取与释放、状态迁移和错误摘要均追加审计。
 - [ ] 未配置 ingest 队列或 Worker runtime 时，健康结果明确报告 `not_configured` 或规定的降级状态。
 - [ ] 自动化测试从 MCP 查询和持久化可观察行为验证调度，不依赖调度器私有实现。
-

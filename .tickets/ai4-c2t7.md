@@ -19,4 +19,3 @@ tags: [wayfinder:grilling]
 ## Acceptance Criteria
 
 确认由 Mapping 提供的最小只读初始化查询能力及其输入前置条件；明确 Task Agent 必需的 TaskNode、Task Owner、必要上游与配置版本字段；明确空结果、未授权、暂不可用和版本不兼容的错误语义；明确 Task Agent 仅在显式初始化时查询并持久化快照，运行期不依赖 Mapping 查询；不引入 Mapping 写入、领域 Buffer 或运行期回调。
-

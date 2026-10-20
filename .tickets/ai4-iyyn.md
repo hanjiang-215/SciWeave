@@ -30,4 +30,3 @@ tags: [implementation, task-agent, ready-for-agent]
 - [ ] 验证 MCP 与回环 HTTP 健康结果的规定差异，以及未配置 ingest 的明确状态。
 - [ ] 运行项目组同步、安装、编译与全部自动化测试；记录命令、结果和遗留风险。
 - [ ] 验证未引入领域 Buffer、领域 MCP、实际队列消费或真实模型凭据。
-

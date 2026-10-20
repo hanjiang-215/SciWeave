@@ -30,4 +30,3 @@ Task Owner 可取消或列出待跟进执行、回答 Worker 暂停问题；Task
 - [ ] waiting 回答创建带 `resume_of` 的新记录；返修创建带 `revision_of` 的新记录；旧记录不可覆盖。
 - [ ] 执行结果接纳不自动创建领域 Buffer、领域草稿或 outbox。
 - [ ] 工具内审核幂等键、非法状态迁移和稳定业务错误均有 MCP 行为测试。
-

@@ -30,4 +30,3 @@ Worker 通过实际 fast-agent Runtime Adapter 和不需真实模型凭据的 pa
 - [ ] 默认关闭自动 compaction，Worker 每次 loop 后退出并保留受配置控制的会话文件。
 - [ ] fast-agent 故障、会话恢复失败和持久目录不可用均形成可查询 failed 执行和无敏感信息审计。
 - [ ] 集成测试不使用或保存真实模型凭据。
-
