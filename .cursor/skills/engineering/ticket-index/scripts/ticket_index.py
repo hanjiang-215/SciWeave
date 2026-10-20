@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """Render and check the hierarchical ticket index under docs/tickets.
 
-Facts come from .tickets/*.md frontmatter. Module ownership and one-line
-summaries come from docs/tickets/index.toml. The generated Markdown is a
-deterministic projection, so `check` can detect both drift and hand edits.
+Facts come from .tickets/*.md frontmatter. The module registry comes from
+docs/tickets/modules.toml; per-ticket module ownership and one-line summaries
+come from docs/tickets/meta/<id>.toml. INDEX.md and modules/*.md are local
+artifacts: they are generated, never committed, and therefore cannot conflict
+when two branches merge.
 
 Commands:
     facts   compact fact sheet for review
@@ -186,14 +188,14 @@ class Index:
                 continue
             self.tickets[ticket.id] = ticket
 
-        config_path = self.root / "docs/tickets/index.toml"
-        if not config_path.is_file():
-            self.errors.append("缺少 docs/tickets/index.toml")
+        modules_path = self.root / "docs/tickets/modules.toml"
+        if not modules_path.is_file():
+            self.errors.append("缺少 docs/tickets/modules.toml")
             return
         try:
-            config = tomllib.loads(config_path.read_text(encoding="utf-8-sig"))
+            config = tomllib.loads(modules_path.read_text(encoding="utf-8-sig"))
         except tomllib.TOMLDecodeError as exc:
-            self.errors.append(f"docs/tickets/index.toml 不是合法 TOML：{exc}")
+            self.errors.append(f"docs/tickets/modules.toml 不是合法 TOML：{exc}")
             return
 
         for raw in config.get("modules", []):
@@ -214,48 +216,54 @@ class Index:
             if count > 1:
                 self.errors.append(f"模块 id 重复：`{duplicate}`")
 
-        raw_entries = config.get("tickets", {})
-        if not isinstance(raw_entries, dict):
-            self.errors.append("index.toml 的 [tickets] 必须是表")
-            raw_entries = {}
+        meta_dir = self.root / "docs/tickets/meta"
+        if not meta_dir.is_dir():
+            self.errors.append("缺少 docs/tickets/meta/ 目录")
+            return
 
-        for ticket_id, raw in raw_entries.items():
-            if ticket_id not in self.tickets:
-                self.errors.append(f"index.toml：`{ticket_id}` 不存在于 .tickets/")
+        for path in sorted(meta_dir.glob("*.toml")):
+            if not ID_RE.fullmatch(path.stem):
+                self.warnings.append(f"忽略非工单元数据：{path.name}")
                 continue
-            if not isinstance(raw, dict):
-                self.errors.append(f"index.toml：`{ticket_id}` 必须是内联表")
+            relative = path.relative_to(self.root).as_posix()
+            try:
+                raw = tomllib.loads(path.read_text(encoding="utf-8-sig"))
+            except tomllib.TOMLDecodeError as exc:
+                self.errors.append(f"{relative} 不是合法 TOML：{exc}")
                 continue
-            self.entries_seen.add(ticket_id)
+            if path.stem not in self.tickets:
+                self.errors.append(f"{relative}：工单 `{path.stem}` 不存在于 .tickets/")
+                continue
+            self.entries_seen.add(path.stem)
             raw_modules = raw.get("module", [])
             if isinstance(raw_modules, str):
                 modules = [raw_modules]
             elif isinstance(raw_modules, list) and all(isinstance(item, str) for item in raw_modules):
                 modules = list(raw_modules)
             else:
-                self.errors.append(f"index.toml：`{ticket_id}` 的 module 必须是字符串或字符串数组")
+                self.errors.append(f"{relative}：module 必须是字符串或字符串数组")
                 continue
             if not modules:
-                self.errors.append(f"index.toml：`{ticket_id}` 未指定 module")
+                self.errors.append(f"{relative}：未指定 module")
                 continue
             if len(set(modules)) != len(modules):
-                self.errors.append(f"index.toml：`{ticket_id}` 的 module 有重复项")
+                self.errors.append(f"{relative}：module 有重复项")
             unknown = [module for module in modules if module not in module_ids]
             if unknown:
-                self.errors.append(f"index.toml：`{ticket_id}` 使用了未知模块 {', '.join(unknown)}")
+                self.errors.append(f"{relative}：使用了未知模块 {', '.join(unknown)}")
                 continue
             summary = str(raw.get("summary", "")).strip()
             if not summary:
-                self.errors.append(f"index.toml：`{ticket_id}` 缺少 summary")
+                self.errors.append(f"{relative}：缺少 summary")
             elif not 20 <= len(summary) <= 60:
-                self.warnings.append(
-                    f"index.toml：`{ticket_id}` 的 summary 为 {len(summary)} 字，建议 20–60 字"
-                )
-            self.entries[ticket_id] = {"modules": tuple(modules), "summary": summary}
+                self.warnings.append(f"{relative}：summary 为 {len(summary)} 字，建议 20–60 字")
+            self.entries[path.stem] = {"modules": tuple(modules), "summary": summary}
 
         for ticket_id in self.tickets:
             if ticket_id not in self.entries_seen:
-                self.errors.append(f"index.toml：缺少工单 `{ticket_id}` 的归属与简介")
+                self.errors.append(
+                    f"docs/tickets/meta/{ticket_id}.toml：缺少该工单的 module 与 summary"
+                )
 
         for ticket in self.tickets.values():
             if ticket.status not in STATUS_ORDER:
@@ -433,7 +441,8 @@ class Index:
             f"# 工单模块：{module.title}",
             "",
             f"> {GENERATED_MARK}，请勿手工编辑。"
-            f"总览：[索引](../INDEX.md) · 归属与简介：[index.toml](../index.toml)",
+            f"总览：[索引](../INDEX.md) · 模块注册：[modules.toml](../modules.toml)"
+            f" · 工单元数据：[meta/](../meta/)",
             "",
             f"**范围**：{module.scope or '（未填写）'}",
             "",
@@ -477,7 +486,7 @@ class Index:
         lines = [
             "# SciWeave 工单索引",
             "",
-            f"> {GENERATED_MARK}：事实来自 `.tickets/`，归属与简介来自 [`index.toml`](index.toml)；请勿手工编辑。",
+            f"> {GENERATED_MARK}：事实来自 `.tickets/`，归属与简介来自 [`meta/<id>.toml`](meta/)，模块来自 [`modules.toml`](modules.toml)；本文件是本地生成物，不入库，请勿手工编辑。",
             "> 工单变更后运行 `python .cursor/skills/engineering/ticket-index/scripts/ticket_index.py render`。",
             "",
             "## 读法",
@@ -620,7 +629,9 @@ class Index:
             "## 维护约定",
             "",
             "- 事实来源：`.tickets/ai4-*.md` 的 frontmatter，通过 `fer` 修改；索引不缓存可推导事实。",
-            "- 归属与简介：`docs/tickets/index.toml`，由人维护；脚本不推断一句话简介。",
+            "- 归属与简介：`docs/tickets/meta/<id>.toml`，由人维护；脚本不推断一句话简介。",
+            "- 模块注册：`docs/tickets/modules.toml`，只在模块增减时修改。",
+            "- 生成物：`INDEX.md` 与 `modules/*.md` 不入库，合并分支后运行 `render` 即可重建。",
             "- 生成：`python .cursor/skills/engineering/ticket-index/scripts/ticket_index.py render`。",
             "- 校验：`python .cursor/skills/engineering/ticket-index/scripts/ticket_index.py check`，退出码 0 才算一致。",
             "- 模块 = 工单结论落地的领域；一张票只在一个模块展开，跨模块关系单独汇总。",
@@ -743,7 +754,7 @@ def cmd_facts(index: Index) -> int:
     print("id\t状态\t类型\t负责人\t主模块\t上级\t简介\t标题")
     for ticket in index.sorted_tickets():
         entry = index.entries.get(ticket.id)
-        summary = entry["summary"] if entry else "[缺少 index.toml 条目]"
+        summary = entry["summary"] if entry else "[缺少 meta 条目]"
         module = index.primary(ticket.id) or "[未归属]"
         assignee = ticket.assignee or "[未分配]"
         print(

@@ -27,3 +27,7 @@ diff 无变化时输出“生成文件已是最新”，有变化时只列出 hu
 **2026-10-20T08:13:07Z**
 
 提交与 PR（2026-10-20）：提交 93ffb44 已推送到 origin/feature/zhanyunfei；Gitee Pull Request #13 https://gitee.com/qi-yueran/ai4science/pulls/13，目标分支 develop。验证：ticket_index.py render/check 通过（59 张工单、7 个模块），py_compile 通过，git diff --check 通过。
+
+**2026-10-20T15:05:09Z**
+
+索引输入路径变更：index.toml 已按 ai4-d4sw 拆分为 docs/tickets/meta/ai4-*.toml 与 docs/tickets/modules.toml，钩子监听的 after-file-edit 路径随之调整；钩子的触发条件不变，仍只对 fer 变更命令与索引输入文件编辑触发 render。

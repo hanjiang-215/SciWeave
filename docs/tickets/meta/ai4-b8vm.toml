@@ -1,0 +1,3 @@
+# ai4-b8vm 的索引归属与简介（人工维护）
+module = "gateway"
+summary = "实现按 TaskNode 串行的短生命周期 Worker 调度、运行时调用、失败与取消"

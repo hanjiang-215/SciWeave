@@ -5,10 +5,10 @@ Registered for two Cursor hooks:
   afterShellExecution  -> argument ``after-shell``
   afterFileEdit        -> argument ``after-file-edit``
 
-The hook only reacts to mutations of fer tickets or of
-``docs/tickets/index.toml`` and then runs ``ticket_index.py render``.
-Anything else exits immediately. Failures are reported on stderr and never
-block the command or the edit.
+The hook only reacts to mutations of fer tickets or of the ticket-index
+inputs (``docs/tickets/meta/ai4-*.toml``, ``docs/tickets/modules.toml``) and
+then runs ``ticket_index.py render``. Anything else exits immediately.
+Failures are reported on stderr and never block the command or the edit.
 """
 
 from __future__ import annotations
@@ -28,7 +28,8 @@ FER_MUTATION = re.compile(
     re.IGNORECASE,
 )
 TICKET_FILE = re.compile(r"\.tickets[/\\]ai4-[0-9a-z]{4}\.md$", re.IGNORECASE)
-INDEX_CONFIG = re.compile(r"docs[/\\]tickets[/\\]index\.toml$", re.IGNORECASE)
+META_FILE = re.compile(r"docs[/\\]tickets[/\\]meta[/\\]ai4-[0-9a-z]{4}\.toml$", re.IGNORECASE)
+MODULES_FILE = re.compile(r"docs[/\\]tickets[/\\]modules\.toml$", re.IGNORECASE)
 
 
 def touches_tickets(event: str, payload: dict) -> bool:
@@ -37,7 +38,11 @@ def touches_tickets(event: str, payload: dict) -> bool:
         return bool(FER_WORD.search(command) and FER_MUTATION.search(command))
     if event == "after-file-edit":
         path = str(payload.get("file_path", ""))
-        return bool(TICKET_FILE.search(path) or INDEX_CONFIG.search(path))
+        return bool(
+            TICKET_FILE.search(path)
+            or META_FILE.search(path)
+            or MODULES_FILE.search(path)
+        )
     return False
 
 

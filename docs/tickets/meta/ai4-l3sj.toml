@@ -1,0 +1,3 @@
+# ai4-l3sj 的索引归属与简介（人工维护）
+module = "wiki"
+summary = "定义 Wiki 内容对象、页面元数据和 Resource Reference 的字段、关系与约束"

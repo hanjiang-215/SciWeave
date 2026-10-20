@@ -24,3 +24,7 @@ __pycache__/
 # fast-agent 运行时产物（会话与锁，可再生成）
 .fast-agent/sessions/
 **/.fast-agent/sessions/
+
+# 工单索引生成物（运行 ticket-index render 生成，不提交）
+docs/tickets/INDEX.md
+docs/tickets/modules/
