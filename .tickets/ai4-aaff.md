@@ -6,7 +6,6 @@ links: []
 created: 2026-10-17T14:58:26Z
 type: prototype
 priority: 1
-assignee: SciWeave
 parent: ai4-ru15
 tags: [wayfinder:prototype, product, sciencepal, ai4science]
 ---
