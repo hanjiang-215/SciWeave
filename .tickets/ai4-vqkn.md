@@ -1,6 +1,6 @@
 ---
 id: ai4-vqkn
-status: open
+status: closed
 deps: [ai4-0nuq, ai4-yvh2]
 links: []
 created: 2026-10-19T07:24:35Z
@@ -24,3 +24,9 @@ tags: [implementation, gateway]
 - [ ] 关闭并重新创建 Gateway 后可以读取既有 TaskSession、ExecutionRecord 和 AuditEvent，不自动重做已失败执行。
 
 > 入口修订（2026-10-19）：Owner 通道改为 MCP（Streamable HTTP）。MCP 客户端重试可能重复发送同一次工具调用，因此幂等键需要在 MCP 工具层显式传入，不能依赖传输层去重。字段名与回环 HTTP 端点保持一致，仍为 `idempotency_key`。背景见 [Owner 通道与上游交接队列物理隔离](ai4-353s.md)。
+
+## Notes
+
+**2026-10-20T07:47:45Z**
+
+2026-10-20：废弃，不再实施。该票基于旧 HTTP seam、旧 OwnerCommand/ExecutionRecord 状态术语和单一 Gateway 假设，已由《MCP v1 命令闭环与共享执行持久化》（ai4-p19z）整体替代。保留为历史实现计划。
