@@ -19,16 +19,17 @@ alwaysApply: false
 ## 修改和提交
 
 1. 每完成一个逻辑上完整、可验证的变更就及时提交，不积累无关修改。
-2. 提交信息使用 Conventional Commits 格式，以便 git-cliff 正确分类，例如：
+2. 修改完成并通过适用验证后，必须在继续下一项修改前创建提交；需要拆分的同一工作项应在每个可独立审查的批次完成后立即提交。
+3. 提交信息使用 Conventional Commits 格式，以便 git-cliff 正确分类，例如：
    - `feat(scope): add ...`
    - `fix(scope): correct ...`
    - `docs(scope): update ...`
    - `refactor(scope): simplify ...`
    - `test(scope): cover ...`
    - `chore(scope): maintain ...`
-3. 一个提交只表达一个逻辑目的；不要把格式化、重命名和功能修改混在同一个提交中。
-4. 提交前查看 `git diff` 和 `git diff --cached`，确认没有凭据、临时文件、无关修改或生成物被误加入。
-5. 提交后检查 `git status`，并记录验证命令及结果。提交失败时先修正原因，不绕过钩子强制提交。
+4. 一个提交只表达一个逻辑目的；不要把格式化、重命名和功能修改混在同一个提交中。
+5. 提交前查看 `git diff` 和 `git diff --cached`，确认没有凭据、临时文件、无关修改或生成物被误加入。
+6. 提交后检查 `git status`，并记录验证命令及结果。提交失败时先修正原因，不绕过钩子强制提交。
 
 ## 远程和分支集成
 

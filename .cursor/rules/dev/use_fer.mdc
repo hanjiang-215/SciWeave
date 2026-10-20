@@ -30,3 +30,8 @@ alwaysApply: false
 - fer 的项目级工作流、目录与状态约定见 `docs/agents/issue-tracker.md`。
 - 运行分诊前读取 `docs/agents/triage-labels.md`，按该文件映射 fer 标签。
 - 领域术语和架构决策的读取约定见 `docs/agents/domain.md`。
+
+## Ticket 归属
+
+- 修改 `.tickets/ai4-*.md` 前先按 `.cursor/rules/dev/ticket-ownership.mdc` 确认当前身份与该票 `assignee` 是否一致；不一致时不要直接编辑，改用评论、关联票或先转交。
+- 新建 ticket 时写入具体个人为 `assignee`；不要使用团队名或占位符。
