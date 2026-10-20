@@ -12,28 +12,6 @@ from pathlib import Path
 from typing import Any
 
 from gateway.app import create_app, make_handler
-from gateway.runtime import RuntimeOutcome
-
-
-class BlockingRuntime:
-    def __init__(self) -> None:
-        self.started = threading.Event()
-        self.release = threading.Event()
-        self.requests: list[str] = []
-        self.lock = threading.Lock()
-
-    def run(self, request):
-        with self.lock:
-            self.requests.append(request.execution_id)
-            self.started.set()
-        self.release.wait(timeout=2)
-        return RuntimeOutcome("awaiting_acceptance", result_summary="blocked runtime completed")
-
-    def resume(self, request):
-        return self.run(request)
-
-    def cancel(self, execution_id):
-        return RuntimeOutcome("cancelled", error_summary="cancelled")
 
 
 class GatewayMcpTests(unittest.TestCase):
@@ -241,29 +219,24 @@ class GatewayMcpTests(unittest.TestCase):
         return self.tool_result(response)["execution_id"]
 
     def test_same_task_node_waits_for_existing_worker_lease(self) -> None:
-        runtime = BlockingRuntime()
-        self.app.set_runtime(runtime)
+        self.app.enable_test_runtime(duration_seconds=0.2)
         first = self.submit("shared-node", "first")
-        self.assertTrue(runtime.started.wait(timeout=1))
+        self.wait_for_execution(first, "running")
         second = self.submit("shared-node", "second")
         time.sleep(0.05)
-        self.assertEqual(runtime.requests, [first])
-
-        runtime.release.set()
+        _, response = self.mcp_call(
+            "tools/call", {"name": "query_execution", "arguments": {"execution_id": second}}
+        )
+        self.assertEqual(self.tool_result(response)["execution_status"], "queued")
         self.wait_for_execution(first, "awaiting_acceptance")
         self.wait_for_execution(second, "awaiting_acceptance")
 
     def test_different_task_nodes_receive_independent_worker_leases(self) -> None:
-        runtime = BlockingRuntime()
-        self.app.set_runtime(runtime)
+        self.app.enable_test_runtime(duration_seconds=0.2)
         first = self.submit("node-one", "node-one-key")
-        self.assertTrue(runtime.started.wait(timeout=1))
         second = self.submit("node-two", "node-two-key")
-        deadline = time.monotonic() + 1
-        while time.monotonic() < deadline and len(runtime.requests) < 2:
-            time.sleep(0.01)
-        self.assertCountEqual(runtime.requests, [first, second])
-        runtime.release.set()
+        self.wait_for_execution(first, "running")
+        self.wait_for_execution(second, "running")
         self.wait_for_execution(first, "awaiting_acceptance")
         self.wait_for_execution(second, "awaiting_acceptance")
 
@@ -289,20 +262,24 @@ class GatewayMcpTests(unittest.TestCase):
 
     def test_test_runtime_failure_is_observable_through_mcp(self) -> None:
         self.app.enable_test_runtime("runtime_error")
-        status, submitted = self.mcp_call(
-            "tools/call",
-            {
-                "name": "submit_owner_command",
-                "arguments": {
-                    "task_node_id": "node-with-failure",
-                    "command": "inspect",
-                    "idempotency_key": "worker-failure",
-                },
-            },
-        )
-        self.assertEqual(status, 200)
-        execution = self.wait_for_execution(self.tool_result(submitted)["execution_id"], "failed")
+        execution = self.wait_for_execution(self.submit("node-with-failure", "worker-failure"), "failed")
         self.assertEqual(execution["error_summary"], "runtime_error")
+
+    def test_runtime_exception_timeout_and_nonzero_exit_are_failed(self) -> None:
+        for outcome in ("exception", "timeout", "nonzero_exit"):
+            with self.subTest(outcome=outcome):
+                self.app.enable_test_runtime(outcome)
+                execution = self.wait_for_execution(
+                    self.submit(f"node-{outcome}", f"worker-{outcome}"), "failed"
+                )
+                self.assertEqual(execution["error_summary"], outcome)
+
+    def test_runtime_cancel_is_observable_through_mcp(self) -> None:
+        self.app.enable_test_runtime("cancelled")
+        execution = self.wait_for_execution(
+            self.submit("node-with-cancel", "worker-cancel"), "cancelled"
+        )
+        self.assertEqual(execution["error_summary"], "cancelled")
 
     def test_authenticated_health_reports_component_states(self) -> None:
         status, response = self.mcp_call("tools/call", {"name": "health", "arguments": {}})

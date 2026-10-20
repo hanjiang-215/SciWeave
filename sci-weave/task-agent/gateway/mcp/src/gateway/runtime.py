@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -35,14 +36,23 @@ class RuntimeAdapter(Protocol):
 
 
 class TestRuntimeAdapter:
-    """Deterministic runtime used only by Gateway behavior tests."""
+    """Deterministic, process-safe runtime used only by Gateway behavior tests."""
 
-    def __init__(self, outcome: str = "success"):
+    def __init__(self, outcome: str = "success", duration_seconds: float = 0) -> None:
         self.outcome = outcome
+        self.duration_seconds = duration_seconds
 
     def run(self, request: RuntimeRequest) -> RuntimeOutcome:
+        if self.duration_seconds:
+            time.sleep(self.duration_seconds)
         if self.outcome == "success":
             return RuntimeOutcome("awaiting_acceptance", result_summary="test runtime completed")
+        if self.outcome == "exception":
+            raise RuntimeError("test runtime exception")
+        if self.outcome == "timeout":
+            raise TimeoutError("test runtime timeout")
+        if self.outcome == "cancelled":
+            return self.cancel(request.execution_id)
         return RuntimeOutcome("failed", error_summary=self.outcome)
 
     def resume(self, request: RuntimeRequest) -> RuntimeOutcome:

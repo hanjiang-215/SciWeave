@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import multiprocessing
 import secrets
 import sqlite3
 import threading
@@ -18,6 +19,102 @@ API_VERSION = "v1"
 MCP_PROTOCOL_VERSION = "2025-03-26"
 
 
+def _audit(
+    connection: sqlite3.Connection,
+    event_type: str,
+    task_node_id: str,
+    command_id: str,
+    execution_id: str,
+    now: str,
+) -> None:
+    connection.execute(
+        """
+        INSERT INTO audit_events
+            (event_type, task_node_id, command_id, execution_id, details, created_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+        """,
+        (event_type, task_node_id, command_id, execution_id, "{}", now),
+    )
+
+
+def run_worker_process(database: str, execution_id: str, runtime: RuntimeAdapter) -> None:
+    """Claim, execute, and release one durable Worker lease in a child process."""
+    store = ExecutionStore(database)
+    try:
+        now = utc_now()
+        with store.transaction() as connection:
+            execution = connection.execute(
+                "SELECT execution_id, task_node_id, session_id, command_id FROM execution_records "
+                "WHERE execution_id = ? AND status = 'queued'",
+                (execution_id,),
+            ).fetchone()
+            if execution is None:
+                return
+            try:
+                connection.execute(
+                    "INSERT INTO worker_leases VALUES (?, ?, ?)",
+                    (execution["task_node_id"], execution_id, now),
+                )
+            except sqlite3.IntegrityError:
+                return
+            connection.execute(
+                "UPDATE execution_records SET status = 'running', started_at = ?, updated_at = ? "
+                "WHERE execution_id = ?",
+                (now, now, execution_id),
+            )
+            _audit(connection, "worker_lease_acquired", execution["task_node_id"], execution["command_id"], execution_id, now)
+            _audit(connection, "worker_started", execution["task_node_id"], execution["command_id"], execution_id, now)
+
+        request = RuntimeRequest(execution_id, execution["task_node_id"], execution["session_id"])
+        try:
+            outcome = runtime.run(request)
+        except TimeoutError:
+            outcome = RuntimeOutcome("failed", error_summary="timeout")
+        except Exception:
+            outcome = RuntimeOutcome("failed", error_summary="exception")
+        if outcome.status not in {"awaiting_acceptance", "failed", "cancelled"}:
+            outcome = RuntimeOutcome("failed", error_summary="invalid_runtime_outcome")
+
+        finished_at = utc_now()
+        event_type = {
+            "awaiting_acceptance": "worker_completed",
+            "cancelled": "worker_cancelled",
+            "failed": "worker_failed",
+        }[outcome.status]
+        with store.transaction() as connection:
+            execution = connection.execute(
+                "SELECT task_node_id, command_id FROM execution_records WHERE execution_id = ?", (execution_id,)
+            ).fetchone()
+            if execution is None:
+                return
+            connection.execute(
+                """UPDATE execution_records SET status = ?, result_summary = ?, error_summary = ?,
+                   finished_at = ?, updated_at = ? WHERE execution_id = ?""",
+                (outcome.status, outcome.result_summary, outcome.error_summary, finished_at, finished_at, execution_id),
+            )
+            connection.execute("DELETE FROM worker_leases WHERE execution_id = ?", (execution_id,))
+            _audit(connection, event_type, execution["task_node_id"], execution["command_id"], execution_id, finished_at)
+            _audit(connection, "worker_lease_released", execution["task_node_id"], execution["command_id"], execution_id, finished_at)
+            next_execution = connection.execute(
+                """SELECT execution_id FROM execution_records
+                   WHERE task_node_id = ? AND status = 'queued'
+                   ORDER BY created_at, execution_id LIMIT 1""",
+                (execution["task_node_id"],),
+            ).fetchone()
+        if next_execution is not None:
+            start_worker_process(database, next_execution["execution_id"], runtime)
+    finally:
+        store.close()
+
+
+def start_worker_process(database: str, execution_id: str, runtime: RuntimeAdapter) -> None:
+    """Start one independently exiting local Worker process."""
+    process = multiprocessing.get_context("spawn").Process(
+        target=run_worker_process, args=(database, execution_id, runtime)
+    )
+    process.start()
+
+
 class GatewayApplication:
     def __init__(self, store: ExecutionStore, token: str, caller_id: str):
         self.store = store
@@ -26,10 +123,10 @@ class GatewayApplication:
         self.test_runtime_enabled = False
         self.runtime: RuntimeAdapter | None = None
 
-    def enable_test_runtime(self, outcome: str = "success") -> None:
+    def enable_test_runtime(self, outcome: str = "success", duration_seconds: float = 0) -> None:
         self.test_runtime_enabled = True
         self.test_runtime_outcome = outcome
-        self.runtime = TestRuntimeAdapter(outcome)
+        self.runtime = TestRuntimeAdapter(outcome, duration_seconds)
 
     def set_runtime(self, runtime: RuntimeAdapter) -> None:
         self.runtime = runtime
@@ -98,62 +195,9 @@ class GatewayApplication:
         }
 
     def _schedule_test_worker(self, execution_id: str) -> None:
-        threading.Thread(target=self._run_test_worker, args=(execution_id,), daemon=True).start()
-
-    def _run_test_worker(self, execution_id: str) -> None:
-        now = utc_now()
-        with self.store.transaction() as connection:
-            execution = connection.execute(
-                "SELECT execution_id, task_node_id, session_id, command_id FROM execution_records WHERE execution_id = ? AND status = 'queued'",
-                (execution_id,),
-            ).fetchone()
-            if execution is None:
-                return
-            try:
-                connection.execute(
-                    "INSERT INTO worker_leases VALUES (?, ?, ?)",
-                    (execution["task_node_id"], execution_id, now),
-                )
-            except sqlite3.IntegrityError:
-                return
-            connection.execute(
-                "UPDATE execution_records SET status = 'running', started_at = ?, updated_at = ? WHERE execution_id = ?",
-                (now, now, execution_id),
-            )
-            self._audit(connection, "worker_lease_acquired", execution["task_node_id"], execution["command_id"], execution_id, now)
-        request = RuntimeRequest(
-            execution_id=execution_id,
-            task_node_id=execution["task_node_id"],
-            session_id=execution["session_id"],
-        )
-        outcome = self.runtime.run(request) if self.runtime is not None else RuntimeOutcome("failed", error_summary="runtime_not_configured")
-        finished_at = utc_now()
-        status = outcome.status
-        result_summary = outcome.result_summary
-        error_summary = outcome.error_summary
-        event_type = "worker_completed" if status == "awaiting_acceptance" else "worker_failed"
-        with self.store.transaction() as connection:
-            execution = connection.execute(
-                "SELECT task_node_id, command_id FROM execution_records WHERE execution_id = ?", (execution_id,)
-            ).fetchone()
-            if execution is None:
-                return
-            connection.execute(
-                """UPDATE execution_records SET status = ?, result_summary = ?, error_summary = ?,
-                   finished_at = ?, updated_at = ? WHERE execution_id = ?""",
-                (status, result_summary, error_summary, finished_at, finished_at, execution_id),
-            )
-            connection.execute("DELETE FROM worker_leases WHERE execution_id = ?", (execution_id,))
-            self._audit(connection, event_type, execution["task_node_id"], execution["command_id"], execution_id, finished_at)
-            self._audit(connection, "worker_lease_released", execution["task_node_id"], execution["command_id"], execution_id, finished_at)
-            next_execution = connection.execute(
-                """SELECT execution_id FROM execution_records
-                   WHERE task_node_id = ? AND status = 'queued'
-                   ORDER BY created_at, execution_id LIMIT 1""",
-                (execution["task_node_id"],),
-            ).fetchone()
-        if next_execution is not None:
-            self._schedule_test_worker(next_execution["execution_id"])
+        if self.runtime is None:
+            return
+        start_worker_process(self.store.path, execution_id, self.runtime)
 
     def query_execution(self, execution_id: str) -> dict[str, Any] | None:
         row = self.store.get_execution(execution_id)
