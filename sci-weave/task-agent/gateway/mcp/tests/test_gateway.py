@@ -220,6 +220,8 @@ class GatewayMcpTests(unittest.TestCase):
         execution_id = self.tool_result(submitted)["execution_id"]
         execution = self.wait_for_execution(execution_id, "awaiting_acceptance")
         self.assertEqual(execution["result_summary"], "test runtime completed")
+        _, health_response = self.mcp_call("tools/call", {"name": "health", "arguments": {}})
+        self.assertEqual(self.tool_result(health_response)["components"]["worker_runtime"], "ready")
 
     def test_test_runtime_failure_is_observable_through_mcp(self) -> None:
         self.app.enable_test_runtime("runtime_error")
