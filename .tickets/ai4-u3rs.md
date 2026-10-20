@@ -6,7 +6,7 @@ links: [ai4-xrxw]
 created: 2026-10-16T05:19:17Z
 type: grilling
 priority: 1
-assignee: SciWeave
+assignee: hanjiang
 parent: ai4-ru15
 tags: [wayfinder:grilling, mapping, proposal, ai4science]
 ---

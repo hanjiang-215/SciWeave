@@ -6,7 +6,7 @@ links: [ai4-m0vt, ai4-xrxw, ai4-xup8]
 created: 2026-10-16T13:42:18Z
 type: grilling
 priority: 1
-assignee: SciWeave
+assignee: hanjiang
 parent: ai4-ru15
 tags: [wayfinder:grilling, mapping, domain-model, ai4science]
 ---
