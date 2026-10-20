@@ -19,6 +19,7 @@ def main() -> None:
         create_app(
             required_environment("SCIWEAVE_GATEWAY_DB"),
             required_environment("SCIWEAVE_GATEWAY_TOKEN"),
+            required_environment("SCIWEAVE_GATEWAY_CALLER_ID"),
         ),
         required_environment("SCIWEAVE_GATEWAY_HOST"),
         int(required_environment("SCIWEAVE_GATEWAY_PORT")),

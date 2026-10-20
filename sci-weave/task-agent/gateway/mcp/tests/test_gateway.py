@@ -8,14 +8,17 @@ import urllib.error
 import urllib.request
 from http.server import ThreadingHTTPServer
 from pathlib import Path
+from typing import Any
 
 from gateway.app import create_app, make_handler
 
 
-class GatewayHttpTests(unittest.TestCase):
+class GatewayMcpTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory()
-        self.app = create_app(str(Path(self.temp.name) / "gateway.sqlite3"), "test-token")
+        self.app = create_app(
+            str(Path(self.temp.name) / "gateway.sqlite3"), "test-token", "local-owner"
+        )
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(self.app))
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.thread.start()
@@ -27,10 +30,17 @@ class GatewayHttpTests(unittest.TestCase):
         self.app.store.close()
         self.temp.cleanup()
 
-    def request(self, method: str, path: str, body: dict | None = None, token: str = "test-token"):
+    def request(
+        self,
+        method: str,
+        path: str,
+        body: dict[str, Any] | None = None,
+        token: str | None = "test-token",
+    ) -> tuple[int, dict[str, Any]]:
         data = json.dumps(body).encode() if body is not None else None
         request = urllib.request.Request(self.base + path, data=data, method=method)
-        request.add_header("Authorization", f"Bearer {token}")
+        if token is not None:
+            request.add_header("Authorization", f"Bearer {token}")
         if data:
             request.add_header("Content-Type", "application/json")
         try:
@@ -39,31 +49,154 @@ class GatewayHttpTests(unittest.TestCase):
         except urllib.error.HTTPError as error:
             return error.code, json.loads(error.read())
 
-    def test_health_and_command_query_create_persisted_records(self) -> None:
-        status, health = self.request("GET", "/health", token="")
-        self.assertEqual((status, health["status"]), (200, "ready"))
-        status, created = self.request("POST", "/v1/commands", {"task_node_id": "node-1", "command": "inspect", "idempotency_key": "idem-1"})
-        self.assertEqual(status, 202)
-        self.assertEqual(created["execution_status"], "created")
-        status, execution = self.request("GET", f"/v1/executions/{created['execution_id']}")
-        self.assertEqual(status, 200)
-        self.assertEqual(execution["session_id"], created["session_id"])
-        self.assertEqual(execution["command_status"], "accepted")
+    def mcp_call(
+        self, method: str, params: dict[str, Any] | None = None, token: str | None = "test-token"
+    ) -> tuple[int, dict[str, Any]]:
+        return self.request(
+            "POST",
+            "/mcp",
+            {"jsonrpc": "2.0", "id": "test-request", "method": method, "params": params or {}},
+            token,
+        )
 
-    def test_rejects_missing_or_invalid_token(self) -> None:
-        status, _ = self.request("POST", "/v1/commands", {}, token="")
-        self.assertEqual(status, 401)
-        status, _ = self.request("POST", "/v1/commands", {}, token="wrong")
-        self.assertEqual(status, 401)
+    def tool_result(self, payload: dict[str, Any]) -> dict[str, Any]:
+        self.assertIn("result", payload)
+        content = payload["result"]["content"]
+        self.assertEqual(len(content), 1)
+        return json.loads(content[0]["text"])
 
-    def test_repeated_idempotency_key_returns_same_execution(self) -> None:
-        body = {"task_node_id": "node-1", "command": "inspect", "idempotency_key": "idem-1"}
-        _, first = self.request("POST", "/v1/commands", body)
-        status, second = self.request("POST", "/v1/commands", body)
+    def test_authenticated_mcp_submits_queries_and_deduplicates_owner_commands(self) -> None:
+        status, initialized = self.mcp_call(
+            "initialize", {"protocolVersion": "2025-03-26", "capabilities": {}, "clientInfo": {"name": "test"}}
+        )
         self.assertEqual(status, 200)
-        self.assertTrue(second["duplicate"])
-        self.assertEqual(second["execution_id"], first["execution_id"])
-        self.assertEqual(second["execution_status"], "created")
+        self.assertEqual(initialized["result"]["protocolVersion"], "2025-03-26")
+
+        status, submitted = self.mcp_call(
+            "tools/call",
+            {
+                "name": "submit_owner_command",
+                "arguments": {
+                    "task_node_id": "node-1",
+                    "command": "inspect",
+                    "idempotency_key": "idem-1",
+                },
+            },
+        )
+        self.assertEqual(status, 200)
+        first = self.tool_result(submitted)
+        self.assertEqual(first["execution_status"], "queued")
+        self.assertFalse(first["duplicate"])
+
+        status, repeated = self.mcp_call(
+            "tools/call",
+            {
+                "name": "submit_owner_command",
+                "arguments": {
+                    "task_node_id": "node-1",
+                    "command": "ignored-on-retry",
+                    "idempotency_key": "idem-1",
+                },
+            },
+        )
+        self.assertEqual(status, 200)
+        duplicate = self.tool_result(repeated)
+        self.assertTrue(duplicate["duplicate"])
+        self.assertEqual(duplicate["execution_id"], first["execution_id"])
+
+        status, queried = self.mcp_call(
+            "tools/call",
+            {"name": "query_execution", "arguments": {"execution_id": first["execution_id"]}},
+        )
+        self.assertEqual(status, 200)
+        execution = self.tool_result(queried)
+        self.assertEqual(execution["task_node_id"], "node-1")
+        self.assertEqual(execution["execution_status"], "queued")
+        self.assertEqual(execution["caller_id"], "local-owner")
+
+    def test_unauthenticated_requests_cannot_create_facts_and_loopback_health_is_minimal(self) -> None:
+        status, health = self.request("GET", "/health", token=None)
+        self.assertEqual((status, health), (200, {"status": "ready", "gateway_api_version": "v1"}))
+
+        status, rejected = self.mcp_call(
+            "tools/call",
+            {
+                "name": "submit_owner_command",
+                "arguments": {
+                    "task_node_id": "node-1",
+                    "command": "inspect",
+                    "idempotency_key": "rejected-key",
+                },
+            },
+            token=None,
+        )
+        self.assertEqual(status, 401)
+        self.assertEqual(rejected, {"error": "unauthorized"})
+
+        status, accepted = self.mcp_call(
+            "tools/call",
+            {
+                "name": "submit_owner_command",
+                "arguments": {
+                    "task_node_id": "node-1",
+                    "command": "inspect",
+                    "idempotency_key": "rejected-key",
+                },
+            },
+        )
+        self.assertEqual(status, 200)
+        self.assertFalse(self.tool_result(accepted)["duplicate"])
+
+        status, query = self.mcp_call(
+            "tools/call",
+            {
+                "name": "query_execution",
+                "arguments": {"execution_id": "does-not-exist"},
+            },
+        )
+        self.assertEqual(status, 200)
+        self.assertTrue(query["result"]["isError"])
+        self.assertEqual(self.tool_result(query)["error"]["code"], "not_found")
+
+    def test_gateway_restart_retains_an_execution_visible_through_mcp(self) -> None:
+        status, submitted = self.mcp_call(
+            "tools/call",
+            {
+                "name": "submit_owner_command",
+                "arguments": {
+                    "task_node_id": "node-1",
+                    "command": "inspect",
+                    "idempotency_key": "restart-key",
+                },
+            },
+        )
+        self.assertEqual(status, 200)
+        execution_id = self.tool_result(submitted)["execution_id"]
+
+        self.server.shutdown()
+        self.server.server_close()
+        self.app.store.close()
+        self.app = create_app(
+            str(Path(self.temp.name) / "gateway.sqlite3"), "test-token", "local-owner"
+        )
+        self.server = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(self.app))
+        self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
+        self.thread.start()
+        self.base = f"http://127.0.0.1:{self.server.server_port}"
+
+        status, queried = self.mcp_call(
+            "tools/call", {"name": "query_execution", "arguments": {"execution_id": execution_id}}
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(self.tool_result(queried)["execution_id"], execution_id)
+
+    def test_authenticated_health_reports_component_states(self) -> None:
+        status, response = self.mcp_call("tools/call", {"name": "health", "arguments": {}})
+        self.assertEqual(status, 200)
+        health = self.tool_result(response)
+        self.assertEqual(health["gateway_api_version"], "v1")
+        self.assertEqual(health["status"], "ready")
+        self.assertEqual(health["components"]["storage"], "ready")
 
 
 if __name__ == "__main__":

@@ -30,27 +30,27 @@ class ExecutionStore:
             CREATE TABLE IF NOT EXISTS task_sessions (
                 task_node_id TEXT PRIMARY KEY,
                 session_id TEXT NOT NULL UNIQUE,
-                status TEXT NOT NULL,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS callers (
+                caller_id TEXT PRIMARY KEY,
+                created_at TEXT NOT NULL
             );
             CREATE TABLE IF NOT EXISTS owner_commands (
                 command_id TEXT PRIMARY KEY,
                 task_node_id TEXT NOT NULL REFERENCES task_sessions(task_node_id),
+                caller_id TEXT NOT NULL REFERENCES callers(caller_id),
                 idempotency_key TEXT NOT NULL UNIQUE,
                 command_text TEXT NOT NULL,
-                status TEXT NOT NULL,
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL
+                created_at TEXT NOT NULL
             );
             CREATE TABLE IF NOT EXISTS execution_records (
                 execution_id TEXT PRIMARY KEY,
                 command_id TEXT NOT NULL UNIQUE REFERENCES owner_commands(command_id),
                 task_node_id TEXT NOT NULL,
                 session_id TEXT NOT NULL,
-                status TEXT NOT NULL,
-                result_summary TEXT,
-                error_summary TEXT,
+                status TEXT NOT NULL CHECK(status IN ('blocked', 'queued')),
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
             );
@@ -85,30 +85,16 @@ class ExecutionStore:
             self.connection.execute("SELECT 1").fetchone()
         return True
 
-    def find_command_by_idempotency(self, key: str) -> sqlite3.Row | None:
-        with self.lock:
-            return self.connection.execute(
-                "SELECT * FROM owner_commands WHERE idempotency_key = ?", (key,)
-            ).fetchone()
-
     def get_execution(self, execution_id: str) -> sqlite3.Row | None:
         with self.lock:
             return self.connection.execute(
                 """
-                SELECT e.*, c.idempotency_key, c.command_text, c.status AS command_status
-                FROM execution_records e JOIN owner_commands c ON c.command_id = e.command_id
+                SELECT e.execution_id, e.task_node_id, e.session_id, e.status AS execution_status,
+                       e.created_at, e.updated_at, c.command_id, c.command_text,
+                       c.idempotency_key, c.caller_id
+                FROM execution_records e
+                JOIN owner_commands c ON c.command_id = e.command_id
                 WHERE e.execution_id = ?
                 """,
                 (execution_id,),
-            ).fetchone()
-
-    def get_execution_by_command(self, command_id: str) -> sqlite3.Row | None:
-        with self.lock:
-            return self.connection.execute(
-                """
-                SELECT e.*, c.idempotency_key, c.command_text, c.status AS command_status
-                FROM execution_records e JOIN owner_commands c ON c.command_id = e.command_id
-                WHERE e.command_id = ?
-                """,
-                (command_id,),
             ).fetchone()
