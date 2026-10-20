@@ -6,7 +6,7 @@ links: [ai4-x3nx, ai4-r3so, ai4-saug, ai4-iciy, ai4-yyy9, ai4-ufqu, ai4-v19u, ai
 created: 2026-10-18T14:54:19Z
 type: epic
 priority: 1
-assignee: zhanyunfei
+assignee: hanjiang
 tags: [wayfinder:map]
 ---
 # Research Mapping 与 Wiki 领域数据模型和持久化规格地图

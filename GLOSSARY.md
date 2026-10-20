@@ -78,7 +78,11 @@
 
 **Execution Record（执行记录）**：对任务执行开始、暂停、重试、失败、完成和人工接管等运行过程的结构化记录。Execution Record 可以由 Central Agent 调度和追加，但不等于正式 Research Mapping 变更，也不单独授予科研结果正式地位。
 
+**Worker Lease（Worker 租约）**：Task Agent Gateway 在共享 SQLite 中为一个 `task_node_id` 领取短生命周期 Worker 启动权的、可过期的执行协调记录。同一任务节点同时只能存在一个有效租约；未取得租约的入口不得启动第二个 Worker。
+
 **AuditEvent（审计事件）**：对受控提交、调度、执行、预审、审核、批准、驳回和正式化等操作的不可变过程记录。AuditEvent 至少说明操作者、操作类型、目标、基准版本、结果、时间、原因以及关联的 Proposal 或任务标识，用于按任务、提案、正式版本或时间重建责任链。
+
+**Caller（调用者）**：向 Gateway 发起 MCP 请求且已通过 Gateway 当前身份校验的请求来源。最小闭环阶段，Caller 由启动配置中的本地开发令牌和调用者标识确定，并作为 OwnerCommand 和 AuditEvent 的操作者记录；它不自动证明调用者是 Task Node Owner，也不授予领域治理权限。
 
 **Personal Agent（Personal Agent）**：研究人员使用自己的 harness 配置的 Agent，通过 MCP、Skills、系统提示词和 Hooks 接入科研协作平台。
 

@@ -4,6 +4,7 @@ status: closed
 deps: [ai4-t5zl, ai4-mjku]
 links: []
 created: 2026-10-18T15:06:41Z
+assignee: hanjiang
 type: epic
 priority: 1
 parent: ai4-xup8  # Research Mapping 与 Wiki 领域数据模型和持久化规格地图

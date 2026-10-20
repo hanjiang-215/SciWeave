@@ -6,7 +6,7 @@ links: [ai4-ru15, ai4-xup8]
 created: 2026-10-18T14:03:32Z
 type: epic
 priority: 1
-assignee: Frank Qi
+assignee: hanjiang
 tags: [wayfinder:map]
 ---
 # Research Mapping 与 Wiki 候选变更并发治理地图
@@ -33,3 +33,7 @@ tags: [wayfinder:map]
 ## Acceptance Criteria
 
 明确候选相对正式基线的身份与保留规则；明确正式基线前进后的重放、冲突分类和审核边界；明确结构化变更摘要的决策用途；明确 Research Mapping/Wiki 与首版/后续能力范围；形成可用于后续规格设计的闭环规则。
+
+**2026-10-20T07:44:05Z**
+
+负责人转交（2026-10-20）：原负责人 Frank Qi。按项目所有者指示，产品与需求、Research Mapping、LLM-Wiki 模块的工单负责人统一为 hanjiang（即 zhanyunfei）；本票同时归属 Research Mapping 与 LLM-Wiki，因此一并转交。

@@ -28,6 +28,7 @@ alwaysApply: false
 ## Engineering Skill Configuration
 
 - fer 的项目级工作流、目录与状态约定见 `docs/agents/issue-tracker.md`。
+- 工单总览、模块归属和一句话简介见 `docs/tickets/INDEX.md`；工单变更后钩子会自动重新渲染，新增工单或调整模块归属时按 `.cursor/skills/engineering/ticket-index/SKILL.md` 补 `index.toml`，并用 `diff`/`check` 确认。
 - 运行分诊前读取 `docs/agents/triage-labels.md`，按该文件映射 fer 标签。
 - 领域术语和架构决策的读取约定见 `docs/agents/domain.md`。
 

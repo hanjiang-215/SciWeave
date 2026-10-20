@@ -8,160 +8,149 @@ type: feature
 priority: 1
 assignee: Frank Qi
 parent: ai4-yyy9
-tags: [spec, gateway, fast-agent]
+tags: [spec, task-agent, fast-agent, ready-for-agent]
 ---
-# Gateway MVP 与最小 fast-agent 技术规格
+# 最小 Task Agent 项目组实现规格
 
-将 Gateway 与最小 fast-agent 执行闭环的 Wayfinder 决策整理为可实现的技术规格。该规格是实现 tickets 的唯一上游输入，不包含 Research Mapping MCP、Agent Kit 或 ZIP 交付。
-
-## Design
+将“Gateway 与最小 fast-agent 执行闭环规格地图”的已决边界收敛为一个可交付的 Task Agent 实现规格。该规格覆盖同一部署单元中的 MCP Gateway、上游 ingest、共享持久化和短生命周期 Worker；它是后续实现 tickets 的唯一上游输入。
 
 ## Problem Statement
-仓库已有 fast-agent-mcp 外部 Worker 启动、固定会话恢复和端侧 Gateway 边界决策，但尚无产品代码入口。需要建立最小 Gateway，使 Owner 能提交受控命令，平台能持久化执行状态并按需启动短生命周期 Worker，完成一次 fast-agent loop。
+
+Task Owner 需要通过其 Codex 等 MCP 客户端提交受控命令、观察执行过程、回答暂停问题、取消执行并审核执行结果。平台还需要为未来正式上游交接保留独立入口，而不会让上游消费者绕过同一 TaskNode 的串行化和审计边界。
+
+当前已有一个仅含 HTTP/SQLite 基础行为的 Gateway MVP，以及 ingest 和 Worker 的可安装骨架；它们尚未形成可认证的 MCP Owner 通道、统一持久化状态机、原子 Worker 租约或 fast-agent 执行闭环。
 
 ## Solution
-实现一个 Python 常驻 Gateway：以 **MCP（Streamable HTTP）** 作为 Owner 请求入口，使用 SQLite 保存 TaskSession、OwnerCommand、ExecutionRecord 和 AuditEvent，使用本地进程调度器按 `task_node_id` 串行启动 Worker，使用 Runtime Adapter 调用 fast-agent-mcp。Worker 使用平台生成的固定 `session_id`、专属持久 home、connection scope 和 session history；每次 loop 完成或暂停后退出。
 
-Gateway 是 MCP server，Task Owner 的 Codex 是 MCP client，仅通过 `mcp_servers` 注册地址与令牌。不采用 stdio 传输，因为 Codex 会自行 spawn 进程并随会话退出，破坏 Gateway 常驻、持久化调度状态与跨会话串行调度。
+实现一个最小 Task Agent 项目组。Gateway 组件组是唯一的 Worker 启动与串行化边界：MCP 入口接收 Owner 请求，ingest 入口为未来正式上游交接预留；两个入口均经共享 SQLite 持久化层保存事实、领取同一 TaskNode 的 Worker Lease（Worker 租约），再启动短生命周期 Worker。Worker 经 fast-agent Runtime Adapter 完成一次 loop 后退出。
 
-Task Agent 项目组的三角色目录、双入口原子租约与具体崩溃恢复规则由 [Task Agent 项目组三角色部署与双入口调度边界](ai4-6fb7.md) 单独收敛；本规格不预设尚未完成的目录迁移实现。
+Owner 主通道为认证后的 MCP Streamable HTTP。Gateway 使用本地开发 Bearer 令牌及配置的 Caller（调用者）标识；OwnerCommand 只记录命令接收事实，ExecutionRecord 是唯一的 Gateway 工作流状态机。回环 HTTP 仅提供最小健康探针，不构成第二条 Owner API。领域 Buffer 不在本阶段设计或自动创建。
 
-## Public seams
-Gateway 通过 MCP 工具对外暴露以下能力：
+## User Stories
 
-- `submit_owner_command`：提交 `task_node_id`、命令内容和幂等键，立即返回稳定的 `command_id`、`execution_id` 和当前状态；必要上游尚未正式发布时可创建 `blocked` 执行，但不启动 Worker。
-- `query_execution`：按 `execution_id` 查询当前状态、结果摘要、错误摘要、会话标识，以及 `waiting` 时的待回答问题。
-- `cancel_execution`：按 `execution_id` 请求取消；已终结执行返回不可取消。
-- `list_pending`：列出需要继续跟进的执行，供 Owner 恢复上下文。
-- `review_execution`：接纳、要求返修、驳回或请求人工接管可审核结果。
-- `health`：返回 Gateway 聚合健康状态及其 MCP、消息队列分项状态。
+1. 作为 Task Owner，我希望通过 MCP 提交带幂等键的任务命令，以便网络重试不会启动第二次执行。
+2. 作为 Task Owner，我希望提交后立即获得稳定的命令和执行标识，以便异步跟踪执行而不等待 Worker 完成。
+3. 作为 Task Owner，我希望查询某个执行的状态、会话、结果摘要、错误摘要和待回答问题，以便恢复工作上下文。
+4. 作为 Task Owner，我希望列出待跟进执行，以便发现等待回答、等待审核或仍在排队的任务。
+5. 作为 Task Owner，我希望取消一个未终结执行，以便停止不再需要的工作；重复取消或已终结执行可安全得到未接受取消的结果。
+6. 作为 Task Node Owner，我希望审核可审核的执行结果并接纳、要求返修、驳回或请求人工接管，以便让执行结果具有可审计的处置结论。
+7. 作为 Task Owner，我希望在 Worker 提问后提交回答，以便以同一稳定会话启动新的恢复执行，而不依赖旧进程仍存活。
+8. 作为本地开发者，我希望未携带正确令牌的请求在进入 MCP 工具前被拒绝，以便不会污染任务事实和审计链。
+9. 作为本地开发者，我希望已认证请求以配置的 Caller 记录，以便审计能说明请求来源，但不伪装为已具备 TaskNode 授权。
+10. 作为 Gateway 维护者，我希望 MCP 与 ingest 可重复安全初始化同一 SQLite schema，以便进程重启或重复部署不会破坏既有执行记录。
+11. 作为 Gateway 维护者，我希望同一 TaskNode 在任意时刻只有一个入口能获得有效 Worker Lease，以便不会并发启动两个 Worker。
+12. 作为 Gateway 维护者，我希望不同 TaskNode 在资源允许时可以分别执行，以便不把全局吞吐量限制为单 Worker。
+13. 作为上游集成者，我希望未来的正式上游交接能进入 ingest，并和 Owner 命令共享调度和审计规则，以便不会绕过 Gateway 边界。
+14. 作为调度器，我希望必要上游尚未正式就绪时保留 Owner 命令为 blocked，以便命令事实不会丢失或被过早执行。
+15. 作为调度器，我希望上游就绪后的首轮执行优先于尚未完成首轮的普通 Owner 命令，以便先建立任务所需的上游基础。
+16. 作为 Worker，我希望获得稳定 session_id、持久 home、connection scope 和 session history，以便新的短生命周期进程能够恢复会话。
+17. 作为 Worker，我希望每次完成、暂停或失败后退出，以便 Gateway 保持为常驻控制面而非长期占用执行进程。
+18. 作为维护者，我希望运行时异常、超时、非零退出和会话恢复失败都被记录为 failed，以便故障可查询而不自动重做。
+19. 作为维护者，我希望健康信息聚合 SQLite、MCP、ingest 队列和 Worker runtime 的实际可用性，以便诊断配置缺失、降级和不可用状态。
+20. 作为本地探针，我希望无需 MCP 令牌取得最小健康状态和 API 版本，以便检测服务存活而不暴露内部组件详情。
+21. 作为领域治理使用者，我希望执行结果接纳不自动写入 Research Mapping、LLM-Wiki 或 Buffer，以便领域提交继续经过显式 MCP 和治理流程。
+22. 作为实现者，我希望对外测试只经 MCP 工具和最小 HTTP 探针验证，以便实现可在不破坏客户端行为的前提下重构。
 
-MCP server 的传输地址、端口和令牌全部由环境变量提供。回环 HTTP 健康端点与 MCP `health` 共用同一份健康计算逻辑，仅用于本地探测、调试和测试，不是 Owner 主通道。
+## Implementation Decisions
 
-### MCP 工具契约
+### 项目组与进程边界
 
-工具名使用动词_名词形式，参数与返回均为 JSON 对象；所有错误通过工具的 `isError` 标记与结构化 `error` 字段返回，不抛传输层异常。
+- Task Agent 是一个项目组，包含 `gateway/mcp`、`gateway/ingest` 和 `worker` 三个独立 Python 子项目，共用项目组级 uv workspace、锁文件和跨角色环境配置。
+- `gateway/mcp` 是常驻 MCP Server，处理 Owner MCP 请求；`gateway/ingest` 是常驻上游交接消费者；`worker` 是一次 loop 一个进程的短生命周期角色。
+- Gateway 组件组，即 `mcp` 与 `ingest` 及其共享持久化契约，是唯一可启动 Worker 并裁决同 TaskNode 串行化的边界。组件组外客户端和消费者不得启动 Worker。
+- 共享 SQLite 持久化包提供 schema、幂等 bootstrap、受约束表访问、状态迁移校验、Worker Lease、审计与健康读写；不包含 MCP、消息队列或 Worker 业务。
+- 首版仅需要幂等 bootstrap；已有数据库的结构升级另行设计 migration。
 
-```text
-submit_owner_command
-  in:  task_node_id: str, command: str, idempotency_key: str,
-       execution_id: str | null
-  out: command_id, execution_id, task_node_id, session_id,
-       command_status, execution_status, duplicate: bool
-  规则: idempotency_key 唯一；相同键返回既有执行且 duplicate=true；
-       execution_id 非空时只用于 waiting 后的回答，创建带 resume_of 的新
-       ExecutionRecord，不跨进程恢复旧 Worker。
+### Owner MCP v1 协议
 
-query_execution
-  in:  execution_id: str
-  out: execution_id, task_node_id, session_id, execution_status,
-       result_summary: str | null, error_summary: str | null,
-       pending_question: str | null, trigger, trigger_ref
-  规则: 不存在返回 isError 与 error=not_found；
-       execution_status=waiting 时 pending_question 必填。
+- Owner 通道采用 MCP Streamable HTTP；不采用 stdio，因为客户端进程生命周期不能承载常驻 Gateway 的持久调度职责；不采用 A2A，因为它不是 Owner harness 的既定扩展面。
+- MCP 初始化承担 MCP 协议版本协商；认证后的 `health` 返回 `gateway_api_version: "v1"`。v1 只能兼容性新增可选字段或工具；删除字段、收紧字段或改变既有语义时升级主版本。
+- 所有成功工具结果仅在 MCP `content` 中返回一个 JSON 文本对象；首版不声明 `outputSchema`，不返回 `structuredContent`。
+- 无效 JSON-RPC、未知工具、缺失必填参数和类型不符由 MCP/JSON-RPC 协议错误表达。已通过参数校验并进入工具后的业务失败以 `isError: true` 返回 JSON 文本 `{ "error": { "code", "message" } }`。
+- 最小业务错误码为 `not_found`、`invalid_state`、`unavailable` 和 `internal`。错误不得包含令牌、异常、堆栈、文件路径或原始命令。
+- `submit_owner_command(task_node_id, command, idempotency_key, execution_id?)` 在单个 SQLite 事务中创建命令接收事实、初始 ExecutionRecord 和审计事件；返回 command_id、execution_id、task_node_id、session_id、execution_status 与 duplicate。`execution_id` 只用于回答 waiting 后的问题，并创建 `resume_of` 关联的新记录。
+- `query_execution(execution_id)` 返回执行、任务、会话、稳定状态、结果/错误摘要、待答问题、trigger 和 trigger_ref；不存在时返回 `not_found`。
+- `cancel_execution(execution_id)` 对存在的执行总返回 execution_id、execution_status 和 accepted。accepted 仅表示本次取消请求被 Gateway 接受；已终结、人工接管或已取消时为 false。不存在时返回 `not_found`。
+- `list_pending(task_node_id?)` 一次返回 blocked、queued、running、waiting 与 awaiting_acceptance 的全部记录，按 created_at、execution_id 升序；首版不分页。
+- `review_execution(execution_id, decision, reason, idempotency_key)` 支持 `accept`、`request_revision`、`reject` 与 `request_human_takeover`；返回处置后的执行状态、可选后继执行标识和 duplicate。
+- `health()` 返回聚合状态和 MCP、消息队列、Worker runtime、存储与调度器分项状态。
+- `submit_owner_command` 与 `review_execution` 的幂等键仅在各自工具内全局唯一；重复键始终返回首次持久化结果并标记 duplicate=true，不比较后续参数。调用者为每个逻辑操作提供新键。
 
-cancel_execution
-  in:  execution_id: str
-  out: execution_id, execution_status, accepted: bool
-  规则: 已终结执行返回 accepted=false 与 error=not_cancellable。
+### 身份、配置与健康
 
-list_pending
-  in:  task_node_id: str | null
-  out: executions: [{execution_id, task_node_id, execution_status, created_at,
-                     action_required, trigger, trigger_ref}]
-  规则: 默认返回 blocked、queued、running、waiting、awaiting_acceptance；
-       action_required 为 none、answer 或 review。
+- 每个 MCP HTTP 请求均需 `Authorization: Bearer <token>`；令牌和 `caller_id` 都由环境变量提供。校验成功后，将 Caller 写入 OwnerCommand 与 AuditEvent。
+- 缺失或无效令牌返回 HTTP 401，不创建 OwnerCommand、ExecutionRecord 或 AuditEvent。首版不实现 OAuth、scope、多人身份、TaskNode Owner 授权绑定或跨网络部署。
+- 所有部署路径、监听地址、端口、令牌、数据库位置、Worker 持久目录和服务地址均由环境变量配置；仓库只保留变量示例，不提交真实凭据。
+- 回环 HTTP 健康探针不要求令牌，只返回 `status` 和 `gateway_api_version`；认证 MCP `health` 返回完整分项健康。二者复用一套健康计算。
+- SQLite 可读写且 schema 兼容是核心条件；核心存储故障为 unavailable。已配置的必需组件故障为 degraded，未配置组件为 not_configured，所有已配置组件满足条件时为 ready。
 
-review_execution
-  in:  execution_id: str,
-       decision: "accept" | "request_revision" | "reject" |
-                 "request_human_takeover",
-       reason: str, idempotency_key: str
-  out: execution_id, decision, execution_status,
-       successor_execution_id | null, duplicate: bool
-  规则: 相同 execution_id + idempotency_key 的重复请求返回首次结果；
-       相同键但内容不同则拒绝并审计。request_revision 创建带 revision_of
-       的新记录；reject 不自动重试；request_human_takeover 停止自动调度。
+### 持久化、状态和调度
 
-health
-  in:  (无)
-  out: status: "ready" | "degraded" | "unavailable",
-       gateway: {status, storage, scheduler},
-       mcp: {status, listener, authentication},
-       message_queue: {status, consumer, last_confirmed_at, backlog},
-       worker_runtime: {status}
-  规则: MCP 与消息队列分别汇报；消息队列未配置时明确返回 not_configured。
-       Gateway 无法安全持久化或调度时为 unavailable；可选依赖异常但 Gateway
-       仍可持久化 Owner 命令时为 degraded。
-```
-
-## Domain objects and state
-
-- TaskSession：每个 `task_node_id` 一个稳定 `session_id`；其状态是执行记录的会话投影，不替代 ExecutionRecord 的审计事实。
-- OwnerCommand：`submit_owner_command` 的持久化原始意图，保存任务节点、命令、提交者、幂等键、接收时间和接收结果；查询工具不创建它。
-- ExecutionRecord：一次可追踪的执行尝试，关联触发它的 OwnerCommand。Worker 启动前可处于 `blocked` 或 `queued`，且 `started_at` 为空；启动后保存实际输入摘要与哈希、会话、起止时间、结果或错误摘要和审计关联。暂停、返修和重试均创建新记录，分别以 `resume_of`、`revision_of`、`retry_of` 关联旧记录。
-- AuditEvent：追加记录命令接收、排队、状态迁移、Worker 创建/退出、运行时结果、审核决定、取消和错误摘要。
-
-ExecutionRecord 的对外稳定状态为：
+- TaskSession 为每个 task_node_id 持有稳定 session_id；它是会话投影，不替代 ExecutionRecord 的审计事实。
+- OwnerCommand 仅记录已接收的原始意图、Caller、幂等键、时间和关联结果，是不可变审计留痕，不维护独立生命周期状态机。
+- ExecutionRecord 是唯一的 Gateway 工作流状态机和一次可追踪执行尝试。它保存触发来源、会话、输入摘要及哈希、起止时间、结果/错误摘要与审计关联。
+- ExecutionRecord 的稳定状态为：
 
 ```text
 blocked → queued → running
                     ├→ waiting
-                    ├→ awaiting_acceptance → accepted
-                    │                       ├→ needs_revision
-                    │                       ├→ rejected
-                    │                       └→ human_takeover
+                    ├→ awaiting_acceptance → accepted | needs_revision | rejected | human_takeover
                     ├→ failed
                     └→ cancelled
 ```
 
-`blocked` 表示必要上游尚未正式发布；条件满足后转为 `queued`。Worker 正常生成可审核结果后直接进入 `awaiting_acceptance`。`succeeded` 只作为运行时成功退出的 AuditEvent/运行时事实，不是对外稳定状态。`waiting` 终结本轮 ExecutionRecord；Owner 回答时创建带 `resume_of` 的新记录。记录以 `trigger` 与 `trigger_ref` 区分 `owner_command`、`upstream_handoff` 与 `system_retry`。
+- `blocked` 表示必要上游尚未正式发布；满足条件后转为 `queued`。`waiting` 终结本轮记录；Owner 回答创建以 `resume_of` 关联的新记录。`request_revision` 将原记录处置为 `needs_revision` 并创建 `revision_of` 新记录；系统重试创建 `retry_of` 新记录。`accepted` 只表示 TaskNode Owner 已接纳执行结果，不代表 Project Owner 正式发布。
+- 审计事件追加记录命令接收、排队、状态转换、租约取得/释放、Worker 生命周期、运行时事实、审核决定、取消和无敏感信息的错误摘要。
+- 同一 task_node_id 只允许一条有效 Worker Lease。两个入口通过 SQLite 原子条件领取启动权；未领取不得启动第二个 Worker。可领取执行按 created_at、execution_id 稳定排序。
+- Owner 命令在首次上游执行前可为 blocked。上游就绪的首轮执行优先于尚未完成首轮的普通 Owner 命令；取消不受此优先规则阻止。
+- 租约失效不覆盖旧记录；恢复必须创建关联旧记录的新记录。续租周期、超时阈值及具体接管算法不在本规格实现。
 
-## Runtime and persistence
-Gateway 核心只依赖 Runtime Adapter、Execution Store 和 Worker Scheduler。首版适配器分别为 fast-agent Runtime Adapter、SQLite Store 和本地进程 Scheduler。Gateway 在一个 SQLite 事务中创建 OwnerCommand、ExecutionRecord 初始记录和命令审计事件；条件满足后调度 Worker。重复幂等键返回既有命令及其结果，不创建新的执行。
+### Runtime Adapter 与 Worker
 
-Runtime Adapter 至少支持 run、resume 和 cancel；同一 `task_node_id` 不能同时有两个 Worker。Worker 以固定 `session_id` 恢复 fast-agent Harness，会话 home 必须持久化，默认关闭自动 compaction。运行时异常、超时、非零退出或会话无法恢复时，ExecutionRecord 进入 `failed` 并保存不含凭据的错误摘要；Gateway 重启不自动重做已失败执行。
+- Gateway 核心依赖 Execution Store、Worker Scheduler 和 Runtime Adapter；首版具体实现分别为共享 SQLite、本地进程调度和 fast-agent Runtime Adapter。
+- Runtime Adapter 至少提供 run、resume 与 cancel。Worker 使用固定 session_id、专属持久 home、connection scope 和 session history，默认关闭自动 compaction。
+- Worker 成功生成可审核结果时将执行转为 awaiting_acceptance；运行时异常、超时、非零退出或无法恢复会话时转为 failed。Gateway 重启可读取未完成记录，但不自动重做 failed 记录。
+- `review_execution(decision="accept")` 仅写 SQLite 审核事实和 AuditEvent；不会自动创建领域草稿、领域 Buffer 或 outbox。
+- Mapping 初始化查询契约仍依赖 Research Mapping 工作完成；当前 Gateway 不假定该接口，不自动放行 blocked 记录，也不实现 ingest 消费。
 
-`review_execution(decision="accept")` 只写入 Gateway SQLite 中的审核决定与 AuditEvent，不自动创建 Research Mapping 或 LLM-Wiki 草稿，也不创建领域 outbox。人控制 Codex 基于已接纳的 ExecutionRecord，经对应领域 MCP 显式提交草稿；该显式操作才进入领域一审。正式交付内容的领域 Buffer 不属于本规格。
+## Testing Decisions
 
-## Authentication and configuration
-首版只支持本地开发令牌配置；真实令牌通过环境变量或本机安全配置注入，不能写入仓库。首版不实现多人身份与 TaskNode Owner 授权绑定、跨网络 MCP、Redpanda、EventBus 或领域 MCP。
+- 以认证后的 MCP 工具调用作为最高且主要的行为测试接缝；测试不检查私有类、表访问顺序、子进程实现细节或日志格式。
+- 回环 HTTP 探针只测试其最小健康结果以及与 MCP `health` 共用健康计算的可观察结果。
+- 使用临时 SQLite 数据库、临时持久目录、回环地址和系统分配端口 `0`；不得依赖固定部署端口、真实令牌、真实模型凭据或外部队列。
+- 在 MCP 入口验证：认证拒绝、命令首次提交、工具内重复幂等提交、命令审计留痕、blocked 查询、状态查询、取消幂等语义、待处理排序、审核决定与稳定错误码。
+- 在共享持久化与调度边界验证：重复 bootstrap、非法状态迁移拒绝、Gateway 重启后读取、同 TaskNode 原子租约和串行化、跨 TaskNode 可并发、上游优先和取消例外。
+- 在 Worker/Runtime Adapter 边界验证：成功进入 awaiting_acceptance、运行时失败、waiting 后产生 resume_of、返修后产生 revision_of、固定会话恢复、Worker 退出和租约释放。
+- 使用 passthrough fast-agent 运行最小集成测试；真实模型提供商不进入测试。
+- 项目组级验证至少包含 uv 环境同步、三个子项目可安装、源码编译和 MCP 行为测试；ingest 在未选定队列前只验证其可启动的受控未实现/未配置行为。
 
-## Testing decisions
-测试通过 MCP 工具公共 seam 验证外部行为，不检查私有实现。必须覆盖：健康检查、首次命令提交、幂等重复提交、`blocked` 执行查询、执行状态查询、Worker 成功进入 `awaiting_acceptance`、运行时失败、取消、同一 `task_node_id` 串行化、`waiting` 后创建 `resume_of` 新记录、审核决定、Gateway 重启后的会话恢复，以及使用 passthrough fast-agent 的最小运行时集成测试。真实模型凭据不进入测试。
+## Out of Scope
 
-## Out of scope
-Research Mapping MCP、依赖图、领域 Buffer 设计、Agent Kit/Skills/Hooks、ZIP 交付、跨服务器部署、Redpanda 消息队列具体实现、A2A 传输、真实模型提供商接入和生产级自动恢复。
+- Research Mapping 或 LLM-Wiki 的领域 MCP、领域 Buffer 及其状态机、Mapping 写入和领域 outbox。
+- 多人身份、TaskNode Owner 授权绑定、OAuth 授权服务器、scope、跨网络或生产级认证部署。
+- Redpanda 或其他消息队列产品选型和实际 ingest 消费实现。
+- Agent Kit manifest、Skills/Hooks 模板、多套件定制、ZIP 交付、跨服务器部署。
+- A2A 传输、EventBus、真实模型提供商接入、原件二进制传输、生产级自动恢复和租约接管算法。
+- 既有 SQLite 数据库 schema migration 方案。
+
+## Further Notes
+
+- 本规格取代此前只覆盖单一 Gateway 的实现视角，统一覆盖 Task Agent 项目组三角色及其共享边界。
+- 已决依据包括“Gateway MVP 状态模型与端口边界”、“Owner 通道与上游交接队列物理隔离”、“执行与接纳状态机融合及 Owner 审核工具边界”、“Task Agent 项目组三角色部署与双入口调度边界”和“Gateway MCP 对外协议版本、鉴权与错误契约”。
+- 现有 HTTP/SQLite MVP 是迁移起点，不是最终 Owner 协议；实现须以本规格的 MCP v1、单一 ExecutionRecord 状态机和共享 SQLite 约束为准。
 
 ## Acceptance Criteria
 
-- [ ] MCP 工具接口、对象状态和 SQLite 持久化规则明确且可实现。
-- [ ] 一次 Owner Command 能产生可查询的 ExecutionRecord 和 AuditEvent，并在上游未就绪时保留为 `blocked`。
-- [ ] 相同幂等键不会创建第二个执行；暂停、返修和重试会创建关联的新 ExecutionRecord。
-- [ ] Worker 能通过 fast-agent Runtime Adapter 完成一次 loop 并释放；同一 `task_node_id` 串行化。
-- [ ] `review_execution` 可审计地接纳、返修、驳回或人工接管，且接纳不产生领域草稿或 outbox。
-- [ ] 固定 `session_id` 能在新的 Worker 中恢复；失败、取消、审核、串行化和 Gateway 重启读取行为有自动化验证。
-- [ ] 同一健康计算逻辑分别报告 MCP 与消息队列状态，不将未配置队列伪装为可用。
-- [ ] 现有 HTTP/SQLite MVP 无行为变更地迁入 `sci-weave/task-agent/gateway/mcp`；项目组使用唯一组级 `uv.lock`，`gateway/ingest` 与 `worker` 仅建立独立、可安装的角色骨架。
-- [ ] 规格未引入领域对象正文、领域 MCP 逻辑、Agent Kit 或 ZIP 交付。
+- [ ] 三角色 Task Agent 项目组、共享 SQLite 持久化边界、单一 Worker 启动权和对外 MCP v1 契约均已实现。
+- [ ] 认证后的 Owner MCP 调用可创建、查询、取消、列出、审核和恢复执行；未认证请求不会创建领域或执行审计事实。
+- [ ] OwnerCommand 仅作为命令接收留痕，ExecutionRecord 是唯一工作流状态机，且所有稳定状态迁移均经审计。
+- [ ] 同一 TaskNode 不会并发启动 Worker；Worker 使用固定会话恢复并在一次 loop 后退出。
+- [ ] 接纳执行结果不会创建任何领域 Buffer、草稿或 outbox。
+- [ ] 健康状态、未配置组件、降级与不可用状态均可从规定的 MCP 或最小 HTTP 接缝观察。
+- [ ] 全部测试决策所列行为均有自动化验证，且不依赖真实模型凭据、固定端口或未选定队列。
 
 ## Notes
 
-**2026-10-19T08:53:34Z**
+**2026-10-20T07:32:36Z**
 
-关联 Gitee Pull Request #9：https://gitee.com/qi-yueran/ai4science/pulls/9（目标 develop）。PR 包含 Gateway MVP 基础闭环、技术栈约束与实现路线图；后续实现票仍按依赖图推进。
-
-**2026-10-19T20:12:00Z**
-
-规格修订（2026-10-19）：Owner 通道由 HTTP 自定义端点改为 MCP（Streamable HTTP）。原因：主流 harness（Codex CLI、Cursor、Claude Code）对外扩展面只有 MCP，没有内置 A2A 客户端，Owner 无法直接作为 A2A 客户端接入。
-
-- 保留 HTTP 回环端点，但只承担健康检查、本地调试和测试 seam，不再是 Owner 主通道。
-- 不使用 stdio 传输：Codex 会自行 spawn 进程并随会话退出，破坏 Gateway 常驻、SQLite 单写者和跨会话串行调度。
-
-**2026-10-20T04:07:00Z**
-
-状态机与契约修订：本规格已与 [执行与接纳状态机融合及 Owner 审核工具边界](ai4-yvh2.md) 对齐，采用稳定执行状态、`review_execution` 和关联的新 ExecutionRecord；健康契约同时分项报告 MCP 与消息队列。Task Agent 项目组三角色与双入口调度细节仍由 [Task Agent 项目组三角色部署与双入口调度边界](ai4-6fb7.md) 收敛。
-
-**2026-10-20T04:50:00Z**
-
-目录迁移完成：既有 HTTP/SQLite Gateway MVP 已无行为变更地从 `sci-weave/gateway` 迁入 `sci-weave/task-agent/gateway/mcp`；项目组根建立 uv workspace 与唯一 `uv.lock`，`gateway/ingest`、`worker` 仅建立独立可安装骨架。验证：在 `sci-weave/task-agent` 执行 `uv lock`、`uv sync --all-packages`、`uv run --package sciweave-task-agent-gateway-mcp python -m unittest discover -s gateway/mcp/tests -v`（3 passed）与 `python -m compileall -q gateway/mcp/src`；两项未实现角色命令均按预期返回退出码 1。
+2026-10-20：按“整体实现”重新发布为《最小 Task Agent 项目组实现规格》，覆盖 gateway/mcp、gateway/ingest、worker、共享 SQLite、租约、最小 MCP v1、Caller、单一 ExecutionRecord 状态机、健康和测试边界；标记 ready-for-agent。已验证：fer dep cycle 无依赖环；git diff --check 通过。

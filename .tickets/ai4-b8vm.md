@@ -1,6 +1,6 @@
 ---
 id: ai4-b8vm
-status: open
+status: closed
 deps: [ai4-vqkn]
 links: []
 created: 2026-10-19T07:24:35Z
@@ -24,3 +24,9 @@ tags: [implementation, gateway, runtime]
 - [ ] Worker 创建、启动、成功退出、失败退出和释放均写入 ExecutionRecord/AuditEvent。
 - [ ] 运行时异常、超时、非零退出和取消请求会形成可查询的失败或取消状态。
 - [ ] 已完成执行不可被取消，取消请求不会伪造成功结果。
+
+## Notes
+
+**2026-10-20T07:47:45Z**
+
+2026-10-20：废弃，不再实施。该票未覆盖共享 SQLite Worker Lease、三角色项目组和当前稳定状态机，已由《带 Worker Lease 的本地调度与测试运行时》（ai4-m96w）整体替代。保留为历史实现计划。

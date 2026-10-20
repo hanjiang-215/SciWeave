@@ -1,6 +1,6 @@
 ---
 id: ai4-wdvf
-status: open
+status: closed
 deps: [ai4-o806, ai4-yvh2]
 links: []
 created: 2026-10-19T07:24:35Z
@@ -24,3 +24,9 @@ tags: [test, gateway, fast-agent]
 - [ ] 验证命令、结果、提交和遗留风险回写本票。
 
 > 修订（2026-10-19）：Owner 通道改为 MCP（Streamable HTTP），原“HTTP 公共 seam”改为“MCP 工具公共 seam”，覆盖 `submit_owner_command`、`query_execution`、`cancel_execution`、`list_pending`、`health`。回环 HTTP 端点只用于健康检查和本地调试。背景见 [Owner 通道与上游交接队列物理隔离](ai4-353s.md)。
+
+## Notes
+
+**2026-10-20T07:47:45Z**
+
+2026-10-20：废弃，不再实施。该票的验收前提是旧 HTTP MVP 票链，已由《最小 Task Agent 项目组端到端验收》（ai4-iyyn）替代；新票覆盖 MCP v1、控制工具、共享租约和固定会话恢复。保留为历史实现计划。
