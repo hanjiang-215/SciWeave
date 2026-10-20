@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import tempfile
 import threading
+import time
 import unittest
 import urllib.error
 import urllib.request
@@ -189,6 +190,53 @@ class GatewayMcpTests(unittest.TestCase):
         )
         self.assertEqual(status, 200)
         self.assertEqual(self.tool_result(queried)["execution_id"], execution_id)
+
+    def wait_for_execution(self, execution_id: str, expected_status: str) -> dict[str, Any]:
+        deadline = time.monotonic() + 2
+        while time.monotonic() < deadline:
+            _, response = self.mcp_call(
+                "tools/call", {"name": "query_execution", "arguments": {"execution_id": execution_id}}
+            )
+            execution = self.tool_result(response)
+            if execution["execution_status"] == expected_status:
+                return execution
+            time.sleep(0.02)
+        self.fail(f"execution {execution_id} did not reach {expected_status}")
+
+    def test_test_runtime_completes_queued_execution_through_a_short_lived_worker(self) -> None:
+        self.app.enable_test_runtime()
+        status, submitted = self.mcp_call(
+            "tools/call",
+            {
+                "name": "submit_owner_command",
+                "arguments": {
+                    "task_node_id": "node-with-worker",
+                    "command": "inspect",
+                    "idempotency_key": "worker-success",
+                },
+            },
+        )
+        self.assertEqual(status, 200)
+        execution_id = self.tool_result(submitted)["execution_id"]
+        execution = self.wait_for_execution(execution_id, "awaiting_acceptance")
+        self.assertEqual(execution["result_summary"], "test runtime completed")
+
+    def test_test_runtime_failure_is_observable_through_mcp(self) -> None:
+        self.app.enable_test_runtime("runtime_error")
+        status, submitted = self.mcp_call(
+            "tools/call",
+            {
+                "name": "submit_owner_command",
+                "arguments": {
+                    "task_node_id": "node-with-failure",
+                    "command": "inspect",
+                    "idempotency_key": "worker-failure",
+                },
+            },
+        )
+        self.assertEqual(status, 200)
+        execution = self.wait_for_execution(self.tool_result(submitted)["execution_id"], "failed")
+        self.assertEqual(execution["error_summary"], "runtime_error")
 
     def test_authenticated_health_reports_component_states(self) -> None:
         status, response = self.mcp_call("tools/call", {"name": "health", "arguments": {}})

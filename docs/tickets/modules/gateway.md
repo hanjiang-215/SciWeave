@@ -4,16 +4,16 @@
 
 **范围**：Gateway MVP、Owner MCP、状态与端口、Worker 调度、fast-agent 适配与验收
 
-**统计**：共 16 张 · 活跃 7（open 7 / in_progress 0） · 已关闭 9 · 地图 1
+**统计**：共 16 张 · 活跃 7（open 6 / in_progress 1） · 已关闭 9 · 地图 1
 
 ## 工单层级
 
 - [ai4-yyy9](../../../.tickets/ai4-yyy9.md) **Gateway 与最小 fast-agent 执行闭环规格地图** — 规划最小 Gateway 与 fast-agent 执行闭环，收敛 Owner 请求、会话、执行、审计和运行时边界 `epic` `map` `P1` `open` `Frank Qi`
   - [ai4-z3z4](../../../.tickets/ai4-z3z4.md) **最小 Task Agent 项目组实现规格** — 汇总三角色项目组、共享 SQLite、MCP v1、调度和运行时的整体可实施规格 `feature` `P1` `open` `Frank Qi`
-    - [ai4-2h8c](../../../.tickets/ai4-2h8c.md) **fast-agent Runtime Adapter 与固定会话恢复** — 将 fast-agent 接入短生命周期 Worker，验证固定会话、持久 home 与恢复执行 `feature` `P1` `open` `Frank Qi` · 阻塞于 [ai4-m96w](../../../.tickets/ai4-m96w.md)（open）
-    - [ai4-gqj3](../../../.tickets/ai4-gqj3.md) **ExecutionRecord 控制、审核与恢复 MCP 工具** — 通过 MCP 提供取消、待处理列表、审核和暂停恢复，并保持 ExecutionRecord 审计关联 `feature` `P1` `open` `Frank Qi` · 阻塞于 [ai4-m96w](../../../.tickets/ai4-m96w.md)（open）
+    - [ai4-m96w](../../../.tickets/ai4-m96w.md) **带 Worker Lease 的本地调度与测试运行时** — 以共享 SQLite Worker Lease 驱动本地短生命周期 Worker，并验证同节点串行化 `feature` `P1` `in_progress` `Frank Qi`
+    - [ai4-2h8c](../../../.tickets/ai4-2h8c.md) **fast-agent Runtime Adapter 与固定会话恢复** — 将 fast-agent 接入短生命周期 Worker，验证固定会话、持久 home 与恢复执行 `feature` `P1` `open` `Frank Qi` · 阻塞于 [ai4-m96w](../../../.tickets/ai4-m96w.md)（in_progress）
+    - [ai4-gqj3](../../../.tickets/ai4-gqj3.md) **ExecutionRecord 控制、审核与恢复 MCP 工具** — 通过 MCP 提供取消、待处理列表、审核和暂停恢复，并保持 ExecutionRecord 审计关联 `feature` `P1` `open` `Frank Qi` · 阻塞于 [ai4-m96w](../../../.tickets/ai4-m96w.md)（in_progress）
     - [ai4-iyyn](../../../.tickets/ai4-iyyn.md) **最小 Task Agent 项目组端到端验收** — 从认证 MCP 客户端端到端验收 Task Agent 调度、运行时、控制工具与健康边界 `feature` `P1` `open` `Frank Qi` · 阻塞于 [ai4-gqj3](../../../.tickets/ai4-gqj3.md)（open）、[ai4-2h8c](../../../.tickets/ai4-2h8c.md)（open）
-    - [ai4-m96w](../../../.tickets/ai4-m96w.md) **带 Worker Lease 的本地调度与测试运行时** — 以共享 SQLite Worker Lease 驱动本地短生命周期 Worker，并验证同节点串行化 `feature` `P1` `open` `Frank Qi`
     - [ai4-0nuq](../../../.tickets/ai4-0nuq.md) **Gateway 健康检查与 Owner Command 基础闭环** — 打通命令提交、幂等键、SQLite 状态持久化及执行与健康查询的第一条垂直路径 `feature` `P1` `closed` `Frank Qi`
     - [ai4-b8vm](../../../.tickets/ai4-b8vm.md) **本地 Worker Scheduler 与 Runtime Adapter** — 实现按 TaskNode 串行的短生命周期 Worker 调度、运行时调用、失败与取消 `feature` `P1` `closed` `Frank Qi`
     - [ai4-o806](../../../.tickets/ai4-o806.md) **最小 fast-agent Runtime Adapter 与固定会话恢复** — 用 passthrough 模型跑通一次 Agent loop，并为 TaskNode 固定会话与持久 home `feature` `P1` `closed` `Frank Qi`

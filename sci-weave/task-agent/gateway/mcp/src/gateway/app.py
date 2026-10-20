@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import secrets
 import sqlite3
+import threading
 import uuid
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -21,6 +22,11 @@ class GatewayApplication:
         self.store = store
         self.token = token
         self.caller_id = caller_id
+        self.test_runtime_enabled = False
+
+    def enable_test_runtime(self, outcome: str = "success") -> None:
+        self.test_runtime_enabled = True
+        self.test_runtime_outcome = outcome
 
     def authorize(self, supplied: str | None) -> bool:
         return bool(supplied) and secrets.compare_digest(supplied, self.token)
@@ -66,11 +72,15 @@ class GatewayApplication:
                 (command_id, task_node_id, self.caller_id, idempotency_key, command_text, now),
             )
             connection.execute(
-                "INSERT INTO execution_records VALUES (?, ?, ?, ?, ?, ?, ?)",
+                """INSERT INTO execution_records
+                   (execution_id, command_id, task_node_id, session_id, status, created_at, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
                 (execution_id, command_id, task_node_id, session_id, "queued", now, now),
             )
             self._audit(connection, "owner_command_received", task_node_id, command_id, execution_id, now)
             self._audit(connection, "execution_queued", task_node_id, command_id, execution_id, now)
+        if self.test_runtime_enabled:
+            threading.Thread(target=self._run_test_worker, args=(execution_id,), daemon=True).start()
         return {
             "command_id": command_id,
             "execution_id": execution_id,
@@ -79,6 +89,48 @@ class GatewayApplication:
             "execution_status": "queued",
             "duplicate": False,
         }
+
+    def _run_test_worker(self, execution_id: str) -> None:
+        now = utc_now()
+        with self.store.transaction() as connection:
+            execution = connection.execute(
+                "SELECT execution_id, task_node_id, command_id FROM execution_records WHERE execution_id = ? AND status = 'queued'",
+                (execution_id,),
+            ).fetchone()
+            if execution is None:
+                return
+            try:
+                connection.execute(
+                    "INSERT INTO worker_leases VALUES (?, ?, ?)",
+                    (execution["task_node_id"], execution_id, now),
+                )
+            except sqlite3.IntegrityError:
+                return
+            connection.execute(
+                "UPDATE execution_records SET status = 'running', started_at = ?, updated_at = ? WHERE execution_id = ?",
+                (now, now, execution_id),
+            )
+            self._audit(connection, "worker_lease_acquired", execution["task_node_id"], execution["command_id"], execution_id, now)
+        finished_at = utc_now()
+        outcome = self.test_runtime_outcome
+        status = "awaiting_acceptance" if outcome == "success" else "failed"
+        result_summary = "test runtime completed" if outcome == "success" else None
+        error_summary = None if outcome == "success" else outcome
+        event_type = "worker_completed" if outcome == "success" else "worker_failed"
+        with self.store.transaction() as connection:
+            execution = connection.execute(
+                "SELECT task_node_id, command_id FROM execution_records WHERE execution_id = ?", (execution_id,)
+            ).fetchone()
+            if execution is None:
+                return
+            connection.execute(
+                """UPDATE execution_records SET status = ?, result_summary = ?, error_summary = ?,
+                   finished_at = ?, updated_at = ? WHERE execution_id = ?""",
+                (status, result_summary, error_summary, finished_at, finished_at, execution_id),
+            )
+            connection.execute("DELETE FROM worker_leases WHERE execution_id = ?", (execution_id,))
+            self._audit(connection, event_type, execution["task_node_id"], execution["command_id"], execution_id, finished_at)
+            self._audit(connection, "worker_lease_released", execution["task_node_id"], execution["command_id"], execution_id, finished_at)
 
     def query_execution(self, execution_id: str) -> dict[str, Any] | None:
         row = self.store.get_execution(execution_id)
@@ -93,7 +145,7 @@ class GatewayApplication:
                 "mcp": "ready",
                 "storage": storage,
                 "ingest": "not_configured",
-                "worker_runtime": "not_configured",
+                "worker_runtime": "ready" if self.test_runtime_enabled else "not_configured",
             },
         }
 
