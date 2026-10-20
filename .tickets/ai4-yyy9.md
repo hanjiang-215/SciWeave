@@ -2,7 +2,7 @@
 id: ai4-yyy9
 status: open
 deps: []
-links: [ai4-xup8, ai4-ufqu, ai4-v19u, ai4-353s, ai4-z3z4]
+links: [ai4-xup8, ai4-ufqu, ai4-v19u, ai4-353s, ai4-z3z4, ai4-yvh2]
 created: 2026-10-19T06:46:37Z
 type: epic
 priority: 1
@@ -25,10 +25,13 @@ tags: [wayfinder:map]
 
 - [Gateway MVP 状态模型与端口边界](ai4-gq0k.md)：首版采用 MCP（Streamable HTTP）作为 Owner 入口、SQLite 持久化、本地进程调度和 fast-agent Runtime Adapter；固定 session_id、持久 home、connection scope、session history，默认关闭 compaction；不接入 EventBus、Redpanda、领域 MCP 或 A2A Human Input。技术规格见 [Gateway MVP 与最小 fast-agent 技术规格](ai4-z3z4.md)。
 - [Owner 通道与上游交接队列物理隔离](ai4-353s.md)：Owner 的 Codex 通过 MCP 调用常驻 Gateway；上游 TaskNode 交接通过消息队列和上游收集器。A2A 不用于 Owner 通道，因为主流 harness 均未内置 A2A 客户端。
+- [执行与接纳状态机融合及 Owner 审核工具边界](ai4-yvh2.md)：Gateway 归入 `sci-weave/task-agent` 项目组；同一 TaskNode 串行、跨 TaskNode 可并发。MCP 与上游交接汇入 Gateway，使用 `blocked`、`queued`、`running`、`waiting`、`awaiting_acceptance` 等状态及 `review_execution` 完成可审计审核；接纳不自动创建领域草稿。
 
 ## Not yet specified
 
-本阶段没有阻塞实现规格的未决问题；实现拆分和代码任务由 [Gateway MVP 与最小 fast-agent 技术规格](ai4-z3z4.md) 进入下一阶段。
+并行接入领域治理时的执行记录归属：本阶段 Gateway 只服务端侧闭环，Execution Record 与 Mapping 治理 SQLite 的关系留待接入 Research Mapping 后决定。
+
+MVP 的调用者身份与 TaskNode Owner 授权绑定：当前只有本地开发令牌，尚未定义多人身份和每个 TaskNode 的 Owner 授权校验。
 
 ## Out of scope
 - [Agent Kit manifest 与模板覆盖规则](ai4-jfvy.md)：本阶段不实现 Agent Kit、Skills/Hooks 模板和多套件定制；待最小闭环稳定后另立阶段。

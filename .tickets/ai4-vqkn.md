@@ -1,7 +1,7 @@
 ---
 id: ai4-vqkn
 status: open
-deps: [ai4-0nuq]
+deps: [ai4-0nuq, ai4-yvh2]
 links: []
 created: 2026-10-19T07:24:35Z
 type: feature

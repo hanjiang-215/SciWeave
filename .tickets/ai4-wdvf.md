@@ -1,7 +1,7 @@
 ---
 id: ai4-wdvf
 status: open
-deps: [ai4-o806]
+deps: [ai4-o806, ai4-yvh2]
 links: []
 created: 2026-10-19T07:24:35Z
 type: feature

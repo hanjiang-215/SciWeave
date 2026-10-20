@@ -1,7 +1,7 @@
 ---
 id: ai4-z3z4
 status: open
-deps: []
+deps: [ai4-yvh2]
 links: [ai4-yyy9]
 created: 2026-10-19T07:07:36Z
 type: feature
