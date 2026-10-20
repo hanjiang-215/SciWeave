@@ -23,3 +23,7 @@ diff 无变化时输出“生成文件已是最新”，有变化时只列出 hu
 **2026-10-20T07:49:28Z**
 
 验证（2026-10-20）：py_compile 通过；ticket_index.py render/check 通过（59 张工单、7 个模块）；diff 无变化时输出 生成文件已是最新；钩子脚本直接调用 after-file-edit、after-shell、非 fer 命令均返回 0。Cursor 会话内未观测到钩子自动触发（afterShellExecution 探针无日志），需重启 Cursor 后在 Hooks 面板确认；ticket-index 技能与 diff 增量审查已生效。
+
+**2026-10-20T08:13:07Z**
+
+提交与 PR（2026-10-20）：提交 93ffb44 已推送到 origin/feature/zhanyunfei；Gitee Pull Request #13 https://gitee.com/qi-yueran/ai4science/pulls/13，目标分支 develop。验证：ticket_index.py render/check 通过（59 张工单、7 个模块），py_compile 通过，git diff --check 通过。
