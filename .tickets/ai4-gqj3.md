@@ -1,6 +1,6 @@
 ---
 id: ai4-gqj3
-status: open
+status: in_progress
 deps: [ai4-m96w]
 links: []
 created: 2026-10-20T07:46:47Z

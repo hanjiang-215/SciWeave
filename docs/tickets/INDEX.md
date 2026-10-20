@@ -12,7 +12,7 @@
 
 ## 总览
 
-- 工单总数 **66**：open 14 · in_progress 3 · closed 49
+- 工单总数 **66**：open 13 · in_progress 4 · closed 49
 - 类型：epic 18 · task 18 · grilling 12 · feature 11 · chore 3 · prototype 2 · research 2
 - 地图 4 张 · 活跃 17 张 · 跨模块关系 45 条
 
@@ -20,7 +20,7 @@
 
 | 负责人 | open | in_progress | 活跃合计 |
 | --- | ---: | ---: | ---: |
-| Frank Qi | 11 | 1 | 12 |
+| Frank Qi | 10 | 2 | 12 |
 | hanjiang | 2 | 2 | 4 |
 | 未分配 | 1 | 0 | 1 |
 
@@ -63,7 +63,7 @@
 | 工单 | 模块 | 阻塞于 |
 | --- | --- | --- |
 | [ai4-c2t7](../../.tickets/ai4-c2t7.md) Task Agent 初始化所需的 Mapping 查询契约 | Agent 与消息协作 | [ai4-xup8](../../.tickets/ai4-xup8.md)（open） |
-| [ai4-iyyn](../../.tickets/ai4-iyyn.md) 最小 Task Agent 项目组端到端验收 | Gateway 与执行运行时 | [ai4-gqj3](../../.tickets/ai4-gqj3.md)（open）、[ai4-2h8c](../../.tickets/ai4-2h8c.md)（open） |
+| [ai4-iyyn](../../.tickets/ai4-iyyn.md) 最小 Task Agent 项目组端到端验收 | Gateway 与执行运行时 | [ai4-gqj3](../../.tickets/ai4-gqj3.md)（in_progress）、[ai4-2h8c](../../.tickets/ai4-2h8c.md)（open） |
 
 ## 待补负责人
 

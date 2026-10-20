@@ -218,7 +218,37 @@ class GatewayMcpTests(unittest.TestCase):
         self.assertEqual(status, 200)
         return self.tool_result(response)["execution_id"]
 
-    def test_same_task_node_waits_for_existing_worker_lease(self) -> None:
+    def test_cancel_queued_execution_is_idempotent_through_mcp(self) -> None:
+        execution_id = self.submit("node-to-cancel", "cancel-key")
+        status, cancelled = self.mcp_call(
+            "tools/call", {"name": "cancel_execution", "arguments": {"execution_id": execution_id}}
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(
+            self.tool_result(cancelled),
+            {"execution_id": execution_id, "execution_status": "cancelled", "accepted": True},
+        )
+
+        _, repeated = self.mcp_call(
+            "tools/call", {"name": "cancel_execution", "arguments": {"execution_id": execution_id}}
+        )
+        self.assertEqual(
+            self.tool_result(repeated),
+            {"execution_id": execution_id, "execution_status": "cancelled", "accepted": False},
+        )
+
+    def test_list_pending_filters_and_sorts_queued_executions(self) -> None:
+        later = self.submit("node-b", "list-second")
+        first = self.submit("node-a", "list-first")
+        status, listed = self.mcp_call("tools/call", {"name": "list_pending", "arguments": {}})
+        self.assertEqual(status, 200)
+        self.assertEqual([item["execution_id"] for item in self.tool_result(listed)], [later, first])
+
+        _, filtered = self.mcp_call(
+            "tools/call", {"name": "list_pending", "arguments": {"task_node_id": "node-a"}}
+        )
+        self.assertEqual([item["execution_id"] for item in self.tool_result(filtered)], [first])
+
         self.app.enable_test_runtime(duration_seconds=0.2)
         first = self.submit("shared-node", "first")
         self.wait_for_execution(first, "running")

@@ -203,6 +203,39 @@ class GatewayApplication:
         row = self.store.get_execution(execution_id)
         return dict(row) if row is not None else None
 
+    def cancel_execution(self, execution_id: str) -> dict[str, Any] | None:
+        now = utc_now()
+        with self.store.transaction() as connection:
+            execution = connection.execute(
+                "SELECT execution_id, task_node_id, command_id, status FROM execution_records WHERE execution_id = ?",
+                (execution_id,),
+            ).fetchone()
+            if execution is None:
+                return None
+            if execution["status"] in {"accepted", "needs_revision", "rejected", "human_takeover", "failed", "cancelled"}:
+                return {"execution_id": execution_id, "execution_status": execution["status"], "accepted": False}
+            connection.execute(
+                "UPDATE execution_records SET status = 'cancelled', finished_at = ?, updated_at = ? WHERE execution_id = ?",
+                (now, now, execution_id),
+            )
+            self._audit(connection, "execution_cancelled", execution["task_node_id"], execution["command_id"], execution_id, now)
+            return {"execution_id": execution_id, "execution_status": "cancelled", "accepted": True}
+
+    def list_pending(self, task_node_id: str | None = None) -> list[dict[str, Any]]:
+        statuses = ("blocked", "queued", "running", "waiting", "awaiting_acceptance")
+        placeholders = ", ".join("?" for _ in statuses)
+        query = f"""SELECT execution_id, task_node_id, session_id, status AS execution_status,
+                         result_summary, error_summary, created_at, updated_at
+                    FROM execution_records WHERE status IN ({placeholders})"""
+        arguments: tuple[str, ...] = statuses
+        if task_node_id is not None:
+            query += " AND task_node_id = ?"
+            arguments += (task_node_id,)
+        query += " ORDER BY created_at, execution_id"
+        with self.store.lock:
+            rows = self.store.connection.execute(query, arguments).fetchall()
+        return [dict(row) for row in rows]
+
     def health(self) -> dict[str, Any]:
         storage = "ready" if self.store.health() else "unavailable"
         return {
@@ -330,6 +363,16 @@ def make_handler(app: GatewayApplication):
                     if result is None:
                         return self._tool_error(request_id, "not_found", "execution was not found")
                     return self._tool_result(request_id, result)
+                if name == "cancel_execution":
+                    result = app.cancel_execution(self._required_string(arguments, "execution_id"))
+                    if result is None:
+                        return self._tool_error(request_id, "not_found", "execution was not found")
+                    return self._tool_result(request_id, result)
+                if name == "list_pending":
+                    task_node_id = arguments.get("task_node_id")
+                    if task_node_id is not None and (not isinstance(task_node_id, str) or not task_node_id.strip()):
+                        raise ValueError("task_node_id")
+                    return self._tool_result(request_id, app.list_pending(task_node_id.strip() if task_node_id else None))
                 if name == "health":
                     return self._tool_result(request_id, app.health())
                 return self._protocol_error(request_id, -32602, "unknown tool")
@@ -352,6 +395,8 @@ def make_handler(app: GatewayApplication):
             return [
                 {"name": "submit_owner_command", "description": "Submit a durable owner command."},
                 {"name": "query_execution", "description": "Query one execution."},
+                {"name": "cancel_execution", "description": "Request cancellation of an execution."},
+                {"name": "list_pending", "description": "List pending executions."},
                 {"name": "health", "description": "Read authenticated gateway health."},
             ]
 
