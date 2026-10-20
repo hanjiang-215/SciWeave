@@ -24,4 +24,5 @@
 
 以下工单主模块在其他领域，同时归属本模块：
 
+- [ai4-c2t7](../../../.tickets/ai4-c2t7.md) **Task Agent 初始化所需的 Mapping 查询契约** — 定义 Task Agent 初始化读取 TaskNode、负责人、必要上游与配置版本的最小查询契约（主模块：[Agent 与消息协作](agent.md)）
 - [ai4-x3nx](../../../.tickets/ai4-x3nx.md) **Research Mapping 与 Wiki 候选变更并发治理地图** — 确定正式基线前进时，其他候选如何保留、重放、语义分析、审核和处置（主模块：[提案治理与审计](governance.md)）

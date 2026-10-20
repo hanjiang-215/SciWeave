@@ -4,11 +4,11 @@
 
 **范围**：端侧 Agent 角色、消息与交接、套件接入、Task Agent 部署与运行时验证
 
-**统计**：共 11 张 · 活跃 7（open 6 / in_progress 1） · 已关闭 4 · 地图 0
+**统计**：共 12 张 · 活跃 7（open 6 / in_progress 1） · 已关闭 5 · 地图 0
 
 ## 工单层级
 
-- [ai4-6fb7](../../../.tickets/ai4-6fb7.md) **Task Agent 项目组三角色部署与双入口调度边界** — 确定 Task Agent 项目组的目录、三个角色、共享 SQLite、双入口启动与上游优先规则 `task` `P1` `open` `Frank Qi` · 上级 [ai4-yyy9](../../../.tickets/ai4-yyy9.md)（Gateway 与执行运行时）
+- [ai4-c2t7](../../../.tickets/ai4-c2t7.md) **Task Agent 初始化所需的 Mapping 查询契约** — 定义 Task Agent 初始化读取 TaskNode、负责人、必要上游与配置版本的最小查询契约 `task` `P1` `open` `Frank Qi` · 阻塞于 [ai4-xup8](../../../.tickets/ai4-xup8.md)（open） · 上级 [ai4-yyy9](../../../.tickets/ai4-yyy9.md)（Gateway 与执行运行时）
 - [ai4-kpvp](../../../.tickets/ai4-kpvp.md) **端侧 Agent 协作与治理分支** — 界定 Personal Agent、Task Agent 与平台在任务执行、提交和审核治理中的协作边界 `epic` `P1` `open` `Frank Qi` · 上级 [ai4-xup8](../../../.tickets/ai4-xup8.md)（Research Mapping）
   - [ai4-ufqu](../../../.tickets/ai4-ufqu.md) **Task Agent 运行时与套件接入方案** — 确定首版 Task Agent 运行时形态、MCP/Skills/Hooks 接入方式与平台职责边界 `epic` `P1` `in_progress` `Frank Qi`
     - [ai4-a9zd](../../../.tickets/ai4-a9zd.md) **验证 fast-agent-mcp 外部进程与 A2A 启动路径** — 验证外部子进程和 A2A 两条 fast-agent-mcp 最小启动路径 `task` `P1` `open` `Frank Qi`
@@ -17,6 +17,7 @@
   - [ai4-wd5l](../../../.tickets/ai4-wd5l.md) **Task Agent 与审核人协作及返修流程** — 定义 Task Agent 与审核人之间的结果提交、澄清、返修、驳回和人工接管流程 `epic` `P1` `closed` `Frank Qi`
 - [ai4-te1v](../../../.tickets/ai4-te1v.md) **消息队列协作模型分支** — 界定多人多 Agent 协作的消息模型、交接语义和触发规则，不选具体队列产品 `epic` `P1` `open` `Frank Qi` · 上级 [ai4-xup8](../../../.tickets/ai4-xup8.md)（Research Mapping）
 - [ai4-v19u](../../../.tickets/ai4-v19u.md) **Agent 套件接入与协作边界分支** — 界定 Agent 套件中 MCP、Skills、Hooks 的职责、接入方式和协作边界 `epic` `P1` `open` `未分配` · 上级 [ai4-xup8](../../../.tickets/ai4-xup8.md)（Research Mapping）
+- [ai4-6fb7](../../../.tickets/ai4-6fb7.md) **Task Agent 项目组三角色部署与双入口调度边界** — 确定 Task Agent 项目组的目录、三个角色、共享 SQLite、双入口启动与上游优先规则 `task` `P1` `closed` `Frank Qi` · 上级 [ai4-yyy9](../../../.tickets/ai4-yyy9.md)（Gateway 与执行运行时）
 - [ai4-jfvy](../../../.tickets/ai4-jfvy.md) **Agent Kit manifest 与模板覆盖规则** — 定义 Agent Kit manifest 的字段与模板覆盖规则，作为套件交付的实现前置 `epic` `P1` `closed` `Frank Qi` · 上级 [ai4-yyy9](../../../.tickets/ai4-yyy9.md)（Gateway 与执行运行时）
 - [ai4-rowi](../../../.tickets/ai4-rowi.md) **Agent Kit ZIP 交付与跨服务器验证边界** — 界定 Agent Kit ZIP 交付与跨服务器验证的范围（当前地图外，待后续阶段） `epic` `P1` `closed` `Frank Qi` · 上级 [ai4-yyy9](../../../.tickets/ai4-yyy9.md)（Gateway 与执行运行时）
 

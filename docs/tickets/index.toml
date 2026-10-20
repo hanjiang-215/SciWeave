@@ -66,6 +66,7 @@ ai4-t5zl = { module = "mapping", summary = "把 TaskNode 与 DependencyEdge 领�
 ai4-yl2o = { module = "mapping", summary = "汇总 Research Mapping 图对象字段与 SQLite 候选治理记录的整体持久化规格" }
 ai4-wglb = { module = "mapping", summary = "界定 Gateway 阶段 Research Mapping MCP 只读依赖图适配的最小范围（当前地图外）" }
 ai4-xup8 = { module = ["mapping", "wiki", "agent"], summary = "收敛 Mapping/Wiki 数据模型与持久化规则，并厘清消息、套件和端侧 Agent 边界" }
+ai4-c2t7 = { module = ["agent", "mapping"], summary = "定义 Task Agent 初始化读取 TaskNode、负责人、必要上游与配置版本的最小查询契约" }
 
 # ---- LLM-Wiki ----
 ai4-36ek = { module = "wiki", summary = "决定 Wiki Buffer 的最小治理对象：单文档、文档加引用，还是完整 ChangeSet" }
@@ -99,7 +100,7 @@ ai4-glmy = { module = "agent", summary = "验证 fast-agent-mcp 的历史保存�
 # ---- Gateway 与执行运行时 ----
 ai4-yyy9 = { module = ["gateway", "agent"], summary = "规划最小 Gateway 与 fast-agent 执行闭环，收敛 Owner 请求、会话、执行、审计和运行时边界" }
 ai4-gq0k = { module = "gateway", summary = "确定 MVP 的 Owner 入口、SQLite 持久化、本地调度、运行时适配和端口边界" }
-ai4-z3z4 = { module = "gateway", summary = "把地图决策整理为唯一可实现的 Gateway 与 fast-agent 技术规格" }
+ai4-z3z4 = { module = "gateway", summary = "汇总三角色项目组、共享 SQLite、MCP v1、调度和运行时的整体可实施规格" }
 ai4-0nuq = { module = "gateway", summary = "打通命令提交、幂等键、SQLite 状态持久化及执行与健康查询的第一条垂直路径" }
 ai4-b8vm = { module = "gateway", summary = "实现按 TaskNode 串行的短生命周期 Worker 调度、运行时调用、失败与取消" }
 ai4-o806 = { module = "gateway", summary = "用 passthrough 模型跑通一次 Agent loop，并为 TaskNode 固定会话与持久 home" }
@@ -107,6 +108,12 @@ ai4-vqkn = { module = "gateway", summary = "保证幂等键唯一对应一次执
 ai4-wdvf = { module = "gateway", summary = "通过 MCP 公共接口验收命令、幂等、Worker、fast-agent、失败、取消和会话恢复闭环" }
 ai4-353s = { module = ["gateway", "agent"], summary = "确定 Owner MCP、上游交接队列、常驻 Gateway 与短生命周期 Worker 的物理隔离" }
 ai4-yvh2 = { module = "gateway", summary = "统一 Worker 执行、暂停恢复、Owner 审核与两类触发的状态机及 MCP 工具契约" }
+ai4-zfz9 = { module = "gateway", summary = "确定最小 MCP v1 的版本、Bearer 调用者校验、工具错误边界与命令留痕语义" }
+ai4-p19z = { module = "gateway", summary = "通过 MCP v1 打通 Caller、命令留痕、执行持久化、幂等和最小健康的首个实现闭环" }
+ai4-m96w = { module = "gateway", summary = "以共享 SQLite Worker Lease 驱动本地短生命周期 Worker，并验证同节点串行化" }
+ai4-gqj3 = { module = "gateway", summary = "通过 MCP 提供取消、待处理列表、审核和暂停恢复，并保持 ExecutionRecord 审计关联" }
+ai4-2h8c = { module = "gateway", summary = "将 fast-agent 接入短生命周期 Worker，验证固定会话、持久 home 与恢复执行" }
+ai4-iyyn = { module = "gateway", summary = "从认证 MCP 客户端端到端验收 Task Agent 调度、运行时、控制工具与健康边界" }
 
 # ---- 工程基础设施 ----
 ai4-5vru = { module = "infra", summary = "盘点运行时、开发工具、外部服务和文档依赖，补齐包管理清单与验证命令" }
