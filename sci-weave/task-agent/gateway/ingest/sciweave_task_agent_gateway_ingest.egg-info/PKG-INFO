@@ -1,0 +1,5 @@
+Metadata-Version: 2.4
+Name: sciweave-task-agent-gateway-ingest
+Version: 0.1.0
+Summary: SciWeave Task Agent Gateway upstream handoff ingest role
+Requires-Python: >=3.11

@@ -1,0 +1,25 @@
+version = 1
+revision = 3
+requires-python = ">=3.11"
+
+[manifest]
+members = [
+    "sciweave-task-agent-gateway-ingest",
+    "sciweave-task-agent-gateway-mcp",
+    "sciweave-task-agent-worker",
+]
+
+[[package]]
+name = "sciweave-task-agent-gateway-ingest"
+version = "0.1.0"
+source = { editable = "gateway/ingest" }
+
+[[package]]
+name = "sciweave-task-agent-gateway-mcp"
+version = "0.1.0"
+source = { editable = "gateway/mcp" }
+
+[[package]]
+name = "sciweave-task-agent-worker"
+version = "0.1.0"
+source = { editable = "worker" }

@@ -1,10 +1,10 @@
-"""Run the SciWeave Gateway MVP."""
+"""Gateway MCP console-script entry point."""
 
 from __future__ import annotations
 
 import os
 
-from gateway.app import create_app, serve
+from .app import create_app, serve
 
 
 def required_environment(name: str) -> str:
@@ -23,7 +23,3 @@ def main() -> None:
         required_environment("SCIWEAVE_GATEWAY_HOST"),
         int(required_environment("SCIWEAVE_GATEWAY_PORT")),
     )
-
-
-if __name__ == "__main__":
-    main()

@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sciweave-task-agent-gateway-ingest"
+version = "0.1.0"
+description = "SciWeave Task Agent Gateway upstream handoff ingest role"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.scripts]
+sciweave-task-agent-gateway-ingest = "gateway_ingest.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sciweave-task-agent-gateway-mcp"
+version = "0.1.0"
+description = "SciWeave Task Agent Gateway MCP entry"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.scripts]
+sciweave-task-agent-gateway-mcp = "gateway.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

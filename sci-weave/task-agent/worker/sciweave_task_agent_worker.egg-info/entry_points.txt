@@ -1,0 +1,2 @@
+[console_scripts]
+sciweave-task-agent-worker = task_agent_worker.cli:main

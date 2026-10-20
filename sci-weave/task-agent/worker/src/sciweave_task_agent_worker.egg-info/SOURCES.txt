@@ -1,0 +1,9 @@
+README.md
+pyproject.toml
+src/sciweave_task_agent_worker.egg-info/PKG-INFO
+src/sciweave_task_agent_worker.egg-info/SOURCES.txt
+src/sciweave_task_agent_worker.egg-info/dependency_links.txt
+src/sciweave_task_agent_worker.egg-info/entry_points.txt
+src/sciweave_task_agent_worker.egg-info/top_level.txt
+src/task_agent_worker/__init__.py
+src/task_agent_worker/cli.py

@@ -161,3 +161,7 @@ Research Mapping MCP、依赖图、领域 Buffer 设计、Agent Kit/Skills/Hooks
 **2026-10-20T04:07:00Z**
 
 状态机与契约修订：本规格已与 [执行与接纳状态机融合及 Owner 审核工具边界](ai4-yvh2.md) 对齐，采用稳定执行状态、`review_execution` 和关联的新 ExecutionRecord；健康契约同时分项报告 MCP 与消息队列。Task Agent 项目组三角色与双入口调度细节仍由 [Task Agent 项目组三角色部署与双入口调度边界](ai4-6fb7.md) 收敛。
+
+**2026-10-20T04:50:00Z**
+
+目录迁移完成：既有 HTTP/SQLite Gateway MVP 已无行为变更地从 `sci-weave/gateway` 迁入 `sci-weave/task-agent/gateway/mcp`；项目组根建立 uv workspace 与唯一 `uv.lock`，`gateway/ingest`、`worker` 仅建立独立可安装骨架。验证：在 `sci-weave/task-agent` 执行 `uv lock`、`uv sync --all-packages`、`uv run --package sciweave-task-agent-gateway-mcp python -m unittest discover -s gateway/mcp/tests -v`（3 passed）与 `python -m compileall -q gateway/mcp/src`；两项未实现角色命令均按预期返回退出码 1。
