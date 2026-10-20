@@ -11,6 +11,7 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 
+from .runtime import RuntimeAdapter, RuntimeOutcome, RuntimeRequest, TestRuntimeAdapter
 from .store import ExecutionStore, utc_now
 
 API_VERSION = "v1"
@@ -23,10 +24,16 @@ class GatewayApplication:
         self.token = token
         self.caller_id = caller_id
         self.test_runtime_enabled = False
+        self.runtime: RuntimeAdapter | None = None
 
     def enable_test_runtime(self, outcome: str = "success") -> None:
         self.test_runtime_enabled = True
         self.test_runtime_outcome = outcome
+        self.runtime = TestRuntimeAdapter(outcome)
+
+    def set_runtime(self, runtime: RuntimeAdapter) -> None:
+        self.runtime = runtime
+        self.test_runtime_enabled = True
 
     def authorize(self, supplied: str | None) -> bool:
         return bool(supplied) and secrets.compare_digest(supplied, self.token)
@@ -94,7 +101,7 @@ class GatewayApplication:
         now = utc_now()
         with self.store.transaction() as connection:
             execution = connection.execute(
-                "SELECT execution_id, task_node_id, command_id FROM execution_records WHERE execution_id = ? AND status = 'queued'",
+                "SELECT execution_id, task_node_id, session_id, command_id FROM execution_records WHERE execution_id = ? AND status = 'queued'",
                 (execution_id,),
             ).fetchone()
             if execution is None:
@@ -111,12 +118,17 @@ class GatewayApplication:
                 (now, now, execution_id),
             )
             self._audit(connection, "worker_lease_acquired", execution["task_node_id"], execution["command_id"], execution_id, now)
+        request = RuntimeRequest(
+            execution_id=execution_id,
+            task_node_id=execution["task_node_id"],
+            session_id=execution["session_id"],
+        )
+        outcome = self.runtime.run(request) if self.runtime is not None else RuntimeOutcome("failed", error_summary="runtime_not_configured")
         finished_at = utc_now()
-        outcome = self.test_runtime_outcome
-        status = "awaiting_acceptance" if outcome == "success" else "failed"
-        result_summary = "test runtime completed" if outcome == "success" else None
-        error_summary = None if outcome == "success" else outcome
-        event_type = "worker_completed" if outcome == "success" else "worker_failed"
+        status = outcome.status
+        result_summary = outcome.result_summary
+        error_summary = outcome.error_summary
+        event_type = "worker_completed" if status == "awaiting_acceptance" else "worker_failed"
         with self.store.transaction() as connection:
             execution = connection.execute(
                 "SELECT task_node_id, command_id FROM execution_records WHERE execution_id = ?", (execution_id,)
