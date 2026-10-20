@@ -9,7 +9,8 @@
 | 后端服务 | Python + uv | Gateway、调度服务、领域服务和 MCP Server 统一使用 Python 开发；每个 Python 子项目以 `pyproject.toml` 声明元数据和依赖，使用 uv 解析、同步和运行。依赖锁文件按下面的“项目组”规则提交：独立子项目提交自身 `uv.lock`，同一项目组的多个子项目提交组级唯一 `uv.lock`。 |
 | MCP | Python | MCP Server 与 MCP 客户端适配统一使用 Python。Owner 侧接入采用 **Streamable HTTP** 传输：Gateway 作为 MCP server，Task Owner 的 harness（Codex、Cursor 等）作为 MCP client 注册地址与令牌。HTTP 回环端点仅用于健康检查、本地调试和测试 seam，不作为 Owner 主通道。具体 SDK 版本由对应 fer ticket 确定后写入子项目依赖清单。 |
 | Web 前端 | Vue | 浏览器端 Web 应用统一使用 Vue；具体 Vue 版本、构建工具、状态管理和组件库由前端实现 ticket 确定。 |
-| 服务状态存储 | SQLite（MVP） | Gateway MVP 使用 Python 标准库 `sqlite3` 保存平台执行状态；不用于替代 fast-agent 的运行时会话文件。 |
+| 服务状态存储 | SQLite（MVP） | Gateway MVP 使用 Python 标准库 `sqlite3` 保存端侧命令、执行、审核与审计状态；不用于替代 fast-agent 的运行时会话文件，也不复制 Research Mapping / LLM-Wiki 的领域正文。 |
+| Research Mapping 图存储 | TerminusDB | Research Mapping 的候选与正式 TaskNode/DependencyEdge 图快照使用 TerminusDB；SQLite 治理记录保存 Proposal、审批、正式版本指针和审计索引。当前镜像同时用于本地验证，具体领域持久化实现另立 ticket。 |
 | Agent 运行时 | fast-agent-mcp | Gateway 后续通过 Runtime Adapter 接入；具体版本和锁定方式由 `ai4-o806` 决定。 |
 
 ## 子项目结构

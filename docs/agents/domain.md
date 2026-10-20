@@ -1,6 +1,6 @@
 # Domain Documentation
 
-This repository uses a single domain context.
+This repository has two isolated domain contexts: Research Mapping and LLM-Wiki. Shared terminology remains in the root `GLOSSARY.md`; each context owns its own governance records, storage boundary, validation and audit chain.
 
 ## Before exploring or changing domain behavior
 
