@@ -6,7 +6,7 @@ links: []
 created: 2026-10-16T00:38:11Z
 type: grilling
 priority: 0
-assignee: SciWeave
+assignee: hanjiang
 parent: ai4-ru15
 tags: [wayfinder:grilling, product, ai4science]
 ---

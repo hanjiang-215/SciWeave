@@ -4,6 +4,7 @@ status: in_progress
 deps: [ai4-ay0e, ai4-r3so, ai4-m0vt, ai4-xrxw, ai4-vbnr]
 links: []
 created: 2026-10-17T14:58:26Z
+assignee: hanjiang
 type: prototype
 priority: 1
 parent: ai4-ru15

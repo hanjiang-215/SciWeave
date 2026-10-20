@@ -6,7 +6,7 @@ links: []
 created: 2026-10-16T04:16:17Z
 type: task
 priority: 1
-assignee: SciWeave
+assignee: hanjiang
 parent: ai4-ru15
 tags: [wayfinder:task, terminusdb, mapping, ai4science]
 ---
