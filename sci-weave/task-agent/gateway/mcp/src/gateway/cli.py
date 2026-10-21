@@ -15,12 +15,16 @@ def required_environment(name: str) -> str:
 
 
 def main() -> None:
+    app = create_app(
+        required_environment("SCIWEAVE_GATEWAY_DB"),
+        required_environment("SCIWEAVE_GATEWAY_TOKEN"),
+        required_environment("SCIWEAVE_GATEWAY_CALLER_ID"),
+    )
+    worker_home = os.environ.get("SCIWEAVE_WORKER_HOME")
+    if worker_home:
+        app.enable_fast_agent_passthrough_runtime(worker_home)
     serve(
-        create_app(
-            required_environment("SCIWEAVE_GATEWAY_DB"),
-            required_environment("SCIWEAVE_GATEWAY_TOKEN"),
-            required_environment("SCIWEAVE_GATEWAY_CALLER_ID"),
-        ),
+        app,
         required_environment("SCIWEAVE_GATEWAY_HOST"),
         int(required_environment("SCIWEAVE_GATEWAY_PORT")),
     )

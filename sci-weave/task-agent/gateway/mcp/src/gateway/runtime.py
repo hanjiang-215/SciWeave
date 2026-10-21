@@ -58,6 +58,8 @@ class TestRuntimeAdapter:
         return RuntimeOutcome("failed", error_summary=self.outcome)
 
     def resume(self, request: RuntimeRequest) -> RuntimeOutcome:
+        if self.outcome == "success":
+            return RuntimeOutcome("awaiting_acceptance", result_summary="test runtime resumed")
         return self.run(request)
 
     def cancel(self, execution_id: str) -> RuntimeOutcome:

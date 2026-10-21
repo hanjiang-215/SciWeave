@@ -46,7 +46,7 @@ def run_worker_process(database: str, execution_id: str, runtime: RuntimeAdapter
         now = utc_now()
         with store.transaction() as connection:
             execution = connection.execute(
-                "SELECT execution_id, task_node_id, session_id, command_id FROM execution_records "
+                "SELECT execution_id, task_node_id, session_id, command_id, resume_of FROM execution_records "
                 "WHERE execution_id = ? AND status = 'queued'",
                 (execution_id,),
             ).fetchone()
@@ -69,7 +69,7 @@ def run_worker_process(database: str, execution_id: str, runtime: RuntimeAdapter
 
         request = RuntimeRequest(execution_id, execution["task_node_id"], execution["session_id"])
         try:
-            outcome = runtime.run(request)
+            outcome = runtime.resume(request) if execution["resume_of"] else runtime.run(request)
         except TimeoutError:
             outcome = RuntimeOutcome("failed", error_summary="timeout")
         except Exception:

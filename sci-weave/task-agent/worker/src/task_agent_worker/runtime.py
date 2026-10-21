@@ -64,7 +64,10 @@ class FastAgentPassthroughRuntime:
             return WorkerOutcome("failed", error_summary="fast_agent_runtime_error")
 
     def resume(self, request: RuntimeRequest) -> WorkerOutcome:
-        return self.run(request)
+        outcome = self.run(request)
+        if outcome.status == "awaiting_acceptance":
+            return WorkerOutcome("awaiting_acceptance", result_summary="fast-agent passthrough resumed")
+        return outcome
 
     def cancel(self, execution_id: str) -> WorkerOutcome:
         return WorkerOutcome("cancelled", error_summary="cancelled")

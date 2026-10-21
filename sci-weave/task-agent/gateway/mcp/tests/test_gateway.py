@@ -379,6 +379,7 @@ class GatewayMcpTests(unittest.TestCase):
         resumed = self.wait_for_execution(resumed_id, "awaiting_acceptance")
         self.assertEqual(resumed["resume_of"], waiting_id)
         self.assertEqual(resumed["session_id"], waiting["session_id"])
+        self.assertEqual(resumed["result_summary"], "test runtime resumed")
 
     def test_different_task_nodes_receive_independent_worker_leases(self) -> None:
         self.app.enable_test_runtime(duration_seconds=0.2)
@@ -394,6 +395,35 @@ class GatewayMcpTests(unittest.TestCase):
         execution_id = self.submit("fast-agent-node", "fast-agent-command")
         execution = self.wait_for_execution(execution_id, "awaiting_acceptance")
         self.assertEqual(execution["result_summary"], "fast-agent passthrough completed")
+
+    def test_fast_agent_passthrough_resume_uses_the_persisted_session(self) -> None:
+        home = str(Path(self.temp.name) / "worker-home")
+        self.app.enable_fast_agent_passthrough_runtime(home)
+        first_id = self.submit("fast-agent-resume-node", "fast-agent-first")
+        first = self.wait_for_execution(first_id, "awaiting_acceptance")
+        self.app.enable_test_runtime("waiting")
+        waiting_id = self.submit("fast-agent-resume-node", "fast-agent-waiting")
+        self.wait_for_execution(waiting_id, "waiting")
+        self.app.enable_fast_agent_passthrough_runtime(home)
+        _, response = self.mcp_call(
+            "tools/call",
+            {"name": "submit_owner_command", "arguments": {
+                "task_node_id": "fast-agent-resume-node", "command": "continue",
+                "idempotency_key": "fast-agent-resume", "execution_id": waiting_id,
+            }},
+        )
+        resumed = self.wait_for_execution(self.tool_result(response)["execution_id"], "awaiting_acceptance")
+        self.assertEqual(first["session_id"], resumed["session_id"])
+        self.assertEqual(resumed["result_summary"], "fast-agent passthrough resumed")
+
+    def test_fast_agent_persistent_home_failure_is_observable_through_mcp(self) -> None:
+        invalid_home = Path(self.temp.name) / "not-a-directory"
+        invalid_home.write_text("occupied", encoding="utf-8")
+        self.app.enable_fast_agent_passthrough_runtime(str(invalid_home))
+        execution = self.wait_for_execution(
+            self.submit("fast-agent-invalid-home", "fast-agent-invalid-home"), "failed"
+        )
+        self.assertEqual(execution["error_summary"], "runtime_storage_unavailable")
 
     def test_test_runtime_completes_queued_execution_through_a_short_lived_worker(self) -> None:
         self.app.enable_test_runtime()
