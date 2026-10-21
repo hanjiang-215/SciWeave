@@ -16,7 +16,7 @@ tags: [mapping, implementation]
 
 ## Design
 
-差异与影响范围围绕 TaskNode、DependencyEdge、输入输出及路线激活条件。审阅对象必须绑定明确的 base Formal MappingRevision 和 candidate head；基准变化或候选 head 变化时重新验证并使旧预览失效。最终正式化成功条件仍由独立的正式化任务实现。
+差异与影响范围围绕 TaskNode、DependencyEdge、输入输出及路线激活条件。审阅对象必须绑定明确的 base Formal MappingRevision 和 candidate head；基准变化或候选 head 变化时重新验证并使旧预览失效。最终正式化成功条件仍由独立的正式化任务实现。适用规格：已关闭的 Proposal 生命周期 `ai4-xrxw`、候选治理记录 `ai4-mjku`、草稿/正式视图 `ai4-u3rs` 和候选分支验证 `ai4-2alw`；`docs/superpowers/specs/2026-10-19-research-mapping-candidate-governance-record-model-design.md`。
 
 ## Implementation Contract
 

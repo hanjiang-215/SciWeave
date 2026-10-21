@@ -16,7 +16,7 @@ tags: [mapping, implementation]
 
 ## Design
 
-遵循 Research Mapping 已确定的 SQLite 治理记录权威与 TerminusDB 精确图快照规则。复用已关闭的字段模型、候选治理和跨存储正式化规格；不新增 SDK 假设。若实现需要额外运行时依赖，先建立专门 fer 依赖任务，再声明来源、版本约束、用途、许可证/限制、验证方式及锁文件。
+遵循 Research Mapping 已确定的 SQLite 治理记录权威与 TerminusDB 精确图快照规则。复用已关闭的字段模型 `ai4-t5zl`、`ai4-r3so`、草稿/正式视图 `ai4-u3rs`、跨存储正式化 `ai4-azx2` 与 TerminusDB 原型验证 `ai4-9hcj`；适用规格见 `docs/superpowers/specs/2026-10-19-research-mapping-content-persistence-model-design.md` 和 `docs/superpowers/specs/2026-10-19-research-mapping-cross-storage-formalization-consistency-and-recovery-design.md`；不新增 SDK 假设。若实现需要额外运行时依赖，先建立专门 fer 依赖任务，再声明来源、版本约束、用途、许可证/限制、验证方式及锁文件。
 
 ## Implementation Contract
 

@@ -1,6 +1,6 @@
 ---
 id: ai4-orpg
-status: open
+status: closed
 deps: []
 links: []
 created: 2026-10-20T08:31:16Z
@@ -36,3 +36,9 @@ tags: [wayfinder:map, wiki, implementation]
 - [x] 不预设 Mapping 与 Wiki 共用数据库、MCP、审核/审计链或跨域事务；不修改 ai4-xup8，也不把消息协作、Agent 套件纳入本地图范围。
 
 本票验收用于确认 Wiki 实施地图及其契约已收敛；子票代码、测试和实际运行证据完成后，才代表实现完成。
+
+## Notes
+
+**2026-10-21T03:03:59Z**
+
+验收核查（2026-10-21）：前置规格 ai4-7xtf 已关闭；四张实现子票 ai4-vczt、ai4-91tk、ai4-txhf、ai4-jdjx 的 parent 均为 ai4-orpg，依赖为 7xtf <- vczt <- 91tk <- txhf <- jdjx，无循环。三张子票引用 Wiki 内容模型、候选治理与资源审核跨存储正式化规格文件，并含成功、拒绝与结果未知的验证要求。未修改 ai4-xup8，未引入共享存储或跨域事务。子票代码与运行证据完成后才代表实现完成。

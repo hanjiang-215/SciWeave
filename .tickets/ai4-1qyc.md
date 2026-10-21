@@ -16,7 +16,7 @@ tags: [mapping, implementation]
 
 ## Design
 
-严格实现 ai4-azx2 已关闭的跨存储正式化规格：精确 TerminusDB Commit 写入并读回确认后，SQLite 单一激活单元创建 Formal MappingRevision、条件切换当前指针、写入成功结果并收敛治理状态；SQLite 激活提交是唯一生效点。不执行跨存储回滚，未激活 Commit 保留为不可查询历史。
+严格实现 ai4-azx2 已关闭的跨存储正式化规格：精确 TerminusDB Commit 写入并读回确认后，SQLite 单一激活单元创建 Formal MappingRevision、条件切换当前指针、写入成功结果并收敛治理状态；SQLite 激活提交是唯一生效点。不执行跨存储回滚，未激活 Commit 保留为不可查询历史。适用规格：`docs/superpowers/specs/2026-10-19-research-mapping-cross-storage-formalization-consistency-and-recovery-design.md`；关联已关闭的 `ai4-mjku`、`ai4-9hcj`。
 
 ## Implementation Contract
 
