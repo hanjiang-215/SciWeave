@@ -7,6 +7,7 @@ created: 2026-10-21T12:16:16Z
 type: feature
 priority: 1
 assignee: Frank Qi
+parent: ai4-fv1r
 tags: [centre-control, centre-agents, interface]
 ---
 # 中央 Agent 能力接口收口
@@ -54,3 +55,12 @@ tags: [centre-control, centre-agents, interface]
 2026-10-21T22:42:30Z
 
 依赖调整：解除对「中央 Agent 按已批准绑定部署 Task Agent」(ai4-s12u) 的阻塞依赖。该票已于 2026-10-21 关闭，且其立意（中央部署 Task Agent）已随端侧自持取消。本票其余依赖不变。
+
+**2026-10-21T23:45:00Z**
+
+2026-10-21 第五轮讨论的修订。本票挂到「中央 Agent 候选预审职能地图」(ai4-fv1r) 之下，收口范围与新增依赖：
+
+- 依赖增加「候选方案合成与送审」(ai4-oebi)，因为混合候选是它唯一要收口的写操作。
+- 工具清单需要按工具粒度收口：`append_prereview_log` 与 `create_merged_candidate` 是两个独立工具，权限可分开配置。见「预审报告的追加日志契约」(ai4-oz3s) 与「注册表登记中央 Agent 与开放面第四档」(ai4-t2wc)。
+- 「中央 Agent 自身的工具是否参与注册表校验」已有答案：进注册表但只留痕，不参与鉴权；开放面按工具面收口，不按登记记录授权。
+- 中央 Agent 只保留预审一类职能，不新增其他能力。这条本身就是本票的收口原则。

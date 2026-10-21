@@ -1,0 +1,3 @@
+# ai4-eex0 的索引归属与简介（人工维护）
+module = ["governance", "mapping"]
+summary = "把格式、引用、依赖环三项机械校验前移到领域 MCP 创建候选时，中央 Agent 只保留需要判断的检查"
