@@ -1,0 +1,3 @@
+# ai4-yvh2 的索引归属与简介（人工维护）
+module = "gateway"
+summary = "统一 Worker 执行、暂停恢复、Owner 审核与两类触发的状态机及 MCP 工具契约"

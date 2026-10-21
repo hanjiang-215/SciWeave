@@ -1,0 +1,3 @@
+# ai4-emsk 的索引归属与简介（人工维护）
+module = "infra"
+summary = "提供可重复启动的单节点 Redpanda Compose，作为本地消息协作验证基础设施"

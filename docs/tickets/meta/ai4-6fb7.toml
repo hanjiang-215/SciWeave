@@ -1,0 +1,3 @@
+# ai4-6fb7 的索引归属与简介（人工维护）
+module = "agent"
+summary = "确定 Task Agent 项目组的目录、三个角色、共享 SQLite、双入口启动与上游优先规则"

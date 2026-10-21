@@ -25,3 +25,7 @@ __pycache__/
 .fast-agent/sessions/
 **/.fast-agent/sessions/
 **/var/
+
+# 工单索引生成物（运行 ticket-index render 生成，不提交）
+docs/tickets/INDEX.md
+docs/tickets/modules/

@@ -1,0 +1,39 @@
+# 工单模块注册表
+#
+# 只维护模块的 id、标题和范围；模块增减时修改本文件。
+# 每张工单的归属与简介在 docs/tickets/meta/<id>.toml。
+
+[[modules]]
+id = "product"
+title = "产品与需求"
+scope = "平台定位、首版范围、研究图与协作模型、资源共享、演示场景、看板可见性"
+
+[[modules]]
+id = "mapping"
+title = "Research Mapping"
+scope = "TaskNode/依赖边模型、草稿与正式视图、提案生命周期、TerminusDB 验证与持久化"
+
+[[modules]]
+id = "wiki"
+title = "LLM-Wiki"
+scope = "Wiki 内容与资源引用、Buffer/Proposal 生命周期、候选治理记录、分支能力验证"
+
+[[modules]]
+id = "governance"
+title = "提案治理与审计"
+scope = "统一提案语义、候选并发与重放、跨存储一致性、中央协调与审计"
+
+[[modules]]
+id = "agent"
+title = "Agent 与消息协作"
+scope = "端侧 Agent 角色、消息与交接、套件接入、Task Agent 部署与运行时验证"
+
+[[modules]]
+id = "gateway"
+title = "Gateway 与执行运行时"
+scope = "Gateway MVP、Owner MCP、状态与端口、Worker 调度、fast-agent 适配与验收"
+
+[[modules]]
+id = "infra"
+title = "工程基础设施"
+scope = "依赖与工具链、技术栈与目录规范、本地服务与版本固定"

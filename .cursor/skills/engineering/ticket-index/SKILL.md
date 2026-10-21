@@ -7,11 +7,13 @@ description: 维护 docs/tickets 下的分层工单索引（总览、模块归�
 
 `.tickets/` 里的工单是事实源，但逐张读取成本高。本技能维护一份**派生索引**：总览（`docs/tickets/INDEX.md`）→ 模块（`docs/tickets/modules/<module>.md`）→ 工单行。读取者先看索引定位候选，再打开唯一的工单全文。
 
-索引由脚本渲染。人只维护 `docs/tickets/index.toml` 里的**归属与简介**；状态、类型、负责人、依赖、层级、跨模块关系和计数全部从工单 frontmatter 推导。因此索引不会因手工同步而漂移。
+索引由脚本渲染。人只维护两类输入：`docs/tickets/modules.toml` 的模块注册表，以及 `docs/tickets/meta/<id>.toml` 里每张票的**归属与简介**。状态、类型、负责人、依赖、层级、跨模块关系和计数全部从工单 frontmatter 推导。
+
+`INDEX.md` 与 `modules/*.md` 是**本地生成物，不入库**。它们不参与分支合并，因此不会再出现 PR 里的索引冲突；合并后运行一次 `render` 即可重建。
 
 ## 何时运行
 
-- 每次新增、关闭、改派、改状态、改依赖或关联工单之后。钩子会自动渲染，但**新增工单仍需补 `index.toml` 条目**并跑 `check`。
+- 每次新增、关闭、改派、改状态、改依赖或关联工单之后。钩子会自动渲染，但**新增工单仍需补 `docs/tickets/meta/<id>.toml`** 并跑 `check`。
 - 提交 PR 前，或审查者要求盘点工单时。
 - 工单范围变化、需要调整模块归属时。
 
@@ -22,9 +24,16 @@ description: 维护 docs/tickets 下的分层工单索引（总览、模块归�
 `.cursor/hooks.json` 注册了 `.cursor/hooks/ticket-index-sync.py`：
 
 - `afterShellExecution`：命令里出现 `fer` 的变更子命令时自动运行 `render`；
-- `afterFileEdit`：编辑 `.tickets/ai4-*.md` 或 `docs/tickets/index.toml` 后自动运行 `render`。
+- `afterFileEdit`：编辑 `.tickets/ai4-*.md`、`docs/tickets/meta/ai4-*.toml` 或 `docs/tickets/modules.toml` 后自动运行 `render`。
 
-钩子只保证生成文件不过期，不替人判断模块归属和简介。新增工单时仍在同一轮补 `index.toml`；自动渲染因缺条目失败时，按 `check` 的输出补齐再重跑。新建 `hooks.json` 后需要 Cursor 在会话启动时加载，首次配置或修改后重启 Cursor，并在 Hooks 输出面板确认已触发。
+钩子只保证生成文件不过期，不替人判断模块归属和简介。新增工单时仍在同一轮补 `meta/<id>.toml`；自动渲染因缺条目失败时，按 `check` 的输出补齐再重跑。新建 `hooks.json` 后需要 Cursor 在会话启动时加载，首次配置或修改后重启 Cursor，并在 Hooks 输出面板确认已触发。
+
+**合并与冲突**
+
+- 生成物不入库，合并其他 PR 不会在索引上产生冲突。
+- 合并后运行 `render`；本地旧生成物会被直接覆盖。
+- `meta/<id>.toml` 每票一个文件；只有两个人同时编辑同一张票的元数据时才可能冲突，按内容合并即可。
+- `modules.toml` 只在模块增减时变化；冲突时保留双方新增的模块定义。
 
 审查只看变化的部分，不要通读整份索引：
 
@@ -52,11 +61,17 @@ python .cursor/skills/engineering/ticket-index/scripts/ticket_index.py facts
 
 ### 2. 补归属与简介
 
-编辑 `docs/tickets/index.toml`：
+新建或编辑 `docs/tickets/meta/<id>.toml`，文件名必须与工单 id 一致：
 
-- 新工单：在 `[tickets]` 加一行，`module` 写主模块，`summary` 写一句话，例如 `ai4-xxxx = { module = "gateway", summary = "…" }`。
+```toml
+# ai4-xxxx 的索引归属与简介（人工维护）
+module = "gateway"
+summary = "一句话说明这张票产出或决定了什么"
+```
+
 - 跨模块：`module = ["主模块", "次模块"]`，主模块排第一。
-- 删除已不存在的工单条目；模块增删改 `[[modules]]`。
+- 新模块：在 `docs/tickets/modules.toml` 增加 `[[modules]]`，不要塞进最接近的旧模块。
+- 工单删除时同时删除对应的 meta 文件。
 
 简介规则：
 
@@ -88,7 +103,7 @@ python .cursor/skills/engineering/ticket-index/scripts/ticket_index.py render
 - 多模块归属是否只在主模块展开，其他模块只出现引用；
 - 前沿、阻塞、待补负责人三张清单是否符合预期。
 
-生成文件带“请勿手工编辑”标记。要改内容就改 `index.toml` 后重跑。
+生成文件带“请勿手工编辑”标记。要改内容就改对应的 `meta/<id>.toml` 或 `modules.toml` 后重跑。
 
 ### 4. 验证
 
@@ -96,7 +111,7 @@ python .cursor/skills/engineering/ticket-index/scripts/ticket_index.py render
 python .cursor/skills/engineering/ticket-index/scripts/ticket_index.py check
 ```
 
-退出码 `0` 且输出 `OK` 即完成。提交时把 `index.toml` 与所有生成文件一起提交。
+退出码 `0` 且输出 `OK` 即完成。提交时只提交 `meta/`、`modules.toml` 和工单改动；不要提交 `INDEX.md` 与 `modules/*.md`，它们已被 `.gitignore` 忽略。
 
 ## 模块归属
 
@@ -105,7 +120,7 @@ python .cursor/skills/engineering/ticket-index/scripts/ticket_index.py check
 - 一张票只在一个模块展开；`module` 数组里的其余模块只在“跨模块归属”中引用，不重复展开。
 - `parent` 跨模块时，子票在自身模块作为根节点展开，并在行尾标注上级；不把父票复制过去。
 - `deps` / `links` 跨模块由脚本汇总到 INDEX 的跨模块关系表；工单行只显示仍阻塞的依赖。
-- 新领域出现时，在 `[[modules]]` 增加模块，不要塞进最接近的旧模块。
+- 新领域出现时，在 `docs/tickets/modules.toml` 的 `[[modules]]` 增加模块，不要塞进最接近的旧模块。
 - 汇总分支（Wayfinder 的 branch/epic）是工单层级，不是模块；模块按领域划分。
 
 ### 跨模块的三种写法
@@ -120,6 +135,8 @@ python .cursor/skills/engineering/ticket-index/scripts/ticket_index.py check
 
 ## 输出结构
 
+以下文件由 `render` 在本地生成，已被 `.gitignore` 忽略，不参与提交和合并：
+
 - `INDEX.md`：用途与读法、状态/类型统计、模块导航、当前前沿（依赖已满足的活跃工单）、阻塞中、待补负责人、跨模块关系、维护约定。
 - `modules/<module>.md`：模块范围、统计、按 `parent` 展开的层状工单树、跨模块归属引用。
 
@@ -128,6 +145,7 @@ python .cursor/skills/engineering/ticket-index/scripts/ticket_index.py check
 ## 常见错误
 
 - 在生成文件里改状态：`check` 会报过期，`render` 会覆盖。改工单用 `fer`。
+- 把生成物提交进 Git：`INDEX.md` 与 `modules/*.md` 不应入库；旧分支仍跟踪时用 `git rm --cached` 移除。
 - 新工单漏了 `summary`：`render` 拒绝输出，避免索引出现空简介。
 - 把 `SciWeave` 当作负责人：它是团队占位名；INDEX 的“待补负责人”会列出仍活跃的此类工单。
 - 用 `links` 代替 `parent` 表达层级：层级只认 `parent`，`links` 渲染为跨模块关系。

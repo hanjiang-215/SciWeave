@@ -18,11 +18,11 @@ Gitee pull requests are managed separately with the `gitee` CLI and are not incl
 
 `docs/tickets/INDEX.md` is the generated overview of all tickets. It groups tickets by domain module, gives each a one-line summary, and lists the current frontier, blocked work, ownerless tickets, and cross-module relations. Read it to locate a ticket before opening the full `.tickets/<id>.md` file.
 
-Module ownership and summaries live in `docs/tickets/index.toml`; status, dependencies, hierarchy, and counts are derived from ticket frontmatter. `.cursor/hooks/ticket-index-sync.py` renders the index automatically after `fer` changes and after edits to `.tickets/*.md` or `index.toml`. New tickets still need an `index.toml` entry. Review only the changed hunks and verify:
+Per-ticket ownership and summaries live in `docs/tickets/meta/<id>.toml`; the module registry lives in `docs/tickets/modules.toml`; status, dependencies, hierarchy, and counts are derived from ticket frontmatter. `.cursor/hooks/ticket-index-sync.py` renders the index automatically after `fer` changes and after edits to `.tickets/*.md`, `meta/*.toml`, or `modules.toml`. New tickets still need a `meta/<id>.toml` file. Review only the changed hunks and verify:
 
 ```bash
 python .cursor/skills/engineering/ticket-index/scripts/ticket_index.py diff
 python .cursor/skills/engineering/ticket-index/scripts/ticket_index.py check
 ```
 
-`check` exits non-zero when a ticket is missing an index entry, a summary is empty, a parent/dependency/link reference is broken, or a generated file is stale. Do not hand-edit `INDEX.md` or `modules/*.md`.
+`check` exits non-zero when a ticket is missing a `meta` entry or has an empty summary, when a ticket references an unknown module, when a parent/dependency/link reference is broken, or when a generated file is stale. Do not hand-edit `INDEX.md` or `modules/*.md`.

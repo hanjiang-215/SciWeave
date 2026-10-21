@@ -1,0 +1,3 @@
+# ai4-gq0k 的索引归属与简介（人工维护）
+module = "gateway"
+summary = "确定 MVP 的 Owner 入口、SQLite 持久化、本地调度、运行时适配和端口边界"
