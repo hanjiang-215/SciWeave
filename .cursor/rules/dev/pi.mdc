@@ -1,0 +1,5 @@
+---
+alwaysApply: true
+---
+
+`.pi`目录和`pi-docker`目录是pi-agent的开发目录，与本AI4Sci项目无关。 
