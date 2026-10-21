@@ -2,6 +2,62 @@
 -- Graph content stays in TerminusDB; this schema stores only identities and
 -- the activation pointer that decides which formal revision is current.
 
+CREATE TABLE IF NOT EXISTS mapping_submission (
+    submission_id TEXT PRIMARY KEY,
+    mapping_domain_id TEXT NOT NULL,
+    submitter_id TEXT NOT NULL,
+    base_formal_revision_id TEXT,
+    idempotency_key TEXT NOT NULL UNIQUE,
+    content_digest TEXT NOT NULL,
+    proposal_id TEXT NOT NULL UNIQUE,
+    submitted_at TEXT NOT NULL,
+    status TEXT NOT NULL,
+    UNIQUE (mapping_domain_id, submission_id)
+);
+
+CREATE TABLE IF NOT EXISTS mapping_proposal (
+    proposal_id TEXT PRIMARY KEY,
+    mapping_domain_id TEXT NOT NULL,
+    base_formal_revision_id TEXT,
+    candidate_store_id TEXT,
+    candidate_branch_id TEXT,
+    status TEXT NOT NULL,
+    created_by TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS mapping_candidate_commit (
+    candidate_commit_id TEXT PRIMARY KEY,
+    mapping_domain_id TEXT NOT NULL,
+    proposal_id TEXT NOT NULL,
+    terminus_store_id TEXT NOT NULL,
+    branch_id TEXT NOT NULL,
+    commit_hash TEXT NOT NULL,
+    base_formal_revision_id TEXT,
+    content_digest TEXT NOT NULL,
+    created_by TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    UNIQUE (terminus_store_id, commit_hash),
+    FOREIGN KEY (proposal_id) REFERENCES mapping_proposal(proposal_id)
+);
+
+CREATE TABLE IF NOT EXISTS mapping_audit_event (
+    event_id TEXT PRIMARY KEY,
+    mapping_domain_id TEXT NOT NULL,
+    actor_id TEXT NOT NULL,
+    operation TEXT NOT NULL,
+    target_object_type TEXT NOT NULL,
+    target_object_id TEXT NOT NULL,
+    result TEXT NOT NULL,
+    occurred_at TEXT NOT NULL,
+    submission_id TEXT NOT NULL,
+    proposal_id TEXT NOT NULL,
+    candidate_commit_id TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS mapping_submission_idempotency
+    ON mapping_submission(mapping_domain_id, submitter_id, idempotency_key);
+
 CREATE TABLE IF NOT EXISTS formal_mapping_revision (
     formal_revision_id TEXT PRIMARY KEY,
     mapping_domain_id TEXT NOT NULL,

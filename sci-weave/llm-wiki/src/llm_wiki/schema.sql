@@ -38,3 +38,30 @@ CREATE TABLE IF NOT EXISTS wiki_audit_event (
 
 CREATE INDEX IF NOT EXISTS wiki_audit_event_target
     ON wiki_audit_event (target_id, occurred_at);
+
+-- Formal activation facts only; Wiki content remains in TerminusDB.
+CREATE TABLE IF NOT EXISTS formal_wiki_revision (
+    formal_wiki_revision_id TEXT PRIMARY KEY,
+    wiki_domain_id TEXT NOT NULL,
+    terminus_store_id TEXT NOT NULL,
+    formal_branch_id TEXT NOT NULL,
+    formal_commit_hash TEXT NOT NULL,
+    content_snapshot_digest TEXT
+);
+
+CREATE TABLE IF NOT EXISTS wiki_formalization_result (
+    result_id TEXT PRIMARY KEY,
+    wiki_domain_id TEXT NOT NULL,
+    formal_wiki_revision_id TEXT NOT NULL,
+    terminus_store_id TEXT NOT NULL,
+    formal_commit_hash TEXT NOT NULL,
+    result_status TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS wiki_formalization_result_lookup
+    ON wiki_formalization_result (wiki_domain_id, formal_wiki_revision_id, result_status);
+
+CREATE TABLE IF NOT EXISTS wiki_current_formal_revision (
+    wiki_domain_id TEXT PRIMARY KEY,
+    current_formal_revision_id TEXT
+);

@@ -8,6 +8,7 @@ from pathlib import Path
 
 from .canonical import canonical_json
 from .domain import ResourceReviewRecord, ResourceVersionLocation, WikiAuditEvent
+from .formal_domain import WikiFormalRevision, WikiFormalizationResult
 
 
 class SqliteStore:
@@ -88,6 +89,120 @@ class SqliteStore:
     def latest_review(self, resource_version_id: str) -> ResourceReviewRecord | None:
         reviews = self.list_reviews(resource_version_id)
         return None if not reviews else reviews[-1]
+
+    def add_formal_revision(
+        self,
+        *,
+        formal_revision_id: str,
+        wiki_domain_id: str,
+        terminus_store_id: str,
+        formal_branch_id: str,
+        formal_commit_hash: str,
+        content_snapshot_digest: str | None = None,
+    ) -> None:
+        with self.connection() as connection:
+            connection.execute(
+                """
+                INSERT INTO formal_wiki_revision (
+                    formal_wiki_revision_id, wiki_domain_id, terminus_store_id,
+                    formal_branch_id, formal_commit_hash, content_snapshot_digest
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (formal_revision_id, wiki_domain_id, terminus_store_id,
+                 formal_branch_id, formal_commit_hash, content_snapshot_digest),
+            )
+            connection.commit()
+
+    def add_formalization_result(
+        self, *, result_id: str, wiki_domain_id: str,
+        formal_wiki_revision_id: str, terminus_store_id: str,
+        formal_commit_hash: str, result_status: str,
+    ) -> None:
+        with self.connection() as connection:
+            connection.execute(
+                """
+                INSERT INTO wiki_formalization_result (
+                    result_id, wiki_domain_id, formal_wiki_revision_id,
+                    terminus_store_id, formal_commit_hash, result_status
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (result_id, wiki_domain_id, formal_wiki_revision_id,
+                 terminus_store_id, formal_commit_hash, result_status),
+            )
+            connection.commit()
+
+    def set_formalization_status(self, result_id: str, result_status: str) -> None:
+        with self.connection() as connection:
+            connection.execute(
+                "UPDATE wiki_formalization_result SET result_status = ? WHERE result_id = ?",
+                (result_status, result_id),
+            )
+            connection.commit()
+
+    def set_current_formal_revision(
+        self, wiki_domain_id: str, formal_revision_id: str | None
+    ) -> None:
+        with self.connection() as connection:
+            connection.execute(
+                """
+                INSERT INTO wiki_current_formal_revision (
+                    wiki_domain_id, current_formal_revision_id
+                ) VALUES (?, ?)
+                ON CONFLICT (wiki_domain_id) DO UPDATE SET
+                    current_formal_revision_id = excluded.current_formal_revision_id
+                """,
+                (wiki_domain_id, formal_revision_id),
+            )
+            connection.commit()
+
+    def get_current_formal_revision_id(self, wiki_domain_id: str) -> str | None:
+        with self.connection() as connection:
+            row = connection.execute(
+                "SELECT current_formal_revision_id FROM wiki_current_formal_revision WHERE wiki_domain_id = ?",
+                (wiki_domain_id,),
+            ).fetchone()
+        return None if row is None else row["current_formal_revision_id"]
+
+    def get_formal_revision(self, revision_id: str) -> WikiFormalRevision | None:
+        with self.connection() as connection:
+            row = connection.execute(
+                "SELECT * FROM formal_wiki_revision WHERE formal_wiki_revision_id = ?",
+                (revision_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        return WikiFormalRevision(
+            formal_wiki_revision_id=str(row["formal_wiki_revision_id"]),
+            wiki_domain_id=str(row["wiki_domain_id"]),
+            terminus_store_id=str(row["terminus_store_id"]),
+            formal_branch_id=str(row["formal_branch_id"]),
+            formal_commit_hash=str(row["formal_commit_hash"]),
+            content_snapshot_digest=row["content_snapshot_digest"],
+        )
+
+    def get_succeeded_formalization_result(
+        self, wiki_domain_id: str, revision_id: str
+    ) -> WikiFormalizationResult | None:
+        with self.connection() as connection:
+            row = connection.execute(
+                """
+                SELECT * FROM wiki_formalization_result
+                WHERE wiki_domain_id = ? AND formal_wiki_revision_id = ?
+                  AND result_status = 'succeeded'
+                ORDER BY rowid DESC LIMIT 1
+                """,
+                (wiki_domain_id, revision_id),
+            ).fetchone()
+        if row is None:
+            return None
+        return WikiFormalizationResult(
+            result_id=str(row["result_id"]),
+            wiki_domain_id=str(row["wiki_domain_id"]),
+            formal_wiki_revision_id=str(row["formal_wiki_revision_id"]),
+            terminus_store_id=str(row["terminus_store_id"]),
+            formal_commit_hash=str(row["formal_commit_hash"]),
+            result_status=str(row["result_status"]),
+        )
 
     def add_audit_event(self, event: WikiAuditEvent) -> None:
         with self.connection() as connection:

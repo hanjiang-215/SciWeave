@@ -157,6 +157,28 @@ class TerminusDBResourceVersionIntegrationTestCase(unittest.TestCase):
             commit_hash=commit,
         )
 
+    def test_exact_snapshot_read_preserves_historical_commit(self) -> None:
+        historical = self.adapter.read_exact_snapshot(
+            self.store, self.database, self.branch, self.historical_commit
+        )
+        head = self.adapter.read_exact_snapshot(
+            self.store, self.database, self.branch, self.head_commit
+        )
+
+        self.assertEqual(historical.status, "confirmed", historical.reason_code)
+        self.assertEqual(head.status, "confirmed", head.reason_code)
+        historical_version = next(
+            document for document in historical.documents
+            if document.get("resource_version_id") == VERSION
+        )
+        head_version = next(
+            document for document in head.documents
+            if document.get("resource_version_id") == VERSION
+        )
+        self.assertEqual(historical_version["license"], ORIGINAL_LICENSE)
+        self.assertEqual(head_version["license"], UPDATED_LICENSE)
+        self.assertNotEqual(historical.content_digest, head.content_digest)
+
     def test_historical_commit_returns_the_pinned_version(self) -> None:
         outcome = self.adapter.read_resource_version(
             self.location(self.historical_commit), VERSION
