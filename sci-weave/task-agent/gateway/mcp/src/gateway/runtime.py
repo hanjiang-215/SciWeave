@@ -51,6 +51,8 @@ class TestRuntimeAdapter:
             raise RuntimeError("test runtime exception")
         if self.outcome == "timeout":
             raise TimeoutError("test runtime timeout")
+        if self.outcome == "waiting":
+            return RuntimeOutcome("waiting", result_summary="test runtime needs an answer")
         if self.outcome == "cancelled":
             return self.cancel(request.execution_id)
         return RuntimeOutcome("failed", error_summary=self.outcome)

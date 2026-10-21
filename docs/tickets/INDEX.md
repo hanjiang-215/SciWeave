@@ -12,15 +12,15 @@
 
 ## 总览
 
-- 工单总数 **66**：open 13 · in_progress 4 · closed 49
+- 工单总数 **66**：open 13 · in_progress 3 · closed 50
 - 类型：epic 18 · task 18 · grilling 12 · feature 11 · chore 3 · prototype 2 · research 2
-- 地图 4 张 · 活跃 17 张 · 跨模块关系 45 条
+- 地图 4 张 · 活跃 16 张 · 跨模块关系 45 条
 
 ## 负责人（活跃工单）
 
 | 负责人 | open | in_progress | 活跃合计 |
 | --- | ---: | ---: | ---: |
-| Frank Qi | 10 | 2 | 12 |
+| Frank Qi | 10 | 1 | 11 |
 | hanjiang | 2 | 2 | 4 |
 | 未分配 | 1 | 0 | 1 |
 
@@ -33,7 +33,7 @@
 | [LLM-Wiki](modules/wiki.md) | Wiki 内容与资源引用、Buffer/Proposal 生命周期、候选治理记录、分支能力验证 | 6 | 0 | 0 |
 | [提案治理与审计](modules/governance.md) | 统一提案语义、候选并发与重放、跨存储一致性、中央协调与审计 | 6 | 0 | 1 |
 | [Agent 与消息协作](modules/agent.md) | 端侧 Agent 角色、消息与交接、套件接入、Task Agent 部署与运行时验证 | 12 | 7 | 0 |
-| [Gateway 与执行运行时](modules/gateway.md) | Gateway MVP、Owner MCP、状态与端口、Worker 调度、fast-agent 适配与验收 | 16 | 6 | 1 |
+| [Gateway 与执行运行时](modules/gateway.md) | Gateway MVP、Owner MCP、状态与端口、Worker 调度、fast-agent 适配与验收 | 16 | 5 | 1 |
 | [工程基础设施](modules/infra.md) | 依赖与工具链、技术栈与目录规范、本地服务与版本固定 | 7 | 1 | 0 |
 
 ## 当前前沿
@@ -49,7 +49,6 @@
 | [ai4-a9zd](../../.tickets/ai4-a9zd.md) 验证 fast-agent-mcp 外部进程与 A2A 启动路径 | Agent 与消息协作 | Frank Qi |
 | [ai4-aaff](../../.tickets/ai4-aaff.md) SciWeave 默认科研示例场景与验证证据 | 产品与需求 | hanjiang |
 | [ai4-csyj](../../.tickets/ai4-csyj.md) TaskNode 交接消息发布与下游触发流程 | Agent 与消息协作 | Frank Qi |
-| [ai4-gqj3](../../.tickets/ai4-gqj3.md) ExecutionRecord 控制、审核与恢复 MCP 工具 | Gateway 与执行运行时 | Frank Qi |
 | [ai4-kpvp](../../.tickets/ai4-kpvp.md) 端侧 Agent 协作与治理分支 | Agent 与消息协作 | Frank Qi |
 | [ai4-te1v](../../.tickets/ai4-te1v.md) 消息队列协作模型分支 | Agent 与消息协作 | Frank Qi |
 | [ai4-ufqu](../../.tickets/ai4-ufqu.md) Task Agent 运行时与套件接入方案 | Agent 与消息协作 | Frank Qi |
@@ -63,7 +62,7 @@
 | 工单 | 模块 | 阻塞于 |
 | --- | --- | --- |
 | [ai4-c2t7](../../.tickets/ai4-c2t7.md) Task Agent 初始化所需的 Mapping 查询契约 | Agent 与消息协作 | [ai4-xup8](../../.tickets/ai4-xup8.md)（open） |
-| [ai4-iyyn](../../.tickets/ai4-iyyn.md) 最小 Task Agent 项目组端到端验收 | Gateway 与执行运行时 | [ai4-gqj3](../../.tickets/ai4-gqj3.md)（in_progress）、[ai4-2h8c](../../.tickets/ai4-2h8c.md)（open） |
+| [ai4-iyyn](../../.tickets/ai4-iyyn.md) 最小 Task Agent 项目组端到端验收 | Gateway 与执行运行时 | [ai4-2h8c](../../.tickets/ai4-2h8c.md)（open） |
 
 ## 待补负责人
 

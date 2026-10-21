@@ -72,12 +72,13 @@ def run_worker_process(database: str, execution_id: str, runtime: RuntimeAdapter
             outcome = RuntimeOutcome("failed", error_summary="timeout")
         except Exception:
             outcome = RuntimeOutcome("failed", error_summary="exception")
-        if outcome.status not in {"awaiting_acceptance", "failed", "cancelled"}:
+        if outcome.status not in {"awaiting_acceptance", "waiting", "failed", "cancelled"}:
             outcome = RuntimeOutcome("failed", error_summary="invalid_runtime_outcome")
 
         finished_at = utc_now()
         event_type = {
             "awaiting_acceptance": "worker_completed",
+            "waiting": "worker_waiting",
             "cancelled": "worker_cancelled",
             "failed": "worker_failed",
         }[outcome.status]
@@ -89,8 +90,10 @@ def run_worker_process(database: str, execution_id: str, runtime: RuntimeAdapter
                 return
             connection.execute(
                 """UPDATE execution_records SET status = ?, result_summary = ?, error_summary = ?,
-                   finished_at = ?, updated_at = ? WHERE execution_id = ?""",
-                (outcome.status, outcome.result_summary, outcome.error_summary, finished_at, finished_at, execution_id),
+                   pending_question = ?, finished_at = ?, updated_at = ? WHERE execution_id = ?""",
+                (outcome.status, outcome.result_summary, outcome.error_summary,
+                 outcome.result_summary if outcome.status == "waiting" else None,
+                 finished_at, finished_at, execution_id),
             )
             connection.execute("DELETE FROM worker_leases WHERE execution_id = ?", (execution_id,))
             _audit(connection, event_type, execution["task_node_id"], execution["command_id"], execution_id, finished_at)
@@ -136,7 +139,7 @@ class GatewayApplication:
         return bool(supplied) and secrets.compare_digest(supplied, self.token)
 
     def submit_owner_command(
-        self, task_node_id: str, command_text: str, idempotency_key: str
+        self, task_node_id: str, command_text: str, idempotency_key: str, resume_of: str | None = None
     ) -> dict[str, Any]:
         command_id = str(uuid.uuid4())
         execution_id = str(uuid.uuid4())
@@ -158,6 +161,17 @@ class GatewayApplication:
                     raise RuntimeError("execution record missing for persisted command")
                 return {**dict(execution), "command_id": existing["command_id"], "duplicate": True}
 
+            resume_execution = None
+            if resume_of is not None:
+                resume_execution = connection.execute(
+                    "SELECT task_node_id, session_id, status FROM execution_records WHERE execution_id = ?",
+                    (resume_of,),
+                ).fetchone()
+                if resume_execution is None:
+                    raise LookupError("resume execution missing")
+                if resume_execution["status"] != "waiting" or resume_execution["task_node_id"] != task_node_id:
+                    raise RuntimeError("invalid_state")
+                session_id = resume_execution["session_id"]
             session = connection.execute(
                 "SELECT session_id FROM task_sessions WHERE task_node_id = ?", (task_node_id,)
             ).fetchone()
@@ -166,7 +180,7 @@ class GatewayApplication:
                     "INSERT INTO task_sessions VALUES (?, ?, ?, ?)",
                     (task_node_id, session_id, now, now),
                 )
-            else:
+            elif resume_execution is None:
                 session_id = session["session_id"]
             connection.execute(
                 "INSERT OR IGNORE INTO callers VALUES (?, ?)", (self.caller_id, now)
@@ -177,9 +191,9 @@ class GatewayApplication:
             )
             connection.execute(
                 """INSERT INTO execution_records
-                   (execution_id, command_id, task_node_id, session_id, status, created_at, updated_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                (execution_id, command_id, task_node_id, session_id, "queued", now, now),
+                   (execution_id, command_id, task_node_id, session_id, status, resume_of, created_at, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (execution_id, command_id, task_node_id, session_id, "queued", resume_of, now, now),
             )
             self._audit(connection, "owner_command_received", task_node_id, command_id, execution_id, now)
             self._audit(connection, "execution_queued", task_node_id, command_id, execution_id, now)
@@ -248,6 +262,7 @@ class GatewayApplication:
         if decision not in status_by_decision:
             raise ValueError("decision")
         now = utc_now()
+        successor_id: str | None = None
         with self.store.transaction() as connection:
             previous = connection.execute(
                 "SELECT execution_id, resulting_status FROM review_decisions WHERE idempotency_key = ?",
@@ -260,7 +275,9 @@ class GatewayApplication:
                     "duplicate": True,
                 }
             execution = connection.execute(
-                "SELECT task_node_id, command_id, status FROM execution_records WHERE execution_id = ?",
+                """SELECT e.task_node_id, e.command_id, e.session_id, e.status, c.command_text
+                   FROM execution_records e JOIN owner_commands c ON c.command_id = e.command_id
+                   WHERE e.execution_id = ?""",
                 (execution_id,),
             ).fetchone()
             if execution is None:
@@ -272,16 +289,36 @@ class GatewayApplication:
                 "UPDATE execution_records SET status = ?, finished_at = ?, updated_at = ? WHERE execution_id = ?",
                 (resulting_status, now, now, execution_id),
             )
+            if decision == "request_revision":
+                successor_id = str(uuid.uuid4())
+                successor_command_id = str(uuid.uuid4())
+                connection.execute(
+                    "INSERT INTO owner_commands VALUES (?, ?, ?, ?, ?, ?)",
+                    (successor_command_id, execution["task_node_id"], self.caller_id,
+                     f"revision:{idempotency_key}", execution["command_text"], now),
+                )
+                connection.execute(
+                    """INSERT INTO execution_records
+                       (execution_id, command_id, task_node_id, session_id, status, revision_of, created_at, updated_at)
+                       VALUES (?, ?, ?, ?, 'queued', ?, ?, ?)""",
+                    (successor_id, successor_command_id, execution["task_node_id"], execution["session_id"], execution_id, now, now),
+                )
+                self._audit(connection, "execution_revision_queued", execution["task_node_id"], successor_command_id, successor_id, now)
             connection.execute(
                 "INSERT INTO review_decisions VALUES (?, ?, ?, ?, ?, ?)",
                 (idempotency_key, execution_id, decision, reason, resulting_status, now),
             )
             self._audit(connection, "execution_reviewed", execution["task_node_id"], execution["command_id"], execution_id, now)
-            return {
-                "execution_id": execution_id,
-                "execution_status": resulting_status,
-                "duplicate": False,
-            }
+        if successor_id is not None and self.test_runtime_enabled:
+            self._schedule_test_worker(successor_id)
+        result: dict[str, Any] = {
+            "execution_id": execution_id,
+            "execution_status": resulting_status,
+            "duplicate": False,
+        }
+        if successor_id is not None:
+            result["successor_execution_id"] = successor_id
+        return result
 
     def health(self) -> dict[str, Any]:
         storage = "ready" if self.store.health() else "unavailable"
@@ -399,10 +436,14 @@ def make_handler(app: GatewayApplication):
                 return self._protocol_error(request_id, -32602, "invalid params")
             try:
                 if name == "submit_owner_command":
+                    resume_of = arguments.get("execution_id")
+                    if resume_of is not None and (not isinstance(resume_of, str) or not resume_of.strip()):
+                        raise ValueError("execution_id")
                     result = app.submit_owner_command(
                         self._required_string(arguments, "task_node_id"),
                         self._required_string(arguments, "command"),
                         self._required_string(arguments, "idempotency_key"),
+                        resume_of.strip() if resume_of else None,
                     )
                     return self._tool_result(request_id, result)
                 if name == "query_execution":
@@ -435,6 +476,8 @@ def make_handler(app: GatewayApplication):
                 return self._protocol_error(request_id, -32602, "unknown tool")
             except ValueError:
                 return self._protocol_error(request_id, -32602, "invalid params")
+            except LookupError:
+                return self._tool_error(request_id, "not_found", "execution was not found")
             except RuntimeError as error:
                 if str(error) == "invalid_state":
                     return self._tool_error(request_id, "invalid_state", "execution cannot be reviewed in its current state")

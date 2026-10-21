@@ -287,6 +287,67 @@ class GatewayMcpTests(unittest.TestCase):
             {"execution_id": execution_id, "execution_status": "accepted", "duplicate": True},
         )
 
+    def test_review_rejection_and_human_takeover_are_terminal(self) -> None:
+        for decision, expected_status in (("reject", "rejected"), ("request_human_takeover", "human_takeover")):
+            with self.subTest(decision=decision):
+                self.app.enable_test_runtime()
+                execution_id = self.submit(f"node-{decision}", f"{decision}-command")
+                self.wait_for_execution(execution_id, "awaiting_acceptance")
+                _, reviewed = self.mcp_call(
+                    "tools/call",
+                    {"name": "review_execution", "arguments": {
+                        "execution_id": execution_id, "decision": decision, "reason": "reviewed",
+                        "idempotency_key": f"{decision}-review",
+                    }},
+                )
+                self.assertEqual(self.tool_result(reviewed)["execution_status"], expected_status)
+
+    def test_request_revision_preserves_old_execution_and_creates_successor(self) -> None:
+        self.app.enable_test_runtime()
+        execution_id = self.submit("node-to-revise", "revision-command")
+        original = self.wait_for_execution(execution_id, "awaiting_acceptance")
+        _, reviewed = self.mcp_call(
+            "tools/call",
+            {"name": "review_execution", "arguments": {
+                "execution_id": execution_id, "decision": "request_revision", "reason": "add evidence",
+                "idempotency_key": "request-revision-key",
+            }},
+        )
+        result = self.tool_result(reviewed)
+        self.assertEqual(result["execution_status"], "needs_revision")
+        successor_id = result["successor_execution_id"]
+        _, old_query = self.mcp_call(
+            "tools/call", {"name": "query_execution", "arguments": {"execution_id": execution_id}}
+        )
+        self.assertEqual(self.tool_result(old_query)["execution_status"], "needs_revision")
+        successor = self.wait_for_execution(successor_id, "awaiting_acceptance")
+        self.assertEqual(successor["revision_of"], original["execution_id"])
+        self.assertEqual(successor["session_id"], original["session_id"])
+
+        self.app.enable_test_runtime(duration_seconds=0.2)
+        first = self.submit("shared-node", "first")
+        self.wait_for_execution(first, "running")
+        second = self.submit("shared-node", "second")
+        time.sleep(0.05)
+        _, response = self.mcp_call(
+            "tools/call", {"name": "query_execution", "arguments": {"execution_id": second}}
+        )
+        self.assertEqual(self.tool_result(response)["execution_status"], "queued")
+        self.wait_for_execution(first, "awaiting_acceptance")
+        self.wait_for_execution(second, "awaiting_acceptance")
+
+    def test_review_rejects_invalid_state_with_stable_error(self) -> None:
+        execution_id = self.submit("node-not-ready", "not-ready-command")
+        _, response = self.mcp_call(
+            "tools/call",
+            {"name": "review_execution", "arguments": {
+                "execution_id": execution_id, "decision": "accept", "reason": "premature",
+                "idempotency_key": "not-ready-review",
+            }},
+        )
+        self.assertTrue(response["result"]["isError"])
+        self.assertEqual(self.tool_result(response)["error"]["code"], "invalid_state")
+
     def test_same_task_node_waits_for_existing_worker_lease(self) -> None:
         self.app.enable_test_runtime(duration_seconds=0.2)
         first = self.submit("shared-node", "first")
@@ -299,6 +360,25 @@ class GatewayMcpTests(unittest.TestCase):
         self.assertEqual(self.tool_result(response)["execution_status"], "queued")
         self.wait_for_execution(first, "awaiting_acceptance")
         self.wait_for_execution(second, "awaiting_acceptance")
+
+    def test_waiting_answer_creates_a_resume_execution_with_same_session(self) -> None:
+        self.app.enable_test_runtime("waiting")
+        waiting_id = self.submit("node-to-resume", "waiting-command")
+        waiting = self.wait_for_execution(waiting_id, "waiting")
+        self.assertEqual(waiting["pending_question"], "test runtime needs an answer")
+
+        self.app.enable_test_runtime()
+        _, answered = self.mcp_call(
+            "tools/call",
+            {"name": "submit_owner_command", "arguments": {
+                "task_node_id": "node-to-resume", "command": "the answer is 42",
+                "idempotency_key": "answer-command", "execution_id": waiting_id,
+            }},
+        )
+        resumed_id = self.tool_result(answered)["execution_id"]
+        resumed = self.wait_for_execution(resumed_id, "awaiting_acceptance")
+        self.assertEqual(resumed["resume_of"], waiting_id)
+        self.assertEqual(resumed["session_id"], waiting["session_id"])
 
     def test_different_task_nodes_receive_independent_worker_leases(self) -> None:
         self.app.enable_test_runtime(duration_seconds=0.2)
