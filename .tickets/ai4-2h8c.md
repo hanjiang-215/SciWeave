@@ -1,6 +1,6 @@
 ---
 id: ai4-2h8c
-status: open
+status: in_progress
 deps: [ai4-m96w]
 links: []
 created: 2026-10-20T07:46:47Z
@@ -30,3 +30,9 @@ Worker 通过实际 fast-agent Runtime Adapter 和不需真实模型凭据的 pa
 - [ ] 默认关闭自动 compaction，Worker 每次 loop 后退出并保留受配置控制的会话文件。
 - [ ] fast-agent 故障、会话恢复失败和持久目录不可用均形成可查询 failed 执行和无敏感信息审计。
 - [ ] 集成测试不使用或保存真实模型凭据。
+
+## Notes
+
+**2026-10-21T02:46:38Z**
+
+2026-10-21：已确认并声明 fast-agent-mcp 运行时依赖。来源：PyPI fast-agent-mcp 0.10.46；用途：Worker 的实际 fast-agent Runtime Adapter 与无真实模型凭据的 passthrough loop；版本约束：>=0.10.46,<0.11；许可证：Apache-2.0。该包要求 Python >=3.12,<3.16，故项目组三个 Python 子项目的 requires-python 已同步收紧。验证：cd sci-weave/task-agent && uv sync；uv run --package sciweave-task-agent-worker python -c "from fast_agent.core.fastagent import FastAgent; print(FastAgent.__name__)"（输出 FastAgent）；uv run --package sciweave-task-agent-gateway-mcp python -m unittest discover -s gateway/mcp/tests -v（17 passed）。
