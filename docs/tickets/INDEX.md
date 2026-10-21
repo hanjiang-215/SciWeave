@@ -12,7 +12,7 @@
 
 ## 总览
 
-- 工单总数 **66**：open 12 · in_progress 3 · closed 51
+- 工单总数 **66**：open 11 · in_progress 4 · closed 51
 - 类型：epic 18 · task 18 · grilling 12 · feature 11 · chore 3 · prototype 2 · research 2
 - 地图 4 张 · 活跃 15 张 · 跨模块关系 45 条
 
@@ -20,7 +20,7 @@
 
 | 负责人 | open | in_progress | 活跃合计 |
 | --- | ---: | ---: | ---: |
-| Frank Qi | 9 | 1 | 10 |
+| Frank Qi | 8 | 2 | 10 |
 | hanjiang | 2 | 2 | 4 |
 | 未分配 | 1 | 0 | 1 |
 
