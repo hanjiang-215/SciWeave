@@ -7,10 +7,15 @@ name = "sciweave-task-agent-gateway-mcp"
 version = "0.1.0"
 description = "SciWeave Task Agent Gateway MCP entry"
 requires-python = ">=3.12,<3.16"
-dependencies = []
+dependencies = [
+    "sciweave-task-agent-worker",
+]
 
 [project.scripts]
 sciweave-task-agent-gateway-mcp = "gateway.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.uv.sources]
+sciweave-task-agent-worker = { workspace = true, editable = true }

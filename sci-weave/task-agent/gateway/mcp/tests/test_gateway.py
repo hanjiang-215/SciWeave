@@ -389,6 +389,12 @@ class GatewayMcpTests(unittest.TestCase):
         self.wait_for_execution(first, "awaiting_acceptance")
         self.wait_for_execution(second, "awaiting_acceptance")
 
+    def test_fast_agent_passthrough_runtime_completes_without_provider_credentials(self) -> None:
+        self.app.enable_fast_agent_passthrough_runtime(str(Path(self.temp.name) / "worker-home"))
+        execution_id = self.submit("fast-agent-node", "fast-agent-command")
+        execution = self.wait_for_execution(execution_id, "awaiting_acceptance")
+        self.assertEqual(execution["result_summary"], "fast-agent passthrough completed")
+
     def test_test_runtime_completes_queued_execution_through_a_short_lived_worker(self) -> None:
         self.app.enable_test_runtime()
         status, submitted = self.mcp_call(
