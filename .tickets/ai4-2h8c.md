@@ -1,6 +1,6 @@
 ---
 id: ai4-2h8c
-status: in_progress
+status: closed
 deps: [ai4-m96w]
 links: []
 created: 2026-10-20T07:46:47Z
@@ -40,3 +40,7 @@ Worker 通过实际 fast-agent Runtime Adapter 和不需真实模型凭据的 pa
 **2026-10-21T04:03:24Z**
 
 2026-10-21：为 DeepSeek 官方 API 的本地人工验证增加 Worker 专属配置边界。新增 worker/.env.example：DEEPSEEK_API_KEY、DEEPSEEK_BASE_URL、SCIWEAVE_WORKER_MODEL、SCIWEAVE_WORKER_HOME、SCIWEAVE_WORKER_SESSION_DIR、SCIWEAVE_WORKER_CONNECTION_SCOPE；真实 worker/.env 不提交。源码仅接收 uv --env-file 注入的环境变量，不自行读取 .env，且不会在结果或日志输出密钥。验证：占位 API Key 被 Worker CLI 拒绝；临时非敏感配置通过 uv run --env-file <temp> --package sciweave-task-agent-worker sciweave-task-agent-worker；Gateway MCP 20 passed、源码编译和 git diff --check 通过。后续由开发者填写本地 worker/.env 后，接入真实 DeepSeek loop。
+
+**2026-10-21T05:56:39Z**
+
+2026-10-21：完成实际 DeepSeek fast-agent Runtime Adapter。Worker 从未提交 worker/.env 注入 DeepSeek 官方 API 配置，以 openai.deepseek-chat 接入 fast-agent；每个 Gateway Worker 子进程执行一次真实 Agent loop，Owner 命令作为 prompt，结果仅以不含凭据的 500 字符摘要回传。Worker 使用 fast-agent 原生 SessionManager 的 create_session_with_id/load+hydrate 接入 Gateway 稳定 session_id，固定持久 home 与 connection scope；自动 compaction 通过 Worker home 下显式 fast-agent.yaml 的 compaction.auto=false 关闭。真实 MCP→独立 Worker 子进程→DeepSeek 验证：提交 Reply exactly: SCIWEAVE_GATEWAY_OK 后查询得到 awaiting_acceptance 和对应摘要；原生 session 恢复验证得到 RESUME_NATIVE_OK。自动化验证不读取真实凭据：Gateway MCP 20 passed；python3 -m compileall -q worker/src gateway/mcp/src；git diff --check。worker/.env、var 会话与锁已由 .gitignore 忽略且不提交。

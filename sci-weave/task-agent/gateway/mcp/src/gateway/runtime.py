@@ -14,6 +14,7 @@ class RuntimeRequest:
     execution_id: str
     task_node_id: str
     session_id: str
+    command_text: str
 
 
 @dataclass(frozen=True)

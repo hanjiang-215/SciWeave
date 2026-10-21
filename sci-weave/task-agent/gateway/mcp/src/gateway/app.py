@@ -13,7 +13,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 
 from task_agent_worker.config import WorkerSettings
-from task_agent_worker.runtime import FastAgentPassthroughRuntime
+from task_agent_worker.runtime import FastAgentDeepSeekRuntime, FastAgentPassthroughRuntime
 
 from .runtime import RuntimeAdapter, RuntimeOutcome, RuntimeRequest, TestRuntimeAdapter
 from .store import ExecutionStore, utc_now
@@ -47,7 +47,8 @@ def run_worker_process(database: str, execution_id: str, runtime: RuntimeAdapter
         now = utc_now()
         with store.transaction() as connection:
             execution = connection.execute(
-                "SELECT execution_id, task_node_id, session_id, command_id, resume_of FROM execution_records "
+                "SELECT e.execution_id, e.task_node_id, e.session_id, e.command_id, e.resume_of, c.command_text "
+                "FROM execution_records e JOIN owner_commands c ON c.command_id = e.command_id "
                 "WHERE execution_id = ? AND status = 'queued'",
                 (execution_id,),
             ).fetchone()
@@ -68,7 +69,12 @@ def run_worker_process(database: str, execution_id: str, runtime: RuntimeAdapter
             _audit(connection, "worker_lease_acquired", execution["task_node_id"], execution["command_id"], execution_id, now)
             _audit(connection, "worker_started", execution["task_node_id"], execution["command_id"], execution_id, now)
 
-        request = RuntimeRequest(execution_id, execution["task_node_id"], execution["session_id"])
+        request = RuntimeRequest(
+            execution_id,
+            execution["task_node_id"],
+            execution["session_id"],
+            execution["command_text"],
+        )
         try:
             outcome = runtime.resume(request) if execution["resume_of"] else runtime.run(request)
         except TimeoutError:
@@ -137,6 +143,10 @@ class GatewayApplication:
     def enable_fast_agent_passthrough_runtime(self, home: str, session_dir: str = "sessions") -> None:
         """Use the credential-free fast-agent runtime for local integration validation."""
         self.set_runtime(FastAgentPassthroughRuntime(home, session_dir=session_dir))
+
+    def enable_fast_agent_deepseek_runtime(self, settings: WorkerSettings) -> None:
+        """Use the configured DeepSeek API for one real fast-agent loop per Worker."""
+        self.set_runtime(FastAgentDeepSeekRuntime(settings))
 
     def set_runtime(self, runtime: RuntimeAdapter) -> None:
         self.runtime = runtime
