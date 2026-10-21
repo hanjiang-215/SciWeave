@@ -1,0 +1,53 @@
+---
+id: ai4-5z9e
+status: open
+deps: [ai4-he04]
+links: [ai4-he04]
+created: 2026-10-21T12:14:41Z
+type: feature
+priority: 1
+assignee: Frank Qi
+tags: [centre-control, centre-agents, candidate-prereview]
+---
+# 中央 Agent 候选预审检查项与失败处置
+
+定义中央 Agent 对有候选分支之后做哪些检查，以及每类失败如何处置：格式、对象引用、权限范围、依赖关系、基准版本、冲突和影响范围。
+
+## Design
+
+修订（2026-10-21）：本票原写「对已接纳提交的预审」，把预审对象当作草稿。现改为作用在**候选分支**上：输入是精确 candidate head、base formal revision 和候选内容，不是草稿箱里的草稿。
+
+检查项：
+
+| 检查 | 输入 | 判定 |
+| --- | --- | --- |
+| 格式与结构 | 候选内容按领域 schema 校验 | 不符合领域模型即失败 |
+| 对象引用 | 候选内引用是否指向存在且未被废弃的对象 | 目标缺失、跨领域或指向其他候选即失败 |
+| 权限范围 | 提交者、审核人、目标单元的操作权限 | 越权即失败，不由中央 Agent 补授权 |
+| 依赖关系 | 候选引入或修改的 Dependency Edge | 自环、blocking 环、端点版本不存在即失败 |
+| 基准版本 | `base_formal_revision_id` 与当前正式版本 | 不相等即 `stale` |
+| 冲突 | 与正式版本或其他活动候选在同一逻辑对象上的改动 | 冲突即 `conflict`，须新候选解决 |
+| 影响范围 | 从不可调度变可调度、受影响资源引用与执行记录 | 无法说明影响即不得进入送审 |
+
+失败处置映射到 Proposal 状态：结构或权限失败为 `abandoned`；基准过期为 `stale`；同对象冲突为 `conflict`。三者都必须由提交方生成新的候选，不改写原候选。
+
+约束：
+
+- 预审不写正式版本，也不创建 Merge Request Buffer。
+- 预审通过只表示候选可以送 Project Owner 选择，不代表批准。
+- 结论经留痕工具落盘，不由中央 Agent 自带私有审计通道。
+- 中央 Agent 不审核 Task Agent 设计稿；设计稿的一审是 Project Owner，在草稿箱内完成。
+
+## Acceptance Criteria
+
+- 每项检查有明确输入、判定与稳定失败码
+- 每种失败对应确定的 Proposal 状态，且不产生新的正式版本
+- 基准变化或候选 head 变化使既有预审结论失效
+- 预审不越过 Project Owner 做批准
+- 预审结论经留痕工具记录，重复预审同一对象结论可复现
+
+## Notes
+
+**2026-10-21 修订记录**
+
+原题「中央 Agent 预审检查项与失败处置」的正文把预审对象写成「已接纳提交」。按 2026-10-21 讨论，一审在草稿箱、二审初步审核在候选分支，本票改为后者。冲突记录见 `docs/data-flow/draft-buffer.md` 第 8 节。

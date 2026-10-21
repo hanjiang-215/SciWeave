@@ -1,0 +1,3 @@
+# ai4-5z9e 的索引归属与简介（人工维护）
+module = "governance"
+summary = "定义中央 Agent 对候选分支的七项检查与失败到 Proposal 状态的映射，不越权批准"

@@ -1,0 +1,3 @@
+# ai4-s12u 的索引归属与简介（人工维护）
+module = "governance"
+summary = "按 Project Owner 已批准的声明式设计写入 Agent 身份与绑定，只写绑定不启动 Worker"
