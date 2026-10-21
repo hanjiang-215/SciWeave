@@ -2,7 +2,7 @@
 id: ai4-oebi
 status: open
 deps: [ai4-5z9e]
-links: []
+links: [ai4-5z9e, ai4-8dgd]
 created: 2026-10-21T12:14:51Z
 type: feature
 priority: 1

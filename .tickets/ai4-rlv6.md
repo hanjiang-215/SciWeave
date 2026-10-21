@@ -1,7 +1,7 @@
 ---
 id: ai4-rlv6
 status: open
-deps: [ai4-he04, ai4-5z9e, ai4-oebi]
+deps: [ai4-he04, ai4-5z9e, ai4-oebi, ai4-oz3s, ai4-8dgd, ai4-a2ba, ai4-t2wc]
 links: [ai4-upsm]
 created: 2026-10-21T12:16:16Z
 type: feature

@@ -35,8 +35,7 @@ tags: [wayfinder:map, centre-agents, governance]
 
 ## Decisions so far
 
-- [中央 Agent 候选预审入口与结论回写](ai4-he04.md)：读领域管理 MCP 中已存在的候选分支，不读草稿箱；预审结论写回治理记录并留痕。
-- [中央 Agent 候选预审检查项与失败处置](ai4-5z9e.md)：七项检查及其失败映射到 Proposal 状态；不写正式版本，不越过 Project Owner 批准。
+<!-- 已关闭的子票在这里各占一行；未关闭的子票通过查询获得，不在此列出 -->
 
 ## Not yet specified
 

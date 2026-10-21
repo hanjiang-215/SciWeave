@@ -1,8 +1,8 @@
 ---
 id: ai4-a2ba
 status: open
-deps: []
-links: [ai4-te1v, ai4-dhpv, ai4-he04]
+deps: [ai4-oz3s]
+links: [ai4-te1v, ai4-dhpv, ai4-he04, ai4-5z9e]
 created: 2026-10-21T15:37:05Z
 type: feature
 priority: 1

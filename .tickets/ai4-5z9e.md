@@ -2,7 +2,7 @@
 id: ai4-5z9e
 status: open
 deps: [ai4-he04]
-links: [ai4-he04]
+links: [ai4-he04, ai4-eex0, ai4-a2ba, ai4-oz3s]
 created: 2026-10-21T12:14:41Z
 type: feature
 priority: 1

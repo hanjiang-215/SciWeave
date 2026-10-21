@@ -1,8 +1,8 @@
 ---
 id: ai4-t2wc
 status: open
-deps: []
-links: [ai4-ujvn, ai4-oz3s]
+deps: [ai4-oz3s]
+links: [ai4-ujvn, ai4-oz3s, ai4-rlv6]
 created: 2026-10-21T15:37:31Z
 type: feature
 priority: 1
