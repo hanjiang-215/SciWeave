@@ -31,9 +31,10 @@ class FastAgentPassthroughRuntime:
     model invocation, so integration tests never require or retain provider credentials.
     """
 
-    def __init__(self, home: str | Path, connection_scope: str = "task-agent") -> None:
+    def __init__(self, home: str | Path, connection_scope: str = "task-agent", session_dir: str = "sessions") -> None:
         self.home = Path(home)
         self.connection_scope = connection_scope
+        self.session_dir = session_dir
 
     def run(self, request: RuntimeRequest) -> WorkerOutcome:
         try:
@@ -44,7 +45,7 @@ class FastAgentPassthroughRuntime:
                 parse_cli_args=False,
                 quiet=True,
             )
-            history_dir = self.home / "sessions" / request.task_node_id
+            history_dir = self.home / self.session_dir / request.task_node_id
             history_dir.mkdir(parents=True, exist_ok=True)
             history_path = history_dir / "history.json"
             history = self._read_history(history_path, request.session_id)

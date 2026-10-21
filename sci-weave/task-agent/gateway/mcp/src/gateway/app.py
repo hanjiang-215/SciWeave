@@ -12,6 +12,7 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 
+from task_agent_worker.config import WorkerSettings
 from task_agent_worker.runtime import FastAgentPassthroughRuntime
 
 from .runtime import RuntimeAdapter, RuntimeOutcome, RuntimeRequest, TestRuntimeAdapter
@@ -133,9 +134,9 @@ class GatewayApplication:
         self.test_runtime_outcome = outcome
         self.runtime = TestRuntimeAdapter(outcome, duration_seconds)
 
-    def enable_fast_agent_passthrough_runtime(self, home: str) -> None:
+    def enable_fast_agent_passthrough_runtime(self, home: str, session_dir: str = "sessions") -> None:
         """Use the credential-free fast-agent runtime for local integration validation."""
-        self.set_runtime(FastAgentPassthroughRuntime(home))
+        self.set_runtime(FastAgentPassthroughRuntime(home, session_dir=session_dir))
 
     def set_runtime(self, runtime: RuntimeAdapter) -> None:
         self.runtime = runtime

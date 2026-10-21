@@ -21,8 +21,9 @@ def main() -> None:
         required_environment("SCIWEAVE_GATEWAY_CALLER_ID"),
     )
     worker_home = os.environ.get("SCIWEAVE_WORKER_HOME")
+    session_dir = os.environ.get("SCIWEAVE_WORKER_SESSION_DIR", "sessions")
     if worker_home:
-        app.enable_fast_agent_passthrough_runtime(worker_home)
+        app.enable_fast_agent_passthrough_runtime(worker_home, session_dir)
     serve(
         app,
         required_environment("SCIWEAVE_GATEWAY_HOST"),
