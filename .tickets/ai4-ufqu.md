@@ -1,6 +1,6 @@
 ---
 id: ai4-ufqu
-status: in_progress
+status: closed
 deps: []
 links: [ai4-yyy9, ai4-xup8, ai4-v19u, ai4-353s]
 created: 2026-10-19T01:28:09Z
@@ -70,3 +70,23 @@ Q8-Q10 修正：A2A 可返回 Task Agent 最终文字回复；fast-agent A2A 已
 - 上游 TaskNode 交接仍走消息队列，与本次修订无关。
 
 详见 [Owner 通道与上游交接队列物理隔离](ai4-353s.md) 的决策修订记录。
+
+**2026-10-21T14:35:45Z**
+
+2026-10-21T22:41:00Z
+
+## Resolution
+
+本票废弃，关闭。
+
+理由：Notes 里累积的十余条结论互相覆盖，且大部分已被后续讨论推翻——A2A Owner 通道、邮件通知、Buffer + Codex Hook 轮询、Owner 消息与上游消息的双通道排队、平台管理上下文拼装。继续保留一张「方案票」而正文多数失效，会让人按错误前提开工。
+
+已被确认仍然有效的部分，已迁移到以下票，不再由本票承载：
+
+- 运行时选型 fast-agent-mcp、Harness API 的可行性：原 Notes 中的源码调研与 `docs/端侧Agent运行时调研.md` 仍然有效，由「Task Agent 改由研究员端侧自持」引用。
+- 会话历史的取舍：由「fast-agent-mcp 历史保存、恢复与上下文隔离验证」承载。
+- 消息驱动与通道分工：由「Agent 以消息驱动，Gateway 的 MCP 只负责返修」承载。
+- 部署位置与运行时归属：由「Task Agent 改由研究员端侧自持」承载。
+- 套件接入边界：由「Agent 套件接入与协作边界分支」承载。
+
+本票正文与 Notes 保留原文，仅作历史记录，不再作为任何实现的上游输入。

@@ -16,7 +16,9 @@ tags: [wayfinder:map]
 ## Design
 
 ## Destination
-形成可交给代码实现的最小 Gateway 与 `fast-agent-mcp` 规格：Gateway 能接收一个受控 Owner 请求，管理 Task Session、Execution Record 和 AuditEvent，按需启动短生命周期 Worker，通过运行时适配层完成一次 Agent loop，并支持查询、失败、取消和固定会话恢复。
+形成可交给代码实现的最小 Gateway 与 `fast-agent-mcp` 规格：Gateway 能接收一个人工请求，管理 Task Session、Execution Record 和 AuditEvent，按需启动短生命周期 Worker，通过运行时适配层完成一次 Agent loop，并支持查询、失败、取消和固定会话恢复。
+
+> 修订（2026-10-21）：「受控 Owner 请求」改为「人工请求」，因为任务下发已改走消息队列，Gateway 的 MCP 只承担返修与处置。Worker 由 Gateway 启动这一核心不变；Gateway 所在位置不再限定为中央服务器——task-agent 的 Gateway 部署在任务负责人处，「服务端」在本文档中泛指 Gateway 所在的进程侧。依据「Agent 以消息驱动，Gateway 的 MCP 只负责返修」与「Task Agent 改由研究员端侧自持」。
 
 ## Notes
 承接既有端侧 Agent 规格；优先跑通最小闭环，暂不接入 Research Mapping、领域 MCP、Redpanda 上游交接队列、Agent Kit manifest 或 ZIP 部署。已有 fast-agent-mcp、TaskNode 模板、Owner 通道、Worker 生命周期和审计边界作为输入。外部运行时通过适配器接入，Gateway 核心不复制领域治理逻辑。
@@ -25,8 +27,14 @@ tags: [wayfinder:map]
 
 - [Gateway MVP 状态模型与端口边界](ai4-gq0k.md)：首版采用 MCP（Streamable HTTP）作为 Owner 入口、SQLite 持久化、本地进程调度和 fast-agent Runtime Adapter；固定 session_id、持久 home、connection scope、session history，默认关闭 compaction；不接入 EventBus、Redpanda、领域 MCP 或 A2A Human Input。技术规格见 [Gateway MVP 与最小 fast-agent 技术规格](ai4-z3z4.md)。
 - [Owner 通道与上游交接队列物理隔离](ai4-353s.md)：Owner 的 Codex 通过 MCP 调用常驻 Gateway；上游 TaskNode 交接通过消息队列和上游收集器。A2A 不用于 Owner 通道，因为主流 harness 均未内置 A2A 客户端。
+
+  > 修订（2026-10-21）：Owner 通道的用途收窄为返修与处置，任务下发改走消息队列；Gateway 位置由中央改为任务负责人处。见「Agent 以消息驱动，Gateway 的 MCP 只负责返修」与「Task Agent 改由研究员端侧自持」。
 - [执行与接纳状态机融合及 Owner 审核工具边界](ai4-yvh2.md)：Gateway 归入 `sci-weave/task-agent` 项目组；同一 TaskNode 串行、跨 TaskNode 可并发。MCP 与上游交接汇入 Gateway，使用 `blocked`、`queued`、`running`、`waiting`、`awaiting_acceptance` 等状态及 `review_execution` 完成可审计审核；接纳不自动创建领域草稿。
+
+  > 修订（2026-10-21）：状态机、串行化与审核工具边界仍然成立；「MCP 与上游交接汇入 Gateway」改为「上游交接经消息队列汇入，MCP 只承担返修与处置」。
 - [Task Agent 项目组三角色部署与双入口调度边界](ai4-6fb7.md)：`mcp`、`ingest` 与短生命周期 `worker` 构成 Task Agent 项目组；两种入口通过共享 SQLite 持久化包、原子执行租约和稳定排序串行调度，健康按组件实际可用性聚合。Mapping 初始化查询另由受阻塞子票收敛。
+
+  > 修订（2026-10-21）：三角色构成、共享 SQLite、原子租约与稳定排序都仍然成立；变化的是部署位置——整个项目组由中央移到任务负责人处，`ingest` 变成端侧主动连接中央队列的订阅器。
 - [Gateway MCP 对外协议版本、鉴权与错误契约](ai4-zfz9.md)：最小 MCP v1 使用本地 Bearer 令牌与配置 Caller，区分 HTTP/JSON-RPC 与工具业务错误；OwnerCommand 仅留痕，ExecutionRecord 是唯一工作流状态机，领域 Buffer 保持开放且不自动创建。
 
 ## Not yet specified

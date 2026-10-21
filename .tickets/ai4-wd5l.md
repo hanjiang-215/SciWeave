@@ -45,3 +45,15 @@ Decision captured（2026-10-19）：Owner 的 accept 在端侧 SQLite Buffer 的
 **2026-10-19T04:08:12Z**
 
 Resolution（2026-10-19）：端侧审核协作流程已收束。1）Gateway 只在所有必需上游 TaskNode 已完成 PO 批准的正式发布、且正式化流程已沿 Dependency Edge 发布正式交接消息后，收集其正式版本引用并启动下游 Task Agent 首轮；候选或仅 Owner 接纳但未正式化的内容不得触发下游。2）每个 TaskNode 固定复用受 Gateway 控制的 fast-agent-mcp Harness 会话，Gateway 串行化调用。3）每轮 Worker 创建不可变 Execution Record 与 Execution Submission；Submission 可引用 RawArtifact 名片和候选领域草稿，不直接改正式领域事实。4）SQLite 为端侧 Buffer 权威状态，Owner 在 Codex 中经 MCP 作 accept/request_revision/reject/request_human_takeover；通知仅为 outbox 提醒，非审核事实。5）request_revision 生成 Owner Command 并恢复同一会话；reject 不自动重试；人工接管停止调度。6）accept 在 SQLite 事务中写审核决定、AuditEvent 及领域草稿创建 outbox；领域适配器以 submission_id + domain 幂等创建独立 Mapping/Wiki 草稿，成功后通知 Central Agent。Central Agent 的冲突/混合/送 PO 及 PO 正式发布不在本票实现范围；PO 正式发布后才结束任务并原子纳入下游交接。7）PDF 等本体不存 Wiki；Task Agent 只登记带定位、来源、哈希、媒体类型和访问状态的 RawArtifact 名片，候选 Wiki 内容在 Owner 接纳后走 Wiki 治理。
+
+**2026-10-21T13:10:32Z**
+
+2026-10-21T21:15:00Z
+
+修订说明，依据「Task Agent 改由研究员端侧自持」(ai4-we38)。本票已关闭，正文保留，下列条目不再按原样成立：
+
+- 原 Resolution 第 6 条「accept 在 SQLite 事务中写审核决定、AuditEvent 及领域草稿创建 outbox；领域适配器以 submission_id + domain 幂等创建独立 Mapping/Wiki 草稿」：端侧自持后，agent 直接把结果作为草稿提交到中央草稿箱的领域命名空间，不再经 Execution Submission 的 outbox 二次创建草稿。一审仍由人完成，之后进入候选。
+- 原 Resolution 第 1 条「Gateway 收集上游正式版本引用并启动下游 Task Agent 首轮」：Gateway 不再位于中央，改为端侧常驻订阅器主动连接中央队列，按订阅的 TaskNode 接收上游交接。
+- 原 Notes 中「SQLite 为端侧 Buffer 权威状态」：端侧的审核协作记录可以保留在研究员自己机器上，但它不构成中央事实；进入中央的只有草稿。
+
+仍然成立的部分：Owner 在 Codex 中经 MCP 作 accept/request_revision/reject/request_human_takeover；request_revision 恢复同一会话；reject 不自动重试；RawArtifact 名片与资源本体不入 Wiki；候选或仅 Owner 接纳但未正式化的内容不得触发下游。

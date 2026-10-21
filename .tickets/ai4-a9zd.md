@@ -1,6 +1,6 @@
 ---
 id: ai4-a9zd
-status: open
+status: closed
 deps: []
 links: []
 created: 2026-10-19T02:49:23Z
@@ -35,3 +35,17 @@ tags: [wayfinder:prototype]
 2026-10-19 A2A 输入/恢复能力验证：在 drafts/osp 使用 `uv run --frozen pytest -q tests/integration/a2a/test_fast_agent_a2a_server.py -k "input_required_task_for_follow_up or cancel_task_cancels_running_agent or research_intake_can_refine_or_start_task"`，结果为 3 passed。fast-agent-mcp 0.10.46 的 A2A 服务端会把 Agent 返回的 `LlmStopReason.PAUSE` 映射为 A2A `TASK_STATE_INPUT_REQUIRED`；客户端保留 task/context 标识，并可在同一任务中发送后续消息使其完成。取消运行中 A2A task 的用例也通过。
 
 限制与后续：`human_input=True` 的默认实现调用本地交互 UI 回调，当前没有证据表明它会自动经 A2A 转发给远程 Codex。该 A2A 原型只保留为 fast-agent-mcp 的协议能力证据；SciWeave Owner 通道已决定采用 MCP（Streamable HTTP），不实现 A2A input-required 或 A2A 回调桥接。远程 Human Input 由 Gateway 的 `query_execution` 返回 `waiting` 和问题文本，Owner 通过同一 `execution_id` 提交新的 OwnerCommand 续接。
+
+**2026-10-21T13:11:03Z**
+
+2026-10-21T21:17:00Z
+
+## Resolution
+
+原型验证已完成，关闭。
+
+两条启动路径在项目 .venv 中验证通过：外部子进程经 Harness API 以 passthrough 模型完成一次 loop；本地 A2A server 由 `start_server(transport=a2a)` 启动，fast-agent CLI 的 A2A 客户端收到响应。均不需要模型凭据。后续补充验证了 A2A 的 `INPUT_REQUIRED` 映射、同一 task/context 的后续输入恢复和运行中任务取消，3 个用例通过。
+
+明确限定：**A2A 原型只作 fast-agent-mcp 的协议能力证据，不进入 Owner 链路。** Owner 通道已定为 MCP（Streamable HTTP），因为 Codex CLI、Cursor、Claude Code 的对外扩展面只有 MCP。远程 Human Input 由 `query_execution` 返回 `waiting` 表达。
+
+依据「Task Agent 改由研究员端侧自持」(ai4-we38)，这两种启动方式都只用于研究员本机的端侧 agent，与中央部署无关。
