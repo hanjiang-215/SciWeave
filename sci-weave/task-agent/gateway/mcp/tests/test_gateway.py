@@ -391,20 +391,20 @@ class GatewayMcpTests(unittest.TestCase):
         self.wait_for_execution(second, "awaiting_acceptance")
 
     def test_fast_agent_passthrough_runtime_completes_without_provider_credentials(self) -> None:
-        self.app.enable_fast_agent_passthrough_runtime(str(Path(self.temp.name) / "worker-home"))
+        self.app.enable_fast_agent_passthrough_runtime(str(Path(self.temp.name) / "worker-home"), "test-scope", "sessions")
         execution_id = self.submit("fast-agent-node", "fast-agent-command")
         execution = self.wait_for_execution(execution_id, "awaiting_acceptance")
         self.assertEqual(execution["result_summary"], "fast-agent passthrough completed")
 
     def test_fast_agent_passthrough_resume_uses_the_persisted_session(self) -> None:
         home = str(Path(self.temp.name) / "worker-home")
-        self.app.enable_fast_agent_passthrough_runtime(home)
+        self.app.enable_fast_agent_passthrough_runtime(home, "test-scope", "sessions")
         first_id = self.submit("fast-agent-resume-node", "fast-agent-first")
         first = self.wait_for_execution(first_id, "awaiting_acceptance")
         self.app.enable_test_runtime("waiting")
         waiting_id = self.submit("fast-agent-resume-node", "fast-agent-waiting")
         self.wait_for_execution(waiting_id, "waiting")
-        self.app.enable_fast_agent_passthrough_runtime(home)
+        self.app.enable_fast_agent_passthrough_runtime(home, "test-scope", "sessions")
         _, response = self.mcp_call(
             "tools/call",
             {"name": "submit_owner_command", "arguments": {
@@ -419,7 +419,7 @@ class GatewayMcpTests(unittest.TestCase):
     def test_fast_agent_persistent_home_failure_is_observable_through_mcp(self) -> None:
         invalid_home = Path(self.temp.name) / "not-a-directory"
         invalid_home.write_text("occupied", encoding="utf-8")
-        self.app.enable_fast_agent_passthrough_runtime(str(invalid_home))
+        self.app.enable_fast_agent_passthrough_runtime(str(invalid_home), "test-scope", "sessions")
         execution = self.wait_for_execution(
             self.submit("fast-agent-invalid-home", "fast-agent-invalid-home"), "failed"
         )

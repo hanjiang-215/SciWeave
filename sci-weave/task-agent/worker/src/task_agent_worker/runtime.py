@@ -32,7 +32,10 @@ class WorkerOutcome:
 class FastAgentPassthroughRuntime:
     """Credential-free runtime used only by automated integration checks."""
 
-    def __init__(self, home: str | Path, connection_scope: str = "task-agent", session_dir: str = "sessions") -> None:
+    def __init__(self, home: str | Path, connection_scope: str, session_dir: str) -> None:
+        session_path = Path(session_dir)
+        if session_path.is_absolute() or any(part in {".", ".."} for part in session_path.parts):
+            raise ValueError("session_dir must stay within Worker home")
         self.home = Path(home)
         self.connection_scope = connection_scope
         self.session_dir = session_dir
@@ -154,7 +157,9 @@ class FastAgentDeepSeekRuntime:
                             metadata_id_key=None,
                         )
                     response = await agent.send(request.command_text)
-                    summary = self._sanitize_summary(str(response))
+                    summary = self._redact_and_truncate_summary(
+                        str(response), (self.settings.api_key or "",)
+                    )
                     outcome = "fast-agent resumed" if resumed else "fast-agent completed"
                     worker_loop.outcome = WorkerOutcome(
                         "awaiting_acceptance", result_summary=f"{outcome}: {summary}"
@@ -175,6 +180,10 @@ class FastAgentDeepSeekRuntime:
         return config_path
 
     @staticmethod
-    def _sanitize_summary(value: str) -> str:
-        normalized = " ".join(value.split())
+    def _redact_and_truncate_summary(value: str, sensitive_values: tuple[str, ...]) -> str:
+        redacted = value
+        for secret in sensitive_values:
+            if secret:
+                redacted = redacted.replace(secret, "[redacted]")
+        normalized = " ".join(redacted.split())
         return normalized[:500] or "empty model response"

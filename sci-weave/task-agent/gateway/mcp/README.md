@@ -19,7 +19,7 @@ uv run --env-file .env sciweave-task-agent-gateway-mcp
 - `SCIWEAVE_GATEWAY_CALLER_ID`：写入命令与审计事实的本地调用者标识。
 - `SCIWEAVE_GATEWAY_DB`：SQLite 数据库位置。
 - `SCIWEAVE_GATEWAY_HOST`：监听地址。
-- `SCIWEAVE_GATEWAY_PORT`：监听端口。
+- `SCIWEAVE_WORKER_HOME`、`SCIWEAVE_WORKER_SESSION_DIR`、`SCIWEAVE_WORKER_CONNECTION_SCOPE`：Worker 专属持久目录、会话子目录和连接域。真实 DeepSeek 配置位于 Worker `.env`；联合启动方式见项目组 README。
 
 ## 接口
 

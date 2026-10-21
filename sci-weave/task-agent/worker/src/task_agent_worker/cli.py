@@ -6,7 +6,7 @@ from .config import WorkerSettings
 
 
 def main() -> None:
-    """Validate Worker model settings before Gateway starts short-lived loops."""
+    """Validate injected Worker model settings without showing credentials."""
     settings = WorkerSettings.from_environment()
     settings.validate_for_model_call()
     print(f"Worker configuration is ready for model {settings.model}.")

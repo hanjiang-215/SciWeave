@@ -140,9 +140,11 @@ class GatewayApplication:
         self.test_runtime_outcome = outcome
         self.runtime = TestRuntimeAdapter(outcome, duration_seconds)
 
-    def enable_fast_agent_passthrough_runtime(self, home: str, session_dir: str = "sessions") -> None:
+    def enable_fast_agent_passthrough_runtime(
+        self, home: str, connection_scope: str, session_dir: str
+    ) -> None:
         """Use the credential-free fast-agent runtime for local integration validation."""
-        self.set_runtime(FastAgentPassthroughRuntime(home, session_dir=session_dir))
+        self.set_runtime(FastAgentPassthroughRuntime(home, connection_scope, session_dir))
 
     def enable_fast_agent_deepseek_runtime(self, settings: WorkerSettings) -> None:
         """Use the configured DeepSeek API for one real fast-agent loop per Worker."""
