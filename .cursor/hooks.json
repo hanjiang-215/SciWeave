@@ -6,10 +6,6 @@
         "command": "python .cursor/hooks/ticket-index-sync.py after-shell",
         "matcher": "\\bfer\\b",
         "timeout": 60
-      },
-      {
-        "command": "python .cursor/hooks/probe.py",
-        "timeout": 60
       }
     ],
     "afterFileEdit": [

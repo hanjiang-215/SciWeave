@@ -1,5 +1,12 @@
-"""Task Agent worker console-script entry point."""
+"""Task Agent Worker console-script entry point."""
+
+from __future__ import annotations
+
+from .config import WorkerSettings
 
 
 def main() -> None:
-    raise SystemExit("Task Agent worker is not implemented yet")
+    """Validate injected Worker model settings without showing credentials."""
+    settings = WorkerSettings.from_environment()
+    settings.validate_for_model_call()
+    print(f"Worker configuration is ready for model {settings.model}.")

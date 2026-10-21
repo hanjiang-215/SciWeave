@@ -1,6 +1,6 @@
 services:
   terminusdb:
-    image: terminusdb/terminusdb-server:12.0.8
+    image: terminusdb/terminusdb-server:v12.0.8
     container_name: ai4sci-terminusdb
     ports:
       - "6363:6363"

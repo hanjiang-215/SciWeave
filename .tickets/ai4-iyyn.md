@@ -1,6 +1,6 @@
 ---
 id: ai4-iyyn
-status: open
+status: in_progress
 deps: [ai4-gqj3, ai4-2h8c]
 links: []
 created: 2026-10-20T07:46:47Z

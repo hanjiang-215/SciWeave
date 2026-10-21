@@ -105,7 +105,7 @@ Gitee Pull Request #3 已创建：https://gitee.com/qi-yueran/ai4science/pulls/3
 
 **2026-10-18T07:06:44Z**
 
-Gitee Pull Request #6 已创建：https://gitee.com/qi-yueran/ai4science/pulls/6，目标分支 develop，当前分支 feature/zhanyunfei。PR 覆盖 25 个提交（相对 origin/develop），内容包括产品命名 SciWeave、README 产品定位、GLOSSARY 新增 Execution Record 与 AuditEvent、文件与命名规范 .cursor/rules/dev/files.mdc、依赖清单权威版本与 humans/dev 副本同步、CHANGELOG.md。验证：git diff --check 退出码 0；分支已包含 origin/develop 全部提交；git-cliff 按 cliff.toml 生成 CHANGELOG.md。本次为文档与工单变更，无测试可执行。
+Gitee Pull Request #6 已创建：https://gitee.com/qi-yueran/ai4science/pulls/6，目标分支 develop。PR 覆盖 25 个提交（相对 origin/develop），内容包括产品命名 SciWeave、README 产品定位、GLOSSARY 新增 Execution Record 与 AuditEvent、文件与命名规范 .cursor/rules/dev/files.mdc、依赖清单权威版本与 humans/dev 副本同步、CHANGELOG.md。验证：git diff --check 退出码 0；分支已包含 origin/develop 全部提交；git-cliff 按 cliff.toml 生成 CHANGELOG.md。本次为文档与工单变更，无测试可执行。
 
 **2026-10-18T08:28:55Z**
 

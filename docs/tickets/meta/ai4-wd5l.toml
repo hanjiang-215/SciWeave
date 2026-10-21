@@ -1,0 +1,3 @@
+# ai4-wd5l 的索引归属与简介（人工维护）
+module = "agent"
+summary = "定义 Task Agent 与审核人之间的结果提交、澄清、返修、驳回和人工接管流程"

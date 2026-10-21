@@ -1,0 +1,3 @@
+# ai4-ufqu 的索引归属与简介（人工维护）
+module = "agent"
+summary = "确定首版 Task Agent 运行时形态、MCP/Skills/Hooks 接入方式与平台职责边界"

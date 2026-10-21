@@ -1,6 +1,6 @@
 ---
 id: ai4-p19z
-status: open
+status: closed
 deps: []
 links: []
 created: 2026-10-20T07:46:47Z
@@ -30,3 +30,9 @@ Task Owner 可通过带本地 Bearer 令牌的 MCP Streamable HTTP 提交命令�
 - [ ] 缺失或无效令牌返回 HTTP 401 且不创建任务事实；协议错误与工具业务错误保持规定边界。
 - [ ] 无令牌回环探针仅返回状态和 API 版本，认证 MCP `health` 报告规定的分项健康。
 - [ ] 自动化测试仅经 MCP 和最小 HTTP 健康接缝验证。
+
+## Notes
+
+**2026-10-20T13:21:50Z**
+
+2026-10-20：已实现认证 MCP v1 HTTP 入口和最小回环健康探针。MCP 工具 submit_owner_command、query_execution、health 已覆盖调用者持久化、SQLite 幂等 bootstrap、OwnerCommand/TaskSession/ExecutionRecord/AuditEvent 持久化、工具内幂等、401 认证边界、协议/业务错误边界及重启后的可查询性。验证：cd sci-weave/task-agent && uv run --package sciweave-task-agent-gateway-mcp python -m unittest discover -s gateway/mcp/tests -v（4 passed）；python3 -m compileall -q gateway/mcp/src；git diff --check。提交待创建。
