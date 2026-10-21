@@ -9,7 +9,7 @@ alwaysApply: false
 3. fer 工单放在 `.tickets/`，一个工单一个文件，不要把多个工单合并到同一个文件里。
 4. 项目技术文档放在 `docs/`，`docs/` 是权威版本。
 5. 面向人阅读的文档、调研和副本放在 `humans/`，按主题分子目录：`humans/competition/` 放赛事信息，`humans/product/` 放产品和竞品调研，`humans/dev/` 放开发相关的面向人副本。
-6. 中央服务器上的第三方服务容器放在 `sci-weave/centre-control/<服务名>/`，至少包含 `compose.yaml` 和一份说明用途、启动方式、端口占用和凭据要求的 `README.md`。
+6. 中央服务器上的第三方服务容器放在 `sci-weave/service/<服务名>/`，至少包含 `compose.yaml` 和一份说明用途、启动方式、端口占用和凭据要求的 `README.md`。
 7. 根目录只保留项目级入口和配置：`README.md`、`CHANGELOG.md`、`GLOSSARY.md`、`cliff.toml`、`.gitignore`，以及包管理器的清单和锁文件（当前为 `package.json`、`pnpm-lock.yaml`，技术栈变化时同步更新本条目）；其他内容按上述归属放入对应目录。
 
 ## 文件命名

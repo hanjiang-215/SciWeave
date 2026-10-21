@@ -28,7 +28,7 @@ docker compose version
 只检查 Compose 配置，不构建或启动容器：
 
 ```bash
-docker compose -f sci-weave/centre-control/redpanda/compose.yaml config
+docker compose -f sci-weave/service/redpanda/compose.yaml config
 ```
 
 ## 启动
@@ -36,14 +36,14 @@ docker compose -f sci-weave/centre-control/redpanda/compose.yaml config
 在仓库根目录执行：
 
 ```bash
-docker compose -f sci-weave/centre-control/redpanda/compose.yaml up -d
+docker compose -f sci-weave/service/redpanda/compose.yaml up -d
 ```
 
 查看服务状态和日志：
 
 ```bash
-docker compose -f sci-weave/centre-control/redpanda/compose.yaml ps
-docker compose -f sci-weave/centre-control/redpanda/compose.yaml logs -f redpanda
+docker compose -f sci-weave/service/redpanda/compose.yaml ps
+docker compose -f sci-weave/service/redpanda/compose.yaml logs -f redpanda
 ```
 
 验证管理接口是否可访问：
@@ -55,13 +55,13 @@ curl -i http://127.0.0.1:19644/v1/status/ready
 停止服务但保留数据卷：
 
 ```bash
-docker compose -f sci-weave/centre-control/redpanda/compose.yaml down
+docker compose -f sci-weave/service/redpanda/compose.yaml down
 ```
 
 停止服务并删除本地数据卷：
 
 ```bash
-docker compose -f sci-weave/centre-control/redpanda/compose.yaml down -v
+docker compose -f sci-weave/service/redpanda/compose.yaml down -v
 ```
 
 `down -v` 会删除本地 Redpanda 数据，请确认不再需要测试数据后再执行。

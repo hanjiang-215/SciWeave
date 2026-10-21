@@ -23,8 +23,8 @@ Python 服务、MCP、Vue 前端及其业务依赖不在本文定义；它们必
 | 变更日志 | git-cliff | 按 Conventional Commits 生成 `CHANGELOG.md` | `cliff.toml` 与 `.cursor/rules/dev/use_gitcliff.mdc` |
 | 根目录包管理 | Node.js + pnpm | 管理根目录 `package.json` 中的开发工具包 | `package.json` 与 `pnpm-lock.yaml` |
 | 知识库工具 | `@codemeall/harness-wiki` | 维护 Harness Wiki 工作流 | 根目录 `package.json` 与 `.cursor/skills/ref/harness-wiki/` |
-| 本地验证服务 | Docker Compose | 运行仓库提供的本地验证服务 | `sci-weave/centre-control/<服务名>/compose.yaml` |
-| Research Mapping 验证 | TerminusDB | 验证 Schema、分支、版本和差异行为 | `sci-weave/centre-control/terminusdb/` |
+| 本地验证服务 | Docker Compose | 运行仓库提供的本地验证服务 | `sci-weave/service/<服务名>/compose.yaml` |
+| Research Mapping 验证 | TerminusDB | 验证 Schema、分支、版本和差异行为 | `sci-weave/service/terminusdb/` |
 
 ## 使用原则
 
@@ -39,5 +39,5 @@ Python 服务、MCP、Vue 前端及其业务依赖不在本文定义；它们必
 
 - 根目录 Node 依赖：`corepack pnpm install --frozen-lockfile`。
 - Python 子项目：独立子项目在其目录执行 `uv sync`；项目组在其根目录执行 `uv sync`，再执行对应子项目 README 中声明的测试命令。
-- 本地服务：按对应 `sci-weave/centre-control/<服务名>/README.md` 启动和验证。
+- 本地服务：按对应 `sci-weave/service/<服务名>/README.md` 启动和验证。
 - 变更日志：按 `cliff.toml` 运行 `git cliff --config cliff.toml --output CHANGELOG.md`。
