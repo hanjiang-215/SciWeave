@@ -39,6 +39,18 @@ class SqliteStore:
         finally:
             connection.close()
 
+    def count_candidate_records(self) -> tuple[int, int, int, int]:
+        with self.connection() as connection:
+            return tuple(
+                int(connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0])
+                for table in (
+                    "mapping_submission",
+                    "mapping_proposal",
+                    "mapping_candidate_commit",
+                    "mapping_audit_event",
+                )
+            )
+
     def add_formal_revision(self, revision: FormalMappingRevision) -> None:
         with self.connection() as connection:
             connection.execute(
