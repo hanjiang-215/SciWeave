@@ -12,6 +12,7 @@
 | 服务状态存储 | SQLite（MVP） | Gateway MVP 使用 Python 标准库 `sqlite3` 保存端侧命令、执行、审核与审计状态；不用于替代 fast-agent 的运行时会话文件，也不复制 Research Mapping / LLM-Wiki 的领域正文。 |
 | Research Mapping 图存储 | TerminusDB | Research Mapping 的候选与正式 TaskNode/DependencyEdge 图快照使用 TerminusDB；SQLite 治理记录保存 Proposal、审批、正式版本指针和审计索引。当前镜像同时用于本地验证，具体领域持久化实现另立 ticket。 |
 | Agent 运行时 | fast-agent-mcp | Gateway 后续通过 Runtime Adapter 接入；具体版本和锁定方式由 `ai4-o806` 决定。 |
+| 消息队列 | Redpanda | 任务下发、上游交接与 Agent 事件统一经 Redpanda 传递。当前使用 `sci-weave/service/redpanda/` 的单节点 Compose 做本地验证，镜像 `redpandadata/redpanda:v24.3.7`；Kafka API 对宿主机暴露 19092，容器网络内为 9092。主题、分区、消费者组、保留期与 offset 提交语义由 `ai4-te1v` 定义，不在本文件记录。生产高可用与副本配置未定。 |
 
 ## 子项目结构
 
@@ -66,3 +67,5 @@ sci-weave/<项目组>/
 
 - Vue 版本、构建工具、测试工具和组件库。
 - 生产部署、容器编排、密钥管理和 CI。
+- Redpanda 的生产形态：副本数、保留期、跨机器访问的暴露方式。
+- `centre-control` 内各服务是否打成一个镜像、在单容器内多进程运行，与现行“不作为同一个部署单元”规则冲突，待裁决。
