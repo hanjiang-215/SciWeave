@@ -1,0 +1,2 @@
+module = "infra"
+summary = "将 Pi 与容器配置收敛为 AI4Sci 可复现的无凭据开发环境。"
