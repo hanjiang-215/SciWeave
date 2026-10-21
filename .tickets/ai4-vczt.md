@@ -83,7 +83,7 @@ tags: [wiki, implementation]
 - `uv sync --locked`：`Audited 1 package`。
 - `uv run python -m unittest discover -s tests`：`Ran 46 tests ... OK`。
 - 集成用例（`SCIWEAVE_RUN_TERMINUSDB_INTEGRATION=1`）自建 `<DATABASE>_it_<随机后缀>` 临时库，写入 `Resource` 与 `ResourceVersion` 并记录历史 Commit，随后更新同一版本的许可字段生成新 branch head；历史 Commit 读回原许可与原快照摘要，branch head 读回更新值，证明没有回退到最新版本；未知版本在可读 Commit 上返回 `missing`，未知 Commit 返回 `unavailable`。`Ran 46 tests ... OK`，无跳过。
-- 契约与设计文档已同步：`docs/superpowers/specs/2026-10-21-terminusdb-exact-commit-read-contract.md`（新增 Wiki 精确读取一节）、`docs/superpowers/specs/2026-10-20-mapping-wiki-implementation-readiness-design.md`、`docs/superpowers/plans/2026-10-21-mapping-wiki-vertical-slices.md`。
+- 契约与设计文档已同步：`docs/superpowers/specs/2026-10-21-terminusdb-exact-commit-read-contract.md`（新增 Wiki 精确读取一节）、`docs/superpowers/specs/2026-10-20-mapping-wiki-implementation-readiness-design.md`、`docs/superpowers/plans/2026-10-21-mapping-wiki-vertical-slices.md`（该计划已由上述两份规格取代并移除，见文末更正）。
 
 范围说明：候选/正式快照写入及位置记录属于后续切片；本票只固定读取 seam。未注入位置源时服务继续失败关闭，不批准任何版本。全部验收标准已满足，关闭本票。
 
@@ -94,3 +94,11 @@ tags: [wiki, implementation]
 - `uv sync --locked`：成功，`Audited 1 package`。
 - `uv run --env-file .env python -m unittest discover -s tests -p "test_terminus_integration.py" -v`：`Ran 5 tests in 0.932s ... OK`。
 - 测试使用的临时 `.env` 已删除；未修改票据状态。
+
+**2026-10-21T05:10:00Z：更正已移除文档的引用**
+
+上文 `2026-10-21T04:15:00Z` 一节把 `docs/superpowers/plans/2026-10-21-mapping-wiki-vertical-slices.md` 列为已同步文档。该计划已由 `docs/superpowers/specs/2026-10-21-terminusdb-exact-commit-read-contract.md` 与 `docs/superpowers/specs/2026-10-20-mapping-wiki-implementation-readiness-design.md` 取代，并在 `feature/hanjiang` 的 `2e58a25` 中删除，路径不再存在；上方原句保留并加了标注，不删除历史记录。
+
+- 当前有效依据只有两份规格：精确 Commit 读取契约（含 Wiki 按版本 ID 在固定位置内选取文档）与实现就绪设计（读取签名 `read_resource_version(location, resource_version_id)`）。
+- 全量用例数复核：`sci-weave/llm-wiki/tests/` 为 `test_resource_review.py` 24 条、`test_terminus_store.py` 17 条、`test_terminus_integration.py` 5 条，合计 46 条，与上文 `Ran 46 tests ... OK` 一致。
+- 票据状态不变，仍为 closed。

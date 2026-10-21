@@ -83,3 +83,12 @@ tags: [mapping, implementation]
 - `uv sync --locked`：成功，`Audited 1 package`。
 - `uv run --env-file .env python -m unittest discover -s tests -p "test_terminus_integration.py" -v`：`Ran 3 tests in 0.436s ... OK`。精确历史提交读取、历史与 head 内容不同、未知 Commit 失败关闭三个用例均通过。
 - 测试使用的临时 `.env` 已删除；未修改数据库或票据状态。
+
+**2026-10-21T05:10:00Z：更正全量用例数（36 → 20）**
+
+上文 `2026-10-21T03:51:05Z` 一节记录的全量结果 `Ran 36 tests in 0.927s ... OK` 与本分支实际用例数不符，按实测更正，原记录保留在上面不改写。
+
+- 事实来源：`sci-weave/research-mapping/tests/` 只有 `test_formal_query.py`（17 条）与 `test_terminus_integration.py`（3 条），合计 20 条；36 条不对应任何已提交的测试文件组合。
+- 启用集成（`SCIWEAVE_RUN_TERMINUSDB_INTEGRATION=1`，Basic 凭据，历史 Commit `wyqlzhb9wpq9mhz1aub53jfdqhdmqtq`、head `mdx0aig891hmbeifqn951mniinu7kfe`）复跑 `uv run python -m unittest discover -s tests`：`Ran 20 tests in 0.920s ... OK`，无跳过。
+- 不启用集成时复跑：`Ran 20 tests ... OK (skipped=3)`，跳过的是三个 TerminusDB 集成用例。
+- 结论不变：验收依赖的是精确 Commit 读回、历史与 head 内容不同、未知 Commit 失败关闭三个集成用例的实际运行，与总数无关；票据状态仍为 closed。提交记录见 `feature/hanjiang` 的 `762587b`。
