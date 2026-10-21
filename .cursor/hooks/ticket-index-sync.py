@@ -60,11 +60,20 @@ def render() -> None:
         print(f"ticket-index 自动同步失败：{detail}", file=sys.stderr)
 
 
+def read_payload() -> dict:
+    """Parse hook JSON from stdin, tolerating a UTF-8 BOM or wrapped encoding."""
+    stream = getattr(sys.stdin, "buffer", None)
+    raw = stream.read() if stream is not None else sys.stdin.read().encode("utf-8", "replace")
+    return json.loads(raw.decode("utf-8-sig", errors="replace"))
+
+
 def main() -> int:
     event = sys.argv[1] if len(sys.argv) > 1 else ""
     try:
-        payload = json.load(sys.stdin)
-    except (json.JSONDecodeError, ValueError):
+        payload = read_payload()
+    except (json.JSONDecodeError, ValueError, UnicodeDecodeError):
+        return 0
+    if not isinstance(payload, dict):
         return 0
     if not touches_tickets(event, payload):
         return 0
