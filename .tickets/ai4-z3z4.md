@@ -2,7 +2,7 @@
 id: ai4-z3z4
 status: open
 deps: [ai4-yvh2]
-links: [ai4-yyy9]
+links: [ai4-yyy9, ai4-dhpv]
 created: 2026-10-19T07:07:36Z
 type: feature
 priority: 1
@@ -11,6 +11,10 @@ parent: ai4-yyy9
 tags: [spec, task-agent, fast-agent, ready-for-agent]
 ---
 # 最小 Task Agent 项目组实现规格
+
+> **形态修订（2026-10-21）：本规格尚未按端侧自持改写，不要按现有正文进入实现。**
+>
+> Task Agent 的运行时已改由研究员端侧自持，中央服务器上不再有 task-agent 服务。依据工单「Task Agent 改由研究员端侧自持」。正文中的「同一部署单元」「共享 SQLite」「中央 Gateway 拉起 Worker」等表述需要在修订后重新落位到研究员本机。修订要点见文末 Notes 的 2026-10-21 条。
 
 将“Gateway 与最小 fast-agent 执行闭环规格地图”的已决边界收敛为一个可交付的 Task Agent 实现规格。该规格覆盖同一部署单元中的 MCP Gateway、上游 ingest、共享持久化和短生命周期 Worker；它是后续实现 tickets 的唯一上游输入。
 
@@ -154,3 +158,19 @@ blocked → queued → running
 **2026-10-20T07:32:36Z**
 
 2026-10-20：按“整体实现”重新发布为《最小 Task Agent 项目组实现规格》，覆盖 gateway/mcp、gateway/ingest、worker、共享 SQLite、租约、最小 MCP v1、Caller、单一 ExecutionRecord 状态机、健康和测试边界；标记 ready-for-agent。已验证：fer dep cycle 无依赖环；git diff --check 通过。
+
+**2026-10-21T13:08:58Z**
+
+2026-10-21T21:12:00Z
+
+形态变更，依据「Task Agent 改由研究员端侧自持」(ai4-we38)：本规格现在描述的是「中央项目组」，而 task-agent 的运行时改由研究员自持。
+
+受影响的决策条目：
+
+- 「项目组与进程边界」中的三角色（`gateway/mcp`、`gateway/ingest`、`worker`）不再部署在中央。端侧形态下 `ingest` 变成研究员电脑上的常驻订阅器，主动连中央队列。
+- 「Owner MCP v1 协议」的 MCP 工具不再由中央 Gateway 暴露，改由端侧 Gateway 在本机暴露，Owner 通过本机回环地址调用。
+- 「共享 SQLite 持久化」留在端侧，ExecutionContext 与 Execution Record 不再进入中央。
+- 「领域 Buffer 保持开放」需要改写：执行结果改为提交到中央草稿箱的领域命名空间。
+- 鉴权章节的「本地 Bearer 令牌」与「不实现多人身份」仍然成立，因为端侧 Gateway 只服务本机 Owner。中央侧的主体校验由「端侧 Agent 的 MCP 能力注册与限制」(ai4-ujvn) 定义。
+
+本票仍 open。修订前不应按现有正文进入实现。

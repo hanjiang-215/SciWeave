@@ -1,0 +1,3 @@
+# ai4-dhpv 的索引归属与简介（人工维护）
+module = ["agent", "gateway"]
+summary = "task-agent 与 centre-agent 改为消息驱动，MCP 收窄为返修与观察，不下发任务"

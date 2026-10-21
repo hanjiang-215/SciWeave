@@ -2,7 +2,7 @@
 id: ai4-yvh2
 status: closed
 deps: []
-links: [ai4-z3z4, ai4-m0vt, ai4-wd5l]
+links: [ai4-z3z4, ai4-m0vt, ai4-wd5l, ai4-dhpv]
 created: 2026-10-19T15:25:21Z
 type: grilling
 priority: 1
@@ -85,3 +85,31 @@ PDF 等原件仅以 Wiki 资源卡记录定位、哈希、媒体类型、来源�
 **2026-10-20 Revision：** “上游收集器不得绕过 Gateway 直接创建 Worker”中的 Gateway 现明确为 **Task Agent Gateway 组件组**，不是单一进程。`gateway/ingest` 与 `gateway/mcp` 是组件组内的独立子项目；二者均可在共享 SQLite 中为同一 `task_node_id` 原子取得执行租约后启动 `worker` 子项目。它们必须共同遵守组件组的状态机、审计和串行化约束，未取得租约不得启动第二个 Worker。组件组外的队列消费者、收集器或客户端不得启动 Worker。该修订保留“不得绕过 Gateway”的边界，并取代本票中“上游收集器只能交给 Gateway、不得直接创建 Worker”的单进程理解；租约崩溃恢复与上游终态放行规则继续由 [Task Agent 项目组三角色部署与双入口调度边界](ai4-6fb7.md) 收敛。
 
 **2026-10-20 Resolution：** 以上结论由 TaskNode Owner 与本次 Wayfinder 讨论确认。MVP 的调用者身份仍只有本地开发令牌，不能伪装为已完成每个 TaskNode 的 Owner 授权校验；多人身份和授权绑定保留为后续范围。
+
+**2026-10-21T14:13:38Z**
+
+2026-10-21T22:14:00Z
+
+修订说明（本票已关闭，正文保留），依据「Agent 以消息驱动，MCP 只负责返修」(ai4-dhpv)。
+
+作废部分：
+
+- `submit_owner_command` 作为任务下发入口。任务改由消息驱动，首轮由上游交接消息或根任务就绪消息触发。
+- `ExecutionRecord.trigger` 取值中的 `owner_command`。改为消息来源，具体取值由新票定义。
+- 「MCP Owner 命令与上游交接队列是两条独立输入路径，均汇入 Gateway」中的「MCP Owner 命令」作为**输入路径**的地位。它不再是输入路径，只是人工介入面。
+
+仍然成立：单一 ExecutionRecord 状态机与稳定状态集合；`review_execution` 的四种决定与幂等语义；`list_pending` 的排序与 `action_required` 取值；`query_execution` 返回待答问题；AuditEvent 形状；同一 TaskNode 串行、跨 TaskNode 并发；接纳不自动创建领域草稿。
+
+**2026-10-21T14:34:22Z**
+
+2026-10-21T22:37:00Z
+
+更正上一条（2026-10-21T22:14:00Z）：把 `submit_owner_command` 整体列为「作废部分」措辞过宽。
+
+准确表述：
+
+- 该工具保留，用途从「任务输入路径」收窄为「返修与处置要求入口」。
+- 任务下发改走消息队列，因此它不再是与上游交接并列的**任务输入路径**。
+- `ExecutionRecord.trigger` 中 `owner_command` 的语义随之改变：它表示「由人工处置要求触发」，不再表示「由任务命令触发」。
+
+依据：「Agent 以消息驱动，Gateway 的 MCP 只负责返修」(ai4-dhpv) 的 2026-10-21T22:35:00Z 澄清。

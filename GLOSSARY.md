@@ -12,6 +12,18 @@
 
 **Domain Isolation（领域隔离）**：Research Mapping 与 LLM-Wiki 在第一阶段采用独立的领域运行边界，分别拥有自己的管理 MCP、Buffer、内存数据边界、校验器、TerminusDB、candidate branch、Revision 和审计链。一个 Central Agent 可以通过两个独立的管理 MCP 分别处理两个领域，但不得共享领域对象、数据库连接、Buffer 或跨域写入状态；两个领域只能通过稳定的对象 ID 和版本 ID 建立显式弱引用，第一阶段不支持单个 MCP Submission 或 Proposal 同时修改两个领域。
 
+> 修订（2026-10-21）：隔离粒度从「服务」下调为「内容与事务」。两个领域共用中央草稿箱（Draft Buffer）的同一个数据库，但按命名空间分离 schema、审核人、读写授权和事务，仍不共享领域对象 ID，也不做跨域原子写入。原文保留。
+
+**Draft Buffer（中央草稿箱）**：中央服务器上保存尚未进入任何领域候选分支的原始内容的共享服务，内容为 Research Mapping 路线变更草稿与 LLM-Wiki 文档及引用草稿。它只由人审核：草稿通过后由人调用对应领域管理 MCP 写入候选分支，自己不创建候选、不写领域存储、不发起执行。它与 Merge Request Buffer、Execution Submission 是三样不同的东西，一律不以「Buffer」单独指代。
+
+> 修订（2026-10-21）：删去「Task Agent 声明式设计稿」。Task Agent 改由研究员端侧自持，其定义与代码留在研究员的仓库，不进入中央草稿箱。原文保留于版本历史。
+
+**Draft Submission（草稿提交）**：草稿箱中一份被固定为审核对象的草稿版本，以提交时记录的确切存储 Commit 标识。草稿正文在提交后仍可继续修改，但本轮审核结论只针对被固定的那个版本。
+
+**Namespace（命名空间）**：草稿箱内区分内容域与审核规则的字段，取值为 `mapping` 或 `wiki`。审核人配置挂在命名空间上，不挂在每份草稿上；草稿只引用命名空间。
+
+> 修订（2026-10-21）：删去 `task_agent_design`，理由见 Draft Buffer 的修订。
+
 **TaskNode（任务节点）**：Research Mapping 中的唯一拓扑节点，表示一个需要规划、执行、讨论、审核或推进的科研任务；平台不预设固定的学科任务类型。
 
 **Dependency Edge（依赖边）**：连接两个 TaskNode 的关系，保存信息依赖、执行阻塞、所需输出和激活条件；节点不重复保存前置或后继节点列表。
@@ -40,7 +52,11 @@
 
 **Candidate Disposition（候选处置结果）**：PO 对审核池中来源提交在正式化方案中的处理结果，包括完整采用（`selected`）、与其他来源组合（`blended`）、部分纳入混合候选（`partially blended`）或放弃（`abandoned`）。该结果对应一个已选定并成功正式化的完整候选方案。
 
-**Draft Acceptance Review（草稿接纳审核）**：端侧 Agent 提交修改后进行的第一阶段审核。Research Mapping 变更由相关 TaskNode 负责人审核；LLM-Wiki 变更由 Wiki Curator、Resource Owner 或文档负责人审核。审核通过后，Buffer 中的变更才可以分别写入对应的 TerminusDB candidate branch，形成 WikiRevision 或 Mapping Revision 草稿；该审核不代表内容已经成为正式科研事实。
+**Draft Acceptance Review（草稿接纳审核）**：端侧 Agent 或研究人员提交修改后进行的第一阶段审核，在中央草稿箱内完成。Research Mapping 变更由相关 TaskNode 负责人审核；LLM-Wiki 变更由 Wiki Curator、Resource Owner 或文档负责人审核。审核通过后，由人调用对应的领域管理 MCP，把该草稿写成 candidate branch 的第一个 Commit，形成 WikiRevision 或 Mapping Revision 草稿；该审核不代表内容已经成为正式科研事实。中央 Agent 不参与这一阶段。
+
+> 修订（2026-10-21）：删去「Task Agent 设计稿由 Project Owner 审核」，端侧自持后没有这一类草稿。
+
+**Candidate Pre-Review（候选预审）**：第二阶段审核的初步部分，由中央 Agent 对**已存在的候选分支**做结构、引用、权限、依赖、基准版本、冲突和影响范围检查，必要时生成混合候选。它作用在候选上，不作用在草稿上；它不构成批准，也不能代替 Project Owner 的正式发布审核。
 
 **Formal Publication Review（正式发布审核）**：草稿转为正式版本前，由项目负责人进行的第二阶段审核。只有审核通过并更新 Formal WikiRevision 或 Formal Mapping Revision 指针后，内容才能进入正式查询和正式调度。
 
@@ -64,21 +80,27 @@
 
 ## 协作与治理
 
-**Unified Proposal Governance Kernel（统一提案治理内核）**：Research Mapping 与 LLM-Wiki 共享的提案版本治理语义，包括 Buffer 接纳、Proposal、candidate branch、candidate Commit、candidate head 锁定、Merge Request Buffer、冲突检查和 Formal Revision；它不要求两个领域共享实现、存储、MCP 或审计链。
+**Unified Proposal Governance Kernel（统一提案治理内核）**：Research Mapping 与 LLM-Wiki 共享的提案版本治理语义，包括草稿提交与一审、Proposal、candidate branch、candidate Commit、candidate head 锁定、候选预审、Merge Request Buffer、冲突检查和 Formal Revision；它不要求两个领域共享实现、存储、MCP 或审计链。
 
-**Domain Adapter（领域适配层）**：某个领域对统一提案治理内核的独立实现，负责领域专属的 Buffer、MCP、对象校验、冲突检测、候选存储、正式版本和审计；Research Mapping 与 LLM-Wiki 各自拥有一个领域适配层。
+**Domain Adapter（领域适配层）**：某个领域对统一提案治理内核的独立实现，负责领域专属的 MCP、对象校验、冲突检测、候选存储、正式版本和审计；Research Mapping 与 LLM-Wiki 各自拥有一个领域适配层。草稿箱由两个领域共用，不属于适配层。
 
 **Proposal（变更提案）**：对正式 Research Mapping 或 LLM-Wiki 受治理内容提出的结构化变更请求。Mapping Proposal 只修改 Research Mapping；Wiki Proposal 只修改 LLM-Wiki；第一阶段不存在跨域 Proposal。
 
-**Wiki Proposal（Wiki 变更提案）**：由一个或多个已通过第一阶段接纳审核的 Wiki Buffer Submission 组成的 Wiki 治理单元。Wiki Proposal 关联 candidate branch、candidate Commit、Merge Request Buffer、基准 Formal WikiRevision 和正式化结果；它可以包含多个文档变更，但默认整体选择和整体正式化。
+**Wiki Proposal（Wiki 变更提案）**：由一个或多个已通过一审的 Wiki 草稿推进而成的 Wiki 治理单元。Wiki Proposal 关联 candidate branch、candidate Commit、Merge Request Buffer、基准 Formal WikiRevision 和正式化结果；它可以包含多个文档变更，但默认整体选择和整体正式化。
 
 **MCP Submission（MCP 提交）**：端侧 Agent 通过标准化 MCP 工具提交任务结果、失败报告或 Proposal 的行为；它是平台接收 Agent 变更的统一入口，不等于正式批准。
 
-**Central Agent（中央 Agent）**：负责调度、注册信息维护以及 Proposal 的格式、依赖、权限和影响范围预审的 Agent；它不替代研究负责人进行科研内容判断和最终批准。首版中，任何正式 Mapping 或正式科研结果发布都必须由 Project Owner 明确批准。
+**Central Agent（中央 Agent）**：对 Research Mapping 与 LLM-Wiki 的候选分支做候选预审并生成必要的混合候选的 Agent。它不参与草稿的一审、不代替研究负责人进行科研内容判断和最终批准、不写正式版本、不发起执行、不部署或托管 Task Agent。任何正式 Mapping 或正式科研结果发布都必须由 Project Owner 明确批准。
+
+> 修订（2026-10-21）：删去「按 Project Owner 已批准的绑定部署 Task Agent」。Task Agent 改由研究员端侧自持，中央不再承担其部署。
+
+**Execution Submission（执行提交）**：Task Agent 一轮执行结束后提交给 Task Node Owner 审核的不可变结果记录，保存在 Task Agent Gateway 的 SQLite 中，与 Execution Record、审核决定和通知 outbox 同库。它不进入中央草稿箱，也不称为 Buffer。
 
 **Execution Record（执行记录）**：对任务执行开始、暂停、重试、失败、完成和人工接管等运行过程的结构化记录。Execution Record 可以由 Central Agent 调度和追加，但不等于正式 Research Mapping 变更，也不单独授予科研结果正式地位。
 
-**Worker Lease（Worker 租约）**：Task Agent Gateway 在共享 SQLite 中为一个 `task_node_id` 领取短生命周期 Worker 启动权的、可过期的执行协调记录。同一任务节点同时只能存在一个有效租约；未取得租约的入口不得启动第二个 Worker。
+**Worker Lease（Worker 租约）**：端侧 Task Agent Gateway 在本地 SQLite 中为一个 `task_node_id` 领取短生命周期 Worker 启动权的、可过期的执行协调记录。同一任务节点同时只能存在一个有效租约；未取得租约的入口不得启动第二个 Worker。
+
+> 修订（2026-10-21）：租约所在的 Gateway 由中央移到研究员本机，语义不变。
 
 **AuditEvent（审计事件）**：对受控提交、调度、执行、预审、审核、批准、驳回和正式化等操作的不可变过程记录。AuditEvent 至少说明操作者、操作类型、目标、基准版本、结果、时间、原因以及关联的 Proposal 或任务标识，用于按任务、提案、正式版本或时间重建责任链。
 
@@ -86,7 +108,13 @@
 
 **Personal Agent（Personal Agent）**：研究人员使用自己的 harness 配置的 Agent，通过 MCP、Skills、系统提示词和 Hooks 接入科研协作平台。
 
-**Task Agent（任务 Agent）**：平台支持的轻量化、可配置 Agent，用于执行边界明确、重复、耗时或结构化的科研任务；它不是平台自研的通用 harness。
+**Task Agent（任务 Agent）**：研究员在自己的电脑上编写和运行的轻量化 Agent，用于执行边界明确、重复、耗时或结构化的科研任务；它不是平台自研的通用 harness，也不由平台部署或托管。它主动连接中央消息队列接收上游交接，按中央服务对端侧开放的能力面调用服务，执行结果作为草稿提交到中央草稿箱。
+
+**Agent Registration（Agent 登记）**：端侧 Agent 部署完成后由部署者写入的一条事实记录，说明该 Agent 的标识、所属主体和部署位置。它不参与鉴权、不阻断调用，只用于事后回答「谁在跑什么 Agent」。
+
+**Central Control（中央控制面）**：部署在中央服务器上的全部服务集合，包括 Research Mapping、LLM-Wiki、草稿箱、中央 Agent、注册表、Web 看板、消息队列与图存储。它不包含任何 Task Agent。
+
+**Agent Gateway（Agent 网关）**：为一个 Agent 提供 MCP 入口、消息入口与执行控制边界的常驻进程。它与若干 fast-agent 模板构成一个部署单元；task-agent 的网关随任务负责人部署，centre-agent 的网关随中央控制面部署。Owner 命令不再经网关下发任务，网关的 MCP 面只承担返修与观察。
 
 ## 版本与存储
 
@@ -115,7 +143,7 @@
 | 对象 | 研究人员看到的操作 | 首版状态 | 正式化条件 |
 | --- | --- | --- | --- |
 | TaskNode/DependencyEdge 版本 | 查看路线草稿、比较路线、查看正式路线 | `candidate`、`formal`、`superseded`、`rejected`、`invalidated` | 通过 Proposal 和 Project Owner 的 Formal Publication Review |
-| Mapping Buffer Submission | 提交、补充、查看退回原因 | `received`、`owner_review`、`accepted`、`rejected` | TaskNode Owner 接纳后才能进入 Central Agent 预审 |
+| Mapping 草稿 | 提交、修改、查看退回原因 | `drafting`、`submitted`、`under_review`、`accepted`、`rejected`、`promoted`、`abandoned` | 一审通过后由人调用 Mapping 管理 MCP 写入候选分支 |
 | Mapping Proposal | 查看路线变更、影响和审核意见 | `draft`、`candidate`、`mr_ready`、`stale`、`conflict`、`merged`、`rejected`、`abandoned` | 创建新的 Formal MappingRevision |
 | Execution Record | 执行、重试、转交、人工接管、补充结果 | `queued`、`running`、`succeeded`、`awaiting_acceptance`、`supplement_requested`、`needs_revision`、`accepted`、`rejected`、`failed`、`cancelled` | 首版不单独发布“正式科研结论”；结果接纳后可作为后续任务输入或受控资源引用 |
 | TaskNode 运行投影 | 查看“待执行、执行中、待补充、已接纳、需调整路线” | `not_ready`、`ready`、`in_progress`、`awaiting_acceptance`、`accepted`、`blocked`、`route_change_required` | 由正式 Mapping 和 Execution Record 计算，不覆盖版本状态 |

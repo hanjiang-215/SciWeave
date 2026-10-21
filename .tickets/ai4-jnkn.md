@@ -19,8 +19,8 @@ tags: [architecture]
 
 - Research Mapping：`sci-weave/centre-control/research-map`。原 `sci-weave/research-mapping` 已移入此处，仍保持独立的 `pyproject.toml` 与 `uv.lock`。
 - LLM-Wiki：`sci-weave/centre-control/research-wiki`。原 `sci-weave/llm-wiki` 已移入此处，仍保持独立项目。
-- TerminusDB：`sci-weave/centre-control/terminusdb`。不再使用 `dockers/service/terminusdb`。
-- Redpanda：`sci-weave/centre-control/redpanda`。不再使用 `dockers/service/redpanda`。消息队列不另写业务项目，由使用它的项目连接该服务。
+- TerminusDB：`sci-weave/service/terminusdb`。不再使用 `dockers/service/terminusdb`。
+- Redpanda：`sci-weave/service/redpanda`。不再使用 `dockers/service/redpanda`。消息队列不另写业务项目，由使用它的项目连接该服务。
 
 后续 Mapping 与 Wiki 实现继续写在上述两个目录中，不要新建回 `sci-weave/research-mapping` 或 `sci-weave/llm-wiki`。已关闭工单中的旧路径是当时记录，不改写。
 
