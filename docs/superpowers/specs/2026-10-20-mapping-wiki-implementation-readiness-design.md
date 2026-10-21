@@ -48,7 +48,7 @@ SQLite 只保存治理事实、状态、审计索引和 TerminusDB 精确定位�
 
 ### TerminusDB 边界
 
-TerminusDB 只保存该领域的不可变内容快照和精确 Commit。应用层只允许通过 `TerminusStore` 访问精确 store/database/branch/commit；共享读取契约 `read_exact_snapshot(...)` 返回 `confirmed`、`missing` 或 `unavailable`，确认结果必须带精确 Commit 身份和内容 SHA-256。Mapping/Wiki 候选通过 `create_candidate_snapshot(...)` 写入隔离分支，正式化通过 `create_formal_snapshot(...)` 写入精确正式快照；写操作区分明确失败和 `result_unknown`，未知结果按原操作身份读回。Wiki 另提供 `read_resource_version(resource_version_id)`，精确返回版本和所属资源元数据。正式查询禁止调用“当前最新 Commit”或候选分支回退；所有 HTTP 实现细节留在可替换适配器内。
+TerminusDB 只保存该领域的不可变内容快照和精确 Commit。应用层只允许通过 `TerminusStore` 访问精确 store/database/branch/commit；共享读取契约 `read_exact_snapshot(...)` 返回 `confirmed`、`missing` 或 `unavailable`，确认结果必须带精确 Commit 身份和内容 SHA-256。Mapping/Wiki 候选通过 `create_candidate_snapshot(...)` 写入隔离分支，正式化通过 `create_formal_snapshot(...)` 写入精确正式快照；写操作区分明确失败和 `result_unknown`，未知结果按原操作身份读回。Wiki 另提供 `read_resource_version(location, resource_version_id)`，`location` 是写入时固定到治理记录的精确 store/database/branch/commit 四元组；读取只在该 Commit 上按版本 ID 选取文档，精确返回版本和所属资源元数据，版本 ID 本身不解析位置。正式查询禁止调用“当前最新 Commit”或候选分支回退；所有 HTTP 实现细节留在可替换适配器内。
 
 ### 失败关闭
 
