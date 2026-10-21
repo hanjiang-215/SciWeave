@@ -236,6 +236,53 @@ class GatewayApplication:
             rows = self.store.connection.execute(query, arguments).fetchall()
         return [dict(row) for row in rows]
 
+    def review_execution(
+        self, execution_id: str, decision: str, reason: str, idempotency_key: str
+    ) -> dict[str, Any] | None:
+        status_by_decision = {
+            "accept": "accepted",
+            "request_revision": "needs_revision",
+            "reject": "rejected",
+            "request_human_takeover": "human_takeover",
+        }
+        if decision not in status_by_decision:
+            raise ValueError("decision")
+        now = utc_now()
+        with self.store.transaction() as connection:
+            previous = connection.execute(
+                "SELECT execution_id, resulting_status FROM review_decisions WHERE idempotency_key = ?",
+                (idempotency_key,),
+            ).fetchone()
+            if previous is not None:
+                return {
+                    "execution_id": previous["execution_id"],
+                    "execution_status": previous["resulting_status"],
+                    "duplicate": True,
+                }
+            execution = connection.execute(
+                "SELECT task_node_id, command_id, status FROM execution_records WHERE execution_id = ?",
+                (execution_id,),
+            ).fetchone()
+            if execution is None:
+                return None
+            if execution["status"] != "awaiting_acceptance":
+                raise RuntimeError("invalid_state")
+            resulting_status = status_by_decision[decision]
+            connection.execute(
+                "UPDATE execution_records SET status = ?, finished_at = ?, updated_at = ? WHERE execution_id = ?",
+                (resulting_status, now, now, execution_id),
+            )
+            connection.execute(
+                "INSERT INTO review_decisions VALUES (?, ?, ?, ?, ?, ?)",
+                (idempotency_key, execution_id, decision, reason, resulting_status, now),
+            )
+            self._audit(connection, "execution_reviewed", execution["task_node_id"], execution["command_id"], execution_id, now)
+            return {
+                "execution_id": execution_id,
+                "execution_status": resulting_status,
+                "duplicate": False,
+            }
+
     def health(self) -> dict[str, Any]:
         storage = "ready" if self.store.health() else "unavailable"
         return {
@@ -373,11 +420,25 @@ def make_handler(app: GatewayApplication):
                     if task_node_id is not None and (not isinstance(task_node_id, str) or not task_node_id.strip()):
                         raise ValueError("task_node_id")
                     return self._tool_result(request_id, app.list_pending(task_node_id.strip() if task_node_id else None))
+                if name == "review_execution":
+                    result = app.review_execution(
+                        self._required_string(arguments, "execution_id"),
+                        self._required_string(arguments, "decision"),
+                        self._required_string(arguments, "reason"),
+                        self._required_string(arguments, "idempotency_key"),
+                    )
+                    if result is None:
+                        return self._tool_error(request_id, "not_found", "execution was not found")
+                    return self._tool_result(request_id, result)
                 if name == "health":
                     return self._tool_result(request_id, app.health())
                 return self._protocol_error(request_id, -32602, "unknown tool")
             except ValueError:
                 return self._protocol_error(request_id, -32602, "invalid params")
+            except RuntimeError as error:
+                if str(error) == "invalid_state":
+                    return self._tool_error(request_id, "invalid_state", "execution cannot be reviewed in its current state")
+                return self._tool_error(request_id, "internal", "internal gateway error")
             except sqlite3.Error:
                 return self._tool_error(request_id, "unavailable", "storage is unavailable")
             except Exception:
@@ -397,6 +458,7 @@ def make_handler(app: GatewayApplication):
                 {"name": "query_execution", "description": "Query one execution."},
                 {"name": "cancel_execution", "description": "Request cancellation of an execution."},
                 {"name": "list_pending", "description": "List pending executions."},
+                {"name": "review_execution", "description": "Review a completed execution."},
                 {"name": "health", "description": "Read authenticated gateway health."},
             ]
 

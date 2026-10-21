@@ -249,6 +249,45 @@ class GatewayMcpTests(unittest.TestCase):
         )
         self.assertEqual([item["execution_id"] for item in self.tool_result(filtered)], [first])
 
+    def test_review_accepts_a_completed_execution_without_creating_domain_output(self) -> None:
+        self.app.enable_test_runtime()
+        execution_id = self.submit("node-to-review", "review-key")
+        self.wait_for_execution(execution_id, "awaiting_acceptance")
+        status, reviewed = self.mcp_call(
+            "tools/call",
+            {
+                "name": "review_execution",
+                "arguments": {
+                    "execution_id": execution_id,
+                    "decision": "accept",
+                    "reason": "result is sufficient",
+                    "idempotency_key": "review-accept-key",
+                },
+            },
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(
+            self.tool_result(reviewed),
+            {"execution_id": execution_id, "execution_status": "accepted", "duplicate": False},
+        )
+        _, repeated = self.mcp_call(
+            "tools/call",
+            {
+                "name": "review_execution",
+                "arguments": {
+                    "execution_id": execution_id,
+                    "decision": "reject",
+                    "reason": "ignored on retry",
+                    "idempotency_key": "review-accept-key",
+                },
+            },
+        )
+        self.assertEqual(
+            self.tool_result(repeated),
+            {"execution_id": execution_id, "execution_status": "accepted", "duplicate": True},
+        )
+
+    def test_same_task_node_waits_for_existing_worker_lease(self) -> None:
         self.app.enable_test_runtime(duration_seconds=0.2)
         first = self.submit("shared-node", "first")
         self.wait_for_execution(first, "running")
