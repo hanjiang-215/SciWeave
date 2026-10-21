@@ -2,7 +2,7 @@
 id: ai4-emsk
 status: closed
 deps: []
-links: []
+links: [ai4-jnkn]
 created: 2026-10-19T06:25:18Z
 type: task
 priority: 1

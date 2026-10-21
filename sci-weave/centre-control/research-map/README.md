@@ -40,7 +40,7 @@ tests/                           标准库 unittest
 ## 验证
 
 ```bash
-cd sci-weave/research-mapping
+cd sci-weave/centre-control/research-map
 uv sync --locked
 uv run --env-file .env python -m unittest discover -s tests -v
 uv run --env-file .env python src/main.py

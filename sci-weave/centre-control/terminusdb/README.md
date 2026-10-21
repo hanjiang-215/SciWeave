@@ -31,7 +31,7 @@ docker compose version
 在仓库根目录执行：
 
 ```bash
-docker compose -f dockers/service/terminusdb/compose.yaml up -d
+docker compose -f sci-weave/centre-control/terminusdb/compose.yaml up -d
 ```
 
 若本机无法直连 Docker Hub，可先通过可用的镜像代理拉取，再用仓库需要的名字打标签，Compose 配置不需要改动：
@@ -46,13 +46,13 @@ docker tag <mirror>/terminusdb/terminusdb-server:v12.0.8 terminusdb/terminusdb-s
 查看容器状态：
 
 ```bash
-docker compose -f dockers/service/terminusdb/compose.yaml ps
+docker compose -f sci-weave/centre-control/terminusdb/compose.yaml ps
 ```
 
 查看服务日志：
 
 ```bash
-docker compose -f dockers/service/terminusdb/compose.yaml logs -f terminusdb
+docker compose -f sci-weave/centre-control/terminusdb/compose.yaml logs -f terminusdb
 ```
 
 服务默认映射到本机：
@@ -118,13 +118,13 @@ curl -u admin:root 'http://127.0.0.1:6363/api/log/admin/sciweave_mapping_it/loca
 停止容器但保留数据卷：
 
 ```bash
-docker compose -f dockers/service/terminusdb/compose.yaml down
+docker compose -f sci-weave/centre-control/terminusdb/compose.yaml down
 ```
 
 停止容器并删除本次 Compose 创建的数据卷：
 
 ```bash
-docker compose -f dockers/service/terminusdb/compose.yaml down -v
+docker compose -f sci-weave/centre-control/terminusdb/compose.yaml down -v
 ```
 
 第二条命令会删除 TerminusDB 的本地测试数据，请确认不再需要后再执行。清理数据卷不会改变平台保存的 Proposal、Formal MappingRevision 或 AuditEvent；生产系统不能使用物理删除代替业务上的废弃或审计归档。

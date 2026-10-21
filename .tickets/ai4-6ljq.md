@@ -2,7 +2,7 @@
 id: ai4-6ljq
 status: closed
 deps: []
-links: []
+links: [ai4-jnkn]
 created: 2026-10-20T08:31:16Z
 type: epic
 priority: 1
