@@ -10,11 +10,8 @@ from urllib.parse import quote
 
 from . import errors
 from .canonical import sha256_json
-from .domain import (
-    ResourceVersionLocation,
-    ResourceVersionRead,
-    ResourceVersionSnapshot,
-)
+from .domain import ResourceVersionLocation, ResourceVersionRead, ResourceVersionSnapshot
+from .formal_domain import WikiSnapshotRead
 
 Opener = Callable[[str, dict[str, str], float], tuple[int, Mapping[str, str], bytes]]
 
@@ -140,6 +137,97 @@ class TerminusDBResourceStore:
                 attribution=_text(document.get("attribution")),
                 handling_mode=_text(document.get("handling_mode")),
             )
+        )
+
+    def read_exact_snapshot(
+        self, store_id: str, database: str, branch_id: str, commit_hash: str
+    ) -> WikiSnapshotRead:
+        """Read an instance snapshot at the exact commit without head fallback."""
+        location = ResourceVersionLocation(
+            store_id=store_id, database=database, branch_id=branch_id,
+            commit_hash=commit_hash,
+        )
+        url = self._document_commit_url(location)
+        headers = {
+            "Accept": "application/json",
+            "TerminusDB-Data-Version": f"commit:{commit_hash}",
+        }
+        if self._authorization:
+            headers["Authorization"] = self._authorization
+        try:
+            status, response_headers, body = self._opener(url, headers, self.timeout)
+        except (OSError, TimeoutError, urllib.error.URLError):
+            return WikiSnapshotRead.unavailable(errors.STORE_UNAVAILABLE)
+        if status == 404:
+            return WikiSnapshotRead.missing(errors.COMMIT_MISSING)
+        if status < 200 or status >= 300:
+            return WikiSnapshotRead.unavailable(errors.STORE_UNAVAILABLE)
+        normalized = {str(key).lower(): str(value) for key, value in response_headers.items()}
+        if "json" not in normalized.get("content-type", "").lower():
+            return WikiSnapshotRead.unavailable(errors.UNEXPECTED_CONTENT_TYPE)
+        if normalized.get("terminusdb-data-version") != f"commit:{commit_hash}":
+            reason = (errors.DATA_VERSION_MISSING
+                      if "terminusdb-data-version" not in normalized
+                      else errors.DATA_VERSION_MISMATCH)
+            return WikiSnapshotRead.unavailable(reason)
+        try:
+            payload: Any = json.loads(body.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            return WikiSnapshotRead.unavailable(errors.UNEXPECTED_PAYLOAD)
+        if not isinstance(payload, list) or not all(isinstance(item, dict) for item in payload):
+            return WikiSnapshotRead.unavailable(errors.UNEXPECTED_PAYLOAD)
+        return WikiSnapshotRead.confirmed(
+            store_id=store_id, database=database, branch_id=branch_id,
+            commit_hash=commit_hash, documents=payload,
+            content_digest=sha256_json(payload),
+        )
+
+    def _document_commit_url(self, location: ResourceVersionLocation) -> str:
+        segments = {
+            "store": quote(location.store_id, safe=""),
+            "database": quote(location.database, safe=""),
+            "remote": quote(self.remote, safe=""),
+            "commit": quote(location.commit_hash, safe=""),
+        }
+        return (
+            f"{self.base_url}/api/document/{segments['store']}/"
+            f"{segments['database']}/{segments['remote']}/commit/{segments['commit']}"
+            "?as_list=true&graph_type=instance"
+        )
+
+    def read_exact_snapshot(
+        self, store_id: str, database: str, branch_id: str, commit_hash: str
+    ) -> WikiSnapshotRead:
+        """Read an instance snapshot at the exact commit without head fallback."""
+        location = ResourceVersionLocation(store_id, database, branch_id, commit_hash)
+        url = self._document_commit_url(location)
+        headers = {"Accept": "application/json", "TerminusDB-Data-Version": f"commit:{commit_hash}"}
+        if self._authorization:
+            headers["Authorization"] = self._authorization
+        try:
+            status, response_headers, body = self._opener(url, headers, self.timeout)
+        except (OSError, TimeoutError, urllib.error.URLError):
+            return WikiSnapshotRead.unavailable(errors.STORE_UNAVAILABLE)
+        if status == 404:
+            return WikiSnapshotRead.missing(errors.COMMIT_MISSING)
+        if status < 200 or status >= 300:
+            return WikiSnapshotRead.unavailable(errors.STORE_UNAVAILABLE)
+        normalized = {str(key).lower(): str(value) for key, value in response_headers.items()}
+        if "json" not in normalized.get("content-type", "").lower():
+            return WikiSnapshotRead.unavailable(errors.UNEXPECTED_CONTENT_TYPE)
+        if normalized.get("terminusdb-data-version") != f"commit:{commit_hash}":
+            reason = errors.DATA_VERSION_MISSING if "terminusdb-data-version" not in normalized else errors.DATA_VERSION_MISMATCH
+            return WikiSnapshotRead.unavailable(reason)
+        try:
+            payload: Any = json.loads(body.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            return WikiSnapshotRead.unavailable(errors.UNEXPECTED_PAYLOAD)
+        if not isinstance(payload, list) or not all(isinstance(item, dict) for item in payload):
+            return WikiSnapshotRead.unavailable(errors.UNEXPECTED_PAYLOAD)
+        return WikiSnapshotRead.confirmed(
+            store_id=store_id, database=database, branch_id=branch_id,
+            commit_hash=commit_hash, documents=payload,
+            content_digest=sha256_json(payload),
         )
 
     def _document_commit_url(self, location: ResourceVersionLocation) -> str:

@@ -72,6 +72,33 @@ class TerminusDBResourceStoreTestCase(unittest.TestCase):
             **kwargs,
         )
 
+    def test_exact_snapshot_uses_exact_commit_and_returns_digest(self) -> None:
+        captured = {}
+        payload = [RESOURCE, VERSION_DOCUMENT]
+        adapter = self.adapter(confirmed_responder(payload, captured))
+
+        outcome = adapter.read_exact_snapshot(STORE, DATABASE, BRANCH, COMMIT)
+
+        self.assertEqual(outcome.status, "confirmed")
+        self.assertEqual(outcome.commit_hash, COMMIT)
+        self.assertEqual(outcome.content_digest, sha256_json(payload))
+        self.assertEqual(captured["headers"]["TerminusDB-Data-Version"], f"commit:{COMMIT}")
+        self.assertIn(f"/commit/{COMMIT}?", captured["url"])
+
+    def test_exact_snapshot_rejects_unknown_commit_and_header_mismatch(self) -> None:
+        missing = self.adapter(lambda url, headers, timeout: (500, {}, b"unknown"))
+        self.assertEqual(
+            missing.read_exact_snapshot(STORE, DATABASE, BRANCH, COMMIT).status,
+            "unavailable",
+        )
+        mismatch = self.adapter(confirmed_responder(
+            [RESOURCE], data_version="commit:" + "b" * 40
+        ))
+        self.assertEqual(
+            mismatch.read_exact_snapshot(STORE, DATABASE, BRANCH, COMMIT).status,
+            "unavailable",
+        )
+
     def test_confirmed_read_uses_the_exact_commit_route(self) -> None:
         captured = {}
         adapter = self.adapter(confirmed_responder([RESOURCE, VERSION_DOCUMENT], captured))

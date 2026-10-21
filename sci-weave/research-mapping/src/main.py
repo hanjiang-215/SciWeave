@@ -17,6 +17,8 @@ def main() -> int:
         token=config.terminusdb_token,
         username=config.terminusdb_username,
         password=config.terminusdb_password,
+        store_id=config.terminusdb_store,
+        database=config.terminusdb_database,
     )
     service = FormalQueryService(
         sqlite_store=sqlite_store,
