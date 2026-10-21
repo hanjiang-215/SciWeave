@@ -79,4 +79,3 @@ uv run --env-file .env python -m unittest discover -s tests -p "test_terminus_in
 - `ResourceReviewService` 必须注入 `ExactVersionLocationSource`；没有位置记录时返回 `exact_version_location_unknown` 并维持 `pending`，不会批准。候选/正式快照的写入与位置记录由后续切片提供。
 
 契约细节与真实服务证据见 [`docs/superpowers/specs/2026-10-21-terminusdb-exact-commit-read-contract.md`](../../docs/superpowers/specs/2026-10-21-terminusdb-exact-commit-read-contract.md)。
-
