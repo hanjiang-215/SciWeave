@@ -39,6 +39,47 @@ CREATE TABLE IF NOT EXISTS wiki_audit_event (
 CREATE INDEX IF NOT EXISTS wiki_audit_event_target
     ON wiki_audit_event (target_id, occurred_at);
 
+-- Candidate governance records. Wiki content snapshots remain in TerminusDB.
+CREATE TABLE IF NOT EXISTS wiki_buffer_submission (
+    submission_id TEXT PRIMARY KEY,
+    wiki_domain_id TEXT NOT NULL,
+    submitter_id TEXT NOT NULL,
+    base_formal_revision_id TEXT NOT NULL,
+    idempotency_key TEXT NOT NULL UNIQUE,
+    content_digest TEXT NOT NULL,
+    proposal_id TEXT NOT NULL UNIQUE,
+    submitted_at TEXT NOT NULL,
+    status TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS wiki_proposal (
+    proposal_id TEXT PRIMARY KEY,
+    wiki_domain_id TEXT NOT NULL,
+    base_formal_revision_id TEXT NOT NULL,
+    candidate_store_id TEXT NOT NULL,
+    candidate_branch_id TEXT NOT NULL,
+    status TEXT NOT NULL,
+    created_by TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS wiki_candidate_commit (
+    candidate_commit_id TEXT PRIMARY KEY,
+    wiki_domain_id TEXT NOT NULL,
+    proposal_id TEXT NOT NULL UNIQUE,
+    terminus_store_id TEXT NOT NULL,
+    branch_id TEXT NOT NULL,
+    commit_hash TEXT NOT NULL,
+    base_formal_revision_id TEXT NOT NULL,
+    content_digest TEXT NOT NULL,
+    candidate_snapshot_digest TEXT NOT NULL,
+    created_by TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS wiki_buffer_submission_domain
+    ON wiki_buffer_submission (wiki_domain_id, submitted_at);
+
 -- Formal activation facts only; Wiki content remains in TerminusDB.
 CREATE TABLE IF NOT EXISTS formal_wiki_revision (
     formal_wiki_revision_id TEXT PRIMARY KEY,
@@ -55,7 +96,8 @@ CREATE TABLE IF NOT EXISTS wiki_formalization_result (
     formal_wiki_revision_id TEXT NOT NULL,
     terminus_store_id TEXT NOT NULL,
     formal_commit_hash TEXT NOT NULL,
-    result_status TEXT NOT NULL
+    result_status TEXT NOT NULL,
+    resource_approval_map TEXT NOT NULL DEFAULT '{}'
 );
 
 CREATE INDEX IF NOT EXISTS wiki_formalization_result_lookup
@@ -64,4 +106,23 @@ CREATE INDEX IF NOT EXISTS wiki_formalization_result_lookup
 CREATE TABLE IF NOT EXISTS wiki_current_formal_revision (
     wiki_domain_id TEXT PRIMARY KEY,
     current_formal_revision_id TEXT
+);
+
+CREATE TABLE IF NOT EXISTS wiki_merge_request_buffer (
+    merge_request_id TEXT PRIMARY KEY, proposal_id TEXT NOT NULL, wiki_domain_id TEXT NOT NULL,
+    base_formal_revision_id TEXT NOT NULL, candidate_head TEXT NOT NULL, candidate_commit_id TEXT NOT NULL,
+    status TEXT NOT NULL, reviewer_id TEXT NOT NULL, owner_id TEXT, owner_decision TEXT NOT NULL,
+    owner_event_id TEXT, created_at TEXT NOT NULL, locked_preview_id TEXT
+);
+CREATE TABLE IF NOT EXISTS wiki_review_evidence (
+    preview_id TEXT PRIMARY KEY, merge_request_id TEXT NOT NULL, evidence_json TEXT NOT NULL,
+    outcome TEXT NOT NULL, created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS wiki_formalization_operation (
+    operation_id TEXT PRIMARY KEY, merge_request_id TEXT NOT NULL, state TEXT NOT NULL,
+    attempt_number INTEGER NOT NULL, formal_revision_id TEXT, store_id TEXT, branch_id TEXT,
+    commit_hash TEXT, reason_code TEXT, resource_approval_ids TEXT NOT NULL DEFAULT '[]',
+    owner_event_id TEXT, candidate_head TEXT, base_formal_revision_id TEXT,
+    notification_status TEXT NOT NULL DEFAULT 'not_sent', notification_reason TEXT,
+    updated_at TEXT NOT NULL
 );

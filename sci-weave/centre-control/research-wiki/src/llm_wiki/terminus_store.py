@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 import urllib.error
 import urllib.request
@@ -337,4 +338,197 @@ __all__ = [
     "ExactResourceVersionStore",
     "Opener",
     "TerminusDBResourceStore",
+    "TerminusDBWikiCandidateStore",
 ]
+
+
+class TerminusDBWikiCandidateStore(TerminusDBResourceStore):
+    """Write isolated Wiki candidates and confirm their exact immutable commit."""
+
+    def __init__(self, *, store_id: str, database: str, **kwargs):
+        super().__init__(**kwargs)
+        self.store_id = store_id
+        self.database = database
+
+    def create_candidate_snapshot(self, domain_id: str, base_commit_ref: str,
+                                  canonical_snapshot: str, idempotency_key: str):
+        from .candidate_submission import CandidateSnapshotResult
+        if not all((self.store_id, self.database, base_commit_ref, idempotency_key)):
+            return CandidateSnapshotResult("failed", reason_code="candidate_store_not_configured")
+        try:
+            documents = json.loads(canonical_snapshot)
+            if not isinstance(documents, list) or not all(isinstance(doc, dict) for doc in documents):
+                return CandidateSnapshotResult("failed", reason_code="invalid_candidate_snapshot")
+            op = hashlib.sha256(idempotency_key.encode("utf-8")).hexdigest()
+            branch = "wiki-candidate-" + op
+            marker = f"sciweave-wiki-candidate:{op}:{domain_id}:{base_commit_ref}:{sha256_json(documents)}"
+            branches = self._candidate_branches()
+            if branches is None:
+                return CandidateSnapshotResult("unknown", reason_code="store_result_unknown")
+            if branch not in branches:
+                status, _, _ = self._request("POST", self._candidate_branch_url(branch), json.dumps({
+                    "origin": f"{quote(self.store_id, safe='')}/{quote(self.database, safe='')}/{quote(self.remote, safe='')}/branch/main"
+                }, separators=(",", ":")).encode())
+                if not 200 <= status < 300:
+                    return CandidateSnapshotResult("unknown" if status >= 500 or status == 409 else "failed",
+                                                   reason_code="store_result_unknown" if status >= 500 or status == 409 else "store_rejected")
+                status, _, _ = self._request("POST", self._candidate_reset_url(branch), json.dumps({
+                    "commit_descriptor": f"{quote(self.store_id, safe='')}/{quote(self.database, safe='')}/{quote(self.remote, safe='')}/commit/{quote(base_commit_ref, safe='')}"
+                }, separators=(",", ":")).encode())
+                if not 200 <= status < 300:
+                    return CandidateSnapshotResult("unknown" if status >= 500 else "failed",
+                                                   reason_code="store_result_unknown" if status >= 500 else "store_rejected")
+            head = self._candidate_head(branch)
+            if not head:
+                return CandidateSnapshotResult("unknown", reason_code="store_result_unknown")
+            if head.get("identifier") != base_commit_ref:
+                return self._candidate_reconcile(branch, marker, documents)
+            if branch in branches:
+                return CandidateSnapshotResult("unknown", reason_code="store_result_unknown")
+            status, _, _ = self._request("POST", self._candidate_document_url(branch) + "?author=sciweave&message=" + quote(marker, safe=""), canonical_snapshot.encode())
+            if not 200 <= status < 300 and status < 500:
+                return CandidateSnapshotResult("failed", reason_code="store_rejected")
+            return self._candidate_reconcile(branch, marker, documents)
+        except (OSError, TimeoutError, urllib.error.URLError, ValueError, json.JSONDecodeError):
+            return CandidateSnapshotResult("unknown", reason_code="store_result_unknown")
+
+    def _candidate_reconcile(self, branch, marker, expected):
+        from .candidate_submission import CandidateSnapshotResult
+        head = self._candidate_head(branch)
+        if not head or head.get("message") != marker or head.get("author") != "sciweave":
+            return CandidateSnapshotResult("unknown", reason_code="store_result_unknown")
+        commit = head.get("identifier")
+        snapshot = self.read_exact_snapshot(self.store_id, self.database, branch, commit)
+        if snapshot.status != "confirmed" or not _candidate_documents_match(snapshot.documents, expected):
+            return CandidateSnapshotResult("unknown", reason_code="store_result_unknown")
+        return CandidateSnapshotResult("confirmed", self.store_id, branch, commit)
+
+    def create_formal_snapshot(self, candidate_ref, operation_id):
+        """Write the locked candidate to the formal branch and confirm its exact Commit.
+
+        Any ambiguous write outcome is resolved only by finding the operation marker
+        in the formal branch log and validating the complete exact-Commit snapshot.
+        """
+        from .candidate_submission import CandidateSnapshotResult
+        try:
+            source = self.read_exact_snapshot(candidate_ref["store_id"], candidate_ref["database"],
+                                              candidate_ref["branch_id"], candidate_ref["commit_hash"])
+            if source.status != "confirmed":
+                return {"status": "unknown", "reason_code": "candidate_unavailable"}
+            documents = [dict(doc) for doc in source.documents]
+            for document in documents:
+                if document.get("@type") == "WikiRevision":
+                    document["lifecycle_state"] = "formal"
+            marker = "sciweave-wiki-formalization:" + operation_id
+            branch = "main"
+            head = self._candidate_head(branch)
+            if not head or head.get("message") != marker:
+                existing = self.read_exact_snapshot(self.store_id, self.database, branch, head.get("identifier")) if head else None
+                if existing is None or existing.status != "confirmed":
+                    return {"status": "unknown", "reason_code": "formal_head_unverified"}
+                existing_by_id = {doc.get("@id"): doc for doc in existing.documents if doc.get("@id")}
+                additions = []
+                for document in documents:
+                    prior = existing_by_id.get(document.get("@id"))
+                    if prior is None:
+                        additions.append(document)
+                    elif prior != document:
+                        return {"status": "failed", "reason_code": "formal_document_conflict"}
+                if additions:
+                    status, _, _ = self._request("POST", self._candidate_document_url(branch) +
+                        "?author=sciweave&message=" + quote(marker, safe=""),
+                        json.dumps(additions, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
+                    if not 200 <= status < 300:
+                        head = self._candidate_head(branch)
+                        if not head or head.get("message") != marker:
+                            return {"status": "unknown" if status >= 500 else "failed",
+                                    "reason_code": "formal_write_unknown" if status >= 500 else "formal_write_rejected"}
+                else:
+                    return {"status": "failed", "reason_code": "formal_snapshot_has_no_new_documents"}
+            head = self._candidate_head(branch)
+            if not head or head.get("message") != marker:
+                return {"status": "unknown", "reason_code": "formal_commit_unconfirmed"}
+            commit = head.get("identifier")
+            verified = self.read_exact_snapshot(self.store_id, self.database, branch, commit)
+            if verified.status != "confirmed" or list(verified.documents) != documents:
+                return {"status": "unknown", "reason_code": "formal_snapshot_unverified"}
+            return {"status": "confirmed", "store_id": self.store_id, "branch_id": branch, "commit_hash": commit}
+        except Exception:
+            return {"status": "unknown", "reason_code": "formal_write_unknown"}
+
+    def verify_formalization_commit(self, store_id, database, branch_id, commit_hash, operation_id):
+        """Confirm the exact formal Commit carries this operation's log marker."""
+        if (store_id, database, branch_id) != (self.store_id, self.database, "main"):
+            return False
+        url = (f"{self.base_url}/api/log/{quote(store_id, safe='')}/"
+               f"{quote(database, safe='')}/{quote(self.remote, safe='')}/branch/"
+               f"{quote(branch_id, safe='')}?count=1000")
+        status, _, body = self._request("GET", url)
+        if not 200 <= status < 300:
+            return False
+        try:
+            entries = json.loads(body.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            return False
+        marker = "sciweave-wiki-formalization:" + operation_id
+        if not isinstance(entries, list) or not any(
+            isinstance(entry, dict) and entry.get("identifier") == commit_hash
+            and entry.get("message") == marker for entry in entries
+        ):
+            return False
+        snapshot = self.read_exact_snapshot(store_id, database, branch_id, commit_hash)
+        return snapshot.status == "confirmed" and snapshot.commit_hash == commit_hash
+
+    def _request(self, method, url, body=None):
+        headers = {"Accept": "application/json"}
+        if self._authorization:
+            headers["Authorization"] = self._authorization
+        if body is not None:
+            headers["Content-Type"] = "application/json"
+        request = urllib.request.Request(url, data=body, headers=headers, method=method)
+        try:
+            with urllib.request.urlopen(request, timeout=self.timeout) as response:
+                return response.status, dict(response.headers), response.read()
+        except urllib.error.HTTPError as error:
+            return error.code, dict(error.headers or {}), error.read()
+
+    def _candidate_branches(self):
+        status, _, body = self._request("GET", self._candidate_database_url() + "?branches=true")
+        try:
+            payload = json.loads(body.decode("utf-8"))
+            branches = payload.get("branches") if isinstance(payload, dict) else None
+            return set(branches) if status in range(200, 300) and isinstance(branches, list) else None
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            return None
+
+    def _candidate_head(self, branch):
+        url = self._candidate_log_url(branch) + "?count=1"
+        status, _, body = self._request("GET", url)
+        try:
+            entries = json.loads(body.decode("utf-8"))
+            return entries[0] if status in range(200, 300) and isinstance(entries, list) and entries and isinstance(entries[0], dict) else None
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            return None
+
+    def _candidate_database_url(self):
+        return f"{self.base_url}/api/db/{quote(self.store_id, safe='')}/{quote(self.database, safe='')}"
+
+    def _candidate_branch_url(self, branch):
+        return f"{self.base_url}/api/branch/{quote(self.store_id, safe='')}/{quote(self.database, safe='')}/{quote(self.remote, safe='')}/branch/{quote(branch, safe='')}"
+
+    def _candidate_reset_url(self, branch):
+        return f"{self.base_url}/api/reset/{quote(self.store_id, safe='')}/{quote(self.database, safe='')}/{quote(self.remote, safe='')}/branch/{quote(branch, safe='')}"
+
+    def _candidate_document_url(self, branch):
+        return f"{self.base_url}/api/document/{quote(self.store_id, safe='')}/{quote(self.database, safe='')}/{quote(self.remote, safe='')}/branch/{quote(branch, safe='')}"
+
+    def _candidate_log_url(self, branch):
+        return f"{self.base_url}/api/log/{quote(self.store_id, safe='')}/{quote(self.database, safe='')}/{quote(self.remote, safe='')}/branch/{quote(branch, safe='')}"
+
+
+def _candidate_documents_match(actual, expected):
+    for wanted in expected:
+        key = "wiki_revision_id" if wanted.get("@type") == "WikiRevision" else "reference_id"
+        if not any(isinstance(doc, dict) and doc.get(key) == wanted.get(key) and doc == wanted for doc in actual):
+            return False
+    return True

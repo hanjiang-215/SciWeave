@@ -8,7 +8,9 @@ import uuid
 from typing import Any
 
 from llm_wiki.canonical import sha256_json
+from llm_wiki.domain import ResourceVersionLocation
 from llm_wiki.formal_query import WikiFormalQueryService
+from llm_wiki.resource_review import ResourceReviewService
 from llm_wiki.sqlite_store import SqliteStore
 from llm_wiki.terminus_store import TerminusDBResourceStore
 
@@ -115,9 +117,74 @@ class WikiFormalQueryIntegrationTestCase(unittest.TestCase):
         self.assertEqual(result.formal_wiki_revision_id, REVISION)
         self.assertEqual(result.formal_commit_hash, self.commit_hash)
         self.assertEqual(result.body_markdown, BODY)
-        self.assertEqual(len(result.references), 1)
-        self.assertEqual(result.references[0].reference_id, "integration-reference")
-        self.assertEqual(result.references[0].target_wiki_revision_id, "prior-formal-revision")
+        self.assertEqual(len(result.references), 5)
+        wiki_reference = next(
+            reference for reference in result.references
+            if reference.reference_id == "integration-reference"
+        )
+        self.assertEqual(wiki_reference.target_wiki_revision_id, "prior-formal-revision")
+
+    def test_resource_references_use_real_review_service_and_keep_exact_targets(self) -> None:
+        reviews = ResourceReviewService(
+            sqlite_store=self.sqlite,
+            terminus_store=self.adapter,
+            location_source=_ExactVersionLocationSource(
+                ResourceVersionLocation(
+                    store_id=self.store_id,
+                    database=self.database,
+                    branch_id=self.branch,
+                    commit_hash=self.commit_hash,
+                )
+            ),
+            clock=lambda: "2026-10-22T00:00:00Z",
+        )
+        approved_decision = reviews.record_decision(
+            "resource-approved", "resource-owner", "approved",
+            reason="citation use verified", scope=("citation",),
+        )
+        self.assertTrue(approved_decision.recorded, approved_decision.reason_code)
+        reviews.record_decision(
+            "resource-revoked", "resource-owner", "approved",
+            reason="initial approval", scope=("citation",),
+        )
+        reviews.record_decision(
+            "resource-revoked", "resource-owner", "revoked",
+            reason="source approval withdrawn",
+        )
+        service = WikiFormalQueryService(
+            sqlite_store=self.sqlite,
+            terminus_store=self.adapter,
+            terminus_database=self.database,
+            resource_review_service=reviews,
+        )
+
+        result = service.get_current(DOMAIN)
+
+        self.assertEqual(result.status, "available", result.reason_code)
+        self.assertEqual(
+            [(reference.reference_id, reference.target_resource_version_id,
+              reference.qualification.status if reference.qualification else None)
+             for reference in result.references],
+            [
+                ("approved-citation", "resource-approved", "approved"),
+                ("integration-reference", None, None),
+                ("pending-citation", "resource-pending", "pending"),
+                ("revoked-citation", "resource-revoked", "revoked"),
+                ("scope-mismatch", "resource-approved", "pending"),
+            ],
+        )
+        approved = result.references[0]
+        self.assertEqual(approved.qualification.resource_version_id, "resource-approved")
+        self.assertEqual(approved.qualification.use_scope, ("citation",))
+        self.assertEqual(result.references[4].qualification.reason_code, "no_effective_decision")
+
+
+class _ExactVersionLocationSource:
+    def __init__(self, location: ResourceVersionLocation):
+        self.location = location
+
+    def locate(self, resource_version_id: str) -> ResourceVersionLocation:
+        return self.location
 
 
 class _NoResourceReviews:
@@ -165,7 +232,18 @@ def _schema() -> list[dict[str, Any]]:
          "description": "xsd:string", "body_markdown": "xsd:string"},
         {"@type": "Class", "@id": "ResourceReference", "@key": {"@type": "Lexical", "@fields": ["reference_id"]},
          "reference_id": "xsd:string", "source_revision_id": "xsd:string",
-         "target_wiki_revision_id": "xsd:string", "reference_role": "xsd:string", "body_locator": "xsd:string"},
+         "target_wiki_revision_id": "xsd:string", "target_resource_version_id": "xsd:string",
+         "requested_scope": "xsd:string", "reference_role": "xsd:string", "body_locator": "xsd:string"},
+        {"@type": "Class", "@id": "Resource", "@key": {"@type": "Lexical", "@fields": ["name"]},
+         "name": "xsd:string", "owner_id": "xsd:string"},
+        {"@type": "Class", "@id": "ResourceVersion", "@key": {"@type": "Lexical", "@fields": ["resource_version_id"]},
+         "resource_version_id": "xsd:string", "resource_id": "xsd:string",
+         "content_checksum_algorithm": "xsd:string", "content_checksum_value": "xsd:string",
+         "license": "xsd:string", "attribution": "xsd:string", "source_locator": "xsd:string",
+         "external_version_id": "xsd:string", "current_access_locator": "xsd:string",
+         "availability_status": "xsd:string", "availability_checked_at": "xsd:string",
+         "generated_at": "xsd:string", "generated_by": "xsd:string",
+         "generated_by_task_id": "xsd:string", "handling_mode": "xsd:string"},
     ]
 
 
@@ -177,9 +255,52 @@ def _documents() -> list[dict[str, Any]]:
          "body_markdown": BODY},
         {"@type": "ResourceReference", "@id": "ResourceReference/integration-reference",
          "reference_id": "integration-reference", "source_revision_id": REVISION,
-         "target_wiki_revision_id": "prior-formal-revision", "reference_role": "related",
+         "target_wiki_revision_id": "prior-formal-revision", "target_resource_version_id": "",
+         "requested_scope": "", "reference_role": "related",
          "body_locator": "paragraph-1"},
+        _resource_document("source-resource-approved"),
+        _resource_document("source-resource-pending"),
+        _resource_document("source-resource-revoked"),
+        _resource_version_document("resource-approved"),
+        _resource_version_document("resource-pending"),
+        _resource_version_document("resource-revoked"),
+        _resource_reference("approved-citation", "resource-approved", "citation"),
+        _resource_reference("pending-citation", "resource-pending", "citation"),
+        _resource_reference("revoked-citation", "resource-revoked", "citation"),
+        _resource_reference("scope-mismatch", "resource-approved", "redistribution"),
     ]
+
+
+def _resource_document(resource_name: str) -> dict[str, Any]:
+    return {
+        "@type": "Resource", "@id": f"Resource/{resource_name}",
+        "name": resource_name, "owner_id": "resource-owner",
+    }
+
+
+def _resource_version_document(version_id: str) -> dict[str, Any]:
+    resource_name = f"source-{version_id}"
+    return {
+        "@type": "ResourceVersion", "@id": f"ResourceVersion/{version_id}",
+        "resource_version_id": version_id, "resource_id": f"Resource/{resource_name}",
+        "content_checksum_algorithm": "sha256", "content_checksum_value": "a" * 64,
+        "license": "CC-BY-4.0", "attribution": "Integration Lab",
+        "source_locator": f"doi:10.0000/{version_id}", "external_version_id": "upstream-v1",
+        "current_access_locator": "https://example.org/resource", "availability_status": "available",
+        "availability_checked_at": "2026-10-22T00:00:00Z", "generated_at": "2026-10-21T00:00:00Z",
+        "generated_by": "integration-agent", "generated_by_task_id": "integration-task",
+        "handling_mode": "direct_query",
+    }
+
+
+def _resource_reference(reference_id: str, version_id: str, scope: str) -> dict[str, Any]:
+    return {
+        "@type": "ResourceReference", "@id": f"ResourceReference/{reference_id}",
+        "reference_id": reference_id, "source_revision_id": REVISION,
+        "target_resource_version_id": version_id, "target_wiki_revision_id": "",
+        "requested_scope": scope,
+        "reference_role": "evidence", "body_locator": "paragraph-2",
+    }
 
 
 if __name__ == "__main__":

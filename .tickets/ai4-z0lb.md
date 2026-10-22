@@ -1,6 +1,6 @@
 ---
 id: ai4-z0lb
-status: open
+status: closed
 deps: [ai4-6s53]
 links: []
 created: 2026-10-20T08:32:17Z
@@ -28,8 +28,19 @@ tags: [mapping, implementation]
 
 ## Acceptance Criteria
 
-- [ ] 对精确基准和 candidate head 生成可重复读取的结构差异、受影响对象和路线影响证据。
-- [ ] Merge Request Buffer 固定引用 Proposal、候选 head、基准正式版本、预览结果及提交/审阅记录；候选正文不复制、不原地修改。
-- [ ] 基准已前进、候选 head 不匹配、候选不可读或预览不完整时返回明确失败结果，不创建可批准的有效请求，且旧证据不被覆盖。
-- [ ] 通过、退回或拒绝等预审/审阅决定保留操作者、UTC 时间、理由及审计关联；最终批准仅由后续 Owner 流程完成。
-- [ ] `tests/test_review.py` 覆盖无变更、有效差异、基准过期、head 失配、候选不可读和 Buffer 锁定；标准库验证命令及输出证据随实现回写。
+- [x] 对精确基准和 candidate head 生成可重复读取的结构差异、受影响对象和路线影响证据。
+- [x] Merge Request Buffer 固定引用 Proposal、候选 head、基准正式版本、预览结果及提交/审阅记录；候选正文不复制、不原地修改。
+- [x] 基准已前进、候选 head 不匹配、候选不可读或预览不完整时返回明确失败结果，不创建可批准的有效请求，且旧证据不被覆盖。
+- [x] 通过、退回或拒绝等预审/审阅决定保留操作者、UTC 时间、理由及审计关联；最终批准仅由后续 Owner 流程完成。
+- [x] `tests/test_review.py` 覆盖无变更、有效差异、基准过期、head 失配、候选不可读和 Buffer 锁定；标准库验证命令及输出证据随实现回写。
+
+## Notes
+
+### 2026-10-22 审阅实现与验收
+
+- 新增 `MappingReviewService`：预览通过 TerminusDB 精确读取正式基线和 candidate commit，验证 Proposal/base/head/store/branch 身份；preview/evidence ID 稳定，差异只向 SQLite 写字段哈希及对象/路线影响摘要，不保存候选图正文。
+- Buffer 绑定 Proposal、正式基线、candidate commit、preview；创建前重新检查正式指针和分支 head。审阅事件保存操作者、UTC 时间、决定及理由，预审记录不触发正式化。
+- 失败尝试记录在 `mapping_review_attempt`，基线过期、head 失配、不可读和差异不完整均失败关闭。
+- 验证：`uv run --locked python -m unittest tests.test_review -v` — 7 项通过；`uv run --locked python -m unittest discover -s tests -v` — 59 项通过、2 项跳过；`uv run --locked python -m compileall -q src tests` 和 `git diff --check` 通过。
+- TerminusDB 12.0.8 实测：`$env:SCIWEAVE_RUN_TERMINUSDB_INTEGRATION='1'; uv run --locked python -m unittest discover -s tests -p 'test_terminus_integration.py' -v` — 4 项执行，其中候选分支建立、精确读回、相同身份重放及临时库清理通过，未知 Commit 失败关闭；2 项 exact historical Commit 对比因未配置 `SCIWEAVE_MAPPING_INTEGRATION_COMMIT` / `SCIWEAVE_MAPPING_INTEGRATION_HEAD_COMMIT` 跳过，不计为通过证据。
+- 本票的验收项由单元测试和可执行 TerminusDB 候选集成用例覆盖；上述跳过项只代表独立历史 Commit 比较环境证据未提供，不影响该实现的固定 Commit 与当前分支 head 检查。

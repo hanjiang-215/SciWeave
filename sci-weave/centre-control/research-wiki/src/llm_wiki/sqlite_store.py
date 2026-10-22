@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from dataclasses import dataclass
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
@@ -9,6 +10,19 @@ from pathlib import Path
 from .canonical import canonical_json
 from .domain import ResourceReviewRecord, ResourceVersionLocation, WikiAuditEvent
 from .formal_domain import WikiFormalRevision, WikiFormalizationResult
+
+
+@dataclass(frozen=True)
+class WikiCandidateSubmission:
+    submission_id: str
+    wiki_domain_id: str
+    submitter_id: str
+    base_formal_revision_id: str
+    idempotency_key: str
+    content_digest: str
+    proposal_id: str
+    submitted_at: str
+    status: str
 
 
 class SqliteStore:
@@ -89,6 +103,19 @@ class SqliteStore:
     def latest_review(self, resource_version_id: str) -> ResourceReviewRecord | None:
         reviews = self.list_reviews(resource_version_id)
         return None if not reviews else reviews[-1]
+
+    def list_candidate_submissions(self, wiki_domain_id: str) -> list["WikiCandidateSubmission"]:
+        with self.connection() as connection:
+            rows = connection.execute(
+                "SELECT * FROM wiki_buffer_submission WHERE wiki_domain_id=? ORDER BY submitted_at, rowid",
+                (wiki_domain_id,),
+            ).fetchall()
+        return [WikiCandidateSubmission(
+            submission_id=str(row["submission_id"]), wiki_domain_id=str(row["wiki_domain_id"]),
+            submitter_id=str(row["submitter_id"]), base_formal_revision_id=str(row["base_formal_revision_id"]),
+            idempotency_key=str(row["idempotency_key"]), content_digest=str(row["content_digest"]),
+            proposal_id=str(row["proposal_id"]), submitted_at=str(row["submitted_at"]), status=str(row["status"]),
+        ) for row in rows]
 
     def add_formal_revision(
         self,

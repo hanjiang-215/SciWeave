@@ -1,6 +1,6 @@
 ---
 id: ai4-1qyc
-status: open
+status: in_progress
 deps: [ai4-z0lb]
 links: []
 created: 2026-10-20T08:32:17Z
@@ -36,3 +36,15 @@ tags: [mapping, implementation]
 - [ ] SQLite 激活确定失败时事务无部分生效；提交结果未知或双侧不一致时进入 `reconciliation_required`，读回核对前不报告成功、不盲目重写。
 - [ ] 通知失败不撤销成功版本；对账、修复及人工决定保留追加审计证据。
 - [ ] 自动化/集成验证覆盖成功、驳回、过期、存储失败、SQLite 回滚和未知结果恢复；README 命令及实际结果回写本票。
+
+## Notes
+
+- 2026-10-22：当前身份核对通过：本票 assignee 为 `hanjiang`，当前分支为 `feature/hanjiang`，`git config user.name` 为 `hanjiang`。
+- 2026-10-22：恢复边界复查发现，较早的 Owner 批准会在之后已有拒绝/退回事件时仍被选中并允许正式化。新增回归测试先复现该问题，再将资格判断改为“最新审阅事件必须是由 Project Owner 作出的批准”；定向正式化测试通过。
+- 2026-10-22：重复调用已成功操作时，现在检查 SQLite 当前指针、正式版本、成功结果的存储/Commit 关联，并精确读回 TerminusDB 快照及摘要；任一证据不一致即返回 `reconciliation_required`，不再仅凭先前 attempt 状态报告成功。
+- 2026-10-22：验证命令 `uv run --locked python -m compileall -q src tests` 成功；`uv run --locked python -m unittest discover -s tests -v` 共 67 项，65 项通过、2 项跳过。跳过的是依赖 `SCIWEAVE_MAPPING_INTEGRATION_COMMIT`（及可选 head Commit）的历史 Commit 对比测试；候选分支创建/重放和未知 Commit 集成用例均运行通过。首轮约定命令 `uv run --env-file .env ...` 因本地未提供 `.env` 无法运行，因此改用仓库已锁定依赖的 `uv run --locked`，未创建或填入环境文件。
+- 2026-10-22：另外补上 SQLite `commit()` 抛错后可能实际已提交的判定：错误分支先比对指针、正式版本、成功结果、attempt 及精确 TerminusDB 内容；所有证据吻合时才返回成功，否则保持 `reconciliation_required`。这处理了之前失败分支可能把已持久化 attempt 改成对账状态的风险。随后全量验证重新运行：编译成功，67 项测试中 65 项通过、2 项按历史 Commit 配置缺失跳过。
+- 2026-10-22：随后将候选 branch head 读取不可用、TerminusDB 正式快照写入抛错和精确读回抛错统一按结果未知处理，避免把服务故障误记为确定性失败；补充候选 head 不可用时必须进入对账的测试。最新全量验证：`uv run --locked python -m compileall -q src tests` 成功；`uv run --locked python -m unittest discover -s tests -v` 共 68 项，66 项通过、2 项因未提供历史 Commit 配置而跳过。
+- 2026-10-22：正式化全量验证记录已同步到 README，并新增 `reconcile()` 在未知快照结果后沿用原操作恢复的定向测试。最新全量验证：源码编译成功；69 项测试中 67 项通过、2 项因未提供历史 Commit 配置而跳过；`git diff --check` 无差异格式错误。
+- 仍有完成阻塞：完整 SQLite 激活服务与真实 TerminusDB 的端到端联合链路尚未实际验证。真实服务已验证候选分支创建/重放、精确读回、同一精确 Commit 的正式快照引用及未知 Commit 检查；完整历史 Commit 对比需配置对应 Commit。保持本票 `in_progress`，不勾选未实证验收项。
+- 2026-10-22：新增 SQLite `commit()` 在激活事务实际持久化后抛出异常的回归测试。首次定向执行发现注入点过早（打断 attempt 建立事务），据此将注入精确限定在成功激活结果已持久化的事务；定向测试通过，并验证当前正式指针、唯一正式版本和成功结果均已持久化后服务返回成功。最新全量验证：编译成功；70 项测试中 68 项通过、2 项因未配置历史 Commit 而跳过；`git diff --check` 通过。真实 TerminusDB 集成验证 4 项中 2 项通过、2 项因未提供历史 Commit 配置跳过。验证记录已同步至 Mapping README。

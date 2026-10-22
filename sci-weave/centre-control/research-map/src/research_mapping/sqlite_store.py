@@ -27,6 +27,15 @@ class SqliteStore:
         schema = self._schema_path.read_text(encoding="utf-8")
         with self.connection() as connection:
             connection.executescript(schema)
+            columns = {
+                row["name"] for row in connection.execute(
+                    "PRAGMA table_info(mapping_candidate_commit)"
+                ).fetchall()
+            }
+            if "candidate_snapshot_digest" not in columns:
+                connection.execute(
+                    "ALTER TABLE mapping_candidate_commit ADD COLUMN candidate_snapshot_digest TEXT"
+                )
             connection.commit()
 
     @contextmanager
