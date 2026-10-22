@@ -81,3 +81,10 @@ tags: [centre-control, centre-agents, candidate-prereview]
 阻塞状态：本票 `deps` 为 `ai4-upsm`（中央服务留痕工具），该票已关闭，本票不再受阻。
 
 > 更正（2026-10-22T14:10:00Z）：上一条写于 2026-10-22 09:15 的说明已过期并保留原文。留痕工具的语义已改为「接口层对外调用账本」，包位置改为 `sci-weave/centre-control/shared/audit-trail`，`ai4-upsm` 已关闭。详见 [中央留痕工具共享包实现规格](ai4-tg3v.md) 与其代码落地票 [留痕包迁移到 centre-control 并改造为接口层调用账本](ai4-gvan.md)。本票的「留痕」指的是预审结论经领域管理 MCP 落库时的对外调用记录，不再要求领域代码在写事实的同一事务里调 `write_audit_event`。
+
+**2026-10-22T14:55:00Z**
+
+「预审报告的追加日志契约」(ai4-oz3s) 关闭后的口径同步（本票 assignee 本人操作）。`## Resolution` 末段「报告失效与重算」的文字按该票最终契约读，原文保留：
+
+- 候选头变化：新报告条目 + 追加 `head_moved` 判定指向它，旧报告不修改。
+- 正式版本发布：追加 `base_moved` 判定（`superseding_report_id` 为空），`stale` 不再是报告字段；重算前该候选卡住。

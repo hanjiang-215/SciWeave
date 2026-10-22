@@ -97,3 +97,11 @@ tags: [centre-agents, governance, prereview, wayfinder:grilling]
 **2026-10-22T09:22:00Z**
 
 2026-10-22 补充「报告失效」一节，依据 Project Owner 裁决「stale 后重算，重算期间该候选卡住」：正式版本发布也发一条领域事件（载荷只带 `formal_revision_id` 与领域标识），受影响候选的旧报告转 `stale` 并在下一次预审时重算，重算完成前卡住；未以该版本为基准的候选不受影响。新增一条验收与对应回归测试要求。原文中「中央 Agent」已按术语统一改称 Centre Agent。
+
+**2026-10-22T14:55:00Z**
+
+「预审报告的追加日志契约」(ai4-oz3s) 关闭后的口径同步（本票 assignee 本人操作）。以下三处按该票的最终契约读，正文原文保留不动：
+
+- 「报告里标 `stale`」：改为**追加一条 `reason='base_moved'` 的失效判定**，报告行本身不被修改。`stale` 不再是报告的字段值。
+- 「旧条目保留并标 `superseded_by`」：改为追加 `reason='head_moved'` 的判定，`superseding_report_id` 指向新 head 的报告。`superseded_by` 字段已从报告表删除。
+- 「下一次预审时重算」：重算产生的是新 head 下的新报告，与判定条目并存；「当前有效报告」由同一候选最新的一条判定推出。

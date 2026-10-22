@@ -1,3 +1,3 @@
 # ai4-gvan 的索引归属与简介（人工维护）
 module = "governance"
-summary = "把留痕包迁到 centre-control/shared 并改成接口层调用账本：新事件形状、两阶段写入与查询"
+summary = "把留痕包改成接口层调用账本：调用形状的表与两阶段写入时序、fail-open 读记录、自管事务与查询接口"

@@ -38,6 +38,7 @@ tags: [wayfinder:map, centre-agents, governance]
 <!-- 已关闭的子票在这里各占一行；未关闭的子票通过查询获得，不在此列出 -->
 
 - [中央服务留痕工具：写入方统一调用的审计接口](ai4-upsm.md)：统一发生在**接口层**而非存储层。2026-10-22 修订后，留痕只记接口层对外调用（调用者、通道、服务、工具、目标、结果、耗时），不记业务语义；中央一个审计库、路径由环境变量提供；读操作单条 fail-open，写操作两阶段 fail-closed；包位置 `sci-weave/centre-control/shared/audit-trail`。规格见 [中央留痕工具共享包实现规格](ai4-tg3v.md)，代码落地见 [留痕包迁移到 centre-control 并改造为接口层调用账本](ai4-gvan.md)。领域审计表与调用账本作用域分开、互不写入。
+- [预审报告的追加日志契约](ai4-oz3s.md)：两套领域 SQLite 各一张报告表与一张失效判定表，字段对齐但不共享；唯一键 `(candidate_id, candidate_head, rule_set_version)` 保证重审幂等；失效用**追加判定**（`head_moved` / `base_moved`）表达，报告行只读，当前有效报告由最新判定推出；冲突矩阵只在同领域内比较；规则版本无法解析时拒写。
 
 ## Not yet specified
 
@@ -58,3 +59,11 @@ tags: [wayfinder:map, centre-agents, governance]
 - **`Not yet specified` 中「预审与正式版本发布之间的时序」已定案，移出**：正式版本发布也发一条领域事件，受影响候选的旧报告标 `stale` 并在下一次预审时重算，重算完成前该候选卡住。落在「预审报告的追加日志契约」(ai4-oz3s) 与「预审门禁、触发范围与故障处置」(ai4-a2ba)。
 - **Decisions so far 中「中央服务留痕工具」一行**：该票后来已关闭，按地图规则转载回索引，见上方条目。
 - **地图形态补充**：Centre Agent 与 Task Agent 共用 Work Agent 架构，见 `docs/data-flow/work-agent.md` 与 [ADR-0001](../../docs/adr/0001-task-dispatch-via-message-queue.md)。本图的产物、存储、门禁与接口边界不受影响，变的是它跑在三个组件上而非单个常驻进程。
+
+**2026-10-22T14:55:00Z**
+
+2026-10-22 更新（本票 assignee 本人操作）：
+
+- **「预审报告的追加日志契约」(ai4-oz3s) 已关闭**，结论转载进 `Decisions so far`。这项原先只被视为存储形态的细节，实际定下了三件影响其他子票的事：失效是**追加判定**而非修改旧报告；两套领域库各一张表、不跨领域比较冲突；`rule_set_version` 的规则文件位置留给「中央 Agent 能力接口收口」(ai4-rlv6)。
+- **`ai4-a2ba`、`ai4-8dgd`、`ai4-t2wc` 随之解除阻塞**，进入前沿。
+- 上一轮 09:35 记录里「旧报告标 `stale`」的表述已作废，正确表述是追加 `base_moved` 判定；保留原文以便对照。
