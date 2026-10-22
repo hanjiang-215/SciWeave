@@ -3,7 +3,6 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
-from dataclasses import dataclass
 import urllib.error
 import urllib.request
 from collections.abc import Callable, Mapping
@@ -12,6 +11,7 @@ from urllib.parse import quote
 
 from . import errors
 from .canonical import canonical_json
+from .candidate_domain import CandidateSnapshotResult
 from .domain import SNAPSHOT_CONFIRMED, SnapshotRead
 
 Opener = Callable[[str, dict[str, str], float], tuple[int, Mapping[str, str], bytes]]
@@ -27,18 +27,6 @@ class CandidateSnapshotStore(Protocol):
     ) -> CandidateSnapshotResult: ...
 
 
-@dataclass(frozen=True)
-class CandidateSnapshotResult:
-    """Explicit result of a candidate snapshot write attempt."""
-
-    status: str
-    store_id: str | None = None
-    branch_id: str | None = None
-    commit_hash: str | None = None
-    reason_code: str | None = None
-
-
-
 def _contains_documents(actual, expected):
     """Confirm every submitted document exists unchanged in the exact commit."""
     by_id = {document.get("@id"): document for document in actual if isinstance(document, dict)}
@@ -49,7 +37,9 @@ def _contains_documents(actual, expected):
 
 
 class ExactSnapshotStore(Protocol):
-    """Boundary for reading one exact formal snapshot."""
+    """Boundary for reading one exact formal snapshot and its branch head."""
+
+    def current_branch_head(self, store_id: str, database: str, branch_id: str) -> str | None: ...
 
     def read_exact_snapshot(
         self, store_id: str, database: str, branch_id: str, commit_hash: str
@@ -103,41 +93,51 @@ class TerminusDBStore:
             return CandidateSnapshotResult("failed", reason_code="invalid_candidate_snapshot")
 
         digest = hashlib.sha256(canonical_json(documents).encode("utf-8")).hexdigest()
-        suffix = hashlib.sha256(idempotency_key.encode("utf-8")).hexdigest()[:16]
-        branch = f"candidate-{suffix}"
-        marker = f"sciweave-candidate:{suffix}:{digest}"
+        operation_id = hashlib.sha256(idempotency_key.encode("utf-8")).hexdigest()
+        branch = f"candidate-{operation_id}"
+        marker = f"sciweave-candidate:{operation_id}:{domain_id}:{base_commit_ref}:{digest}"
         try:
             branches = self._branches()
             if branches is None:
                 return CandidateSnapshotResult("unknown", reason_code=errors.STORE_RESULT_UNKNOWN)
-            if branch not in branches:
-                status, _, _ = self._request(
-                    "POST", self._branch_url(branch), json.dumps({}, separators=(",", ":")).encode()
-                )
-                if not 200 <= status < 300:
-                    # A conflict can mean a previous timed-out create. Re-read
-                    # state; never infer creation from the response alone.
-                    if status not in (409, 422):
-                        return CandidateSnapshotResult("failed", reason_code="store_rejected")
-                    branches = self._branches()
-                    if branches is None or branch not in branches:
-                        return CandidateSnapshotResult("unknown", reason_code=errors.STORE_RESULT_UNKNOWN)
-                status, _, _ = self._request(
-                    "POST", self._reset_url(branch), json.dumps({
-                        "commit_descriptor": self._commit_descriptor(base_commit_ref)
-                    }, separators=(",", ":")).encode()
-                )
-                if not 200 <= status < 300:
-                    return CandidateSnapshotResult(
-                        "unknown" if status >= 500 else "failed",
-                        reason_code=errors.STORE_RESULT_UNKNOWN if status >= 500 else "store_rejected",
+            branch_existed = branch in branches
+            branch_created = False
+            if not branch_existed:
+                try:
+                    status, _, _ = self._request(
+                        "POST", self._branch_url(branch), json.dumps({
+                            "origin": f"{quote(self.store_id, safe='')}/{quote(self.database, safe='')}/{quote(self.remote, safe='')}/branch/main"
+                        }, separators=(",", ":")).encode()
                     )
+                except (OSError, TimeoutError, urllib.error.URLError):
+                    return self._reconcile_if_present(branch, marker, documents, digest)
+                if not 200 <= status < 300:
+                    if status in (409, 422) or status >= 500:
+                        return self._reconcile_if_present(branch, marker, documents, digest)
+                    return CandidateSnapshotResult("failed", reason_code="store_rejected")
+                else:
+                    branch_created = True
+                if branch_created:
+                    status, _, _ = self._request(
+                        "POST", self._reset_url(branch), json.dumps({
+                            "commit_descriptor": self._commit_descriptor(base_commit_ref)
+                        }, separators=(",", ":")).encode()
+                    )
+                    if not 200 <= status < 300:
+                        return CandidateSnapshotResult(
+                            "unknown" if status >= 500 else "failed",
+                            reason_code=errors.STORE_RESULT_UNKNOWN if status >= 500 else "store_rejected",
+                        )
 
             current = self._head(branch)
             if current is None:
                 return CandidateSnapshotResult("unknown", reason_code=errors.STORE_RESULT_UNKNOWN)
             if current.get("identifier") != base_commit_ref:
                 return self._reconcile(branch, marker, documents, digest, head=current)
+            if branch_existed:
+                # A branch at the requested base is not proof that this
+                # operation owns it; never append to a pre-existing branch.
+                return CandidateSnapshotResult("unknown", reason_code=errors.STORE_RESULT_UNKNOWN)
 
             headers = {"Content-Type": "application/json"}
             if self._authorization:
@@ -153,6 +153,15 @@ class TerminusDBStore:
             return self._reconcile(branch, marker, documents, digest, response_headers)
         except (OSError, TimeoutError, urllib.error.URLError, ValueError, json.JSONDecodeError):
             return self._reconcile(branch, marker, documents, digest)
+
+    def _reconcile_if_present(self, branch, marker, documents, digest):
+        branches = self._branches()
+        if branches is None or branch not in branches:
+            return CandidateSnapshotResult("unknown", reason_code=errors.STORE_RESULT_UNKNOWN)
+        head = self._head(branch)
+        if head is None:
+            return CandidateSnapshotResult("unknown", reason_code=errors.STORE_RESULT_UNKNOWN)
+        return self._reconcile(branch, marker, documents, digest, head=head)
 
     def _reconcile(self, branch, marker, documents, digest, response_headers=None, head=None):
         try:
@@ -225,6 +234,40 @@ class TerminusDBStore:
 
     def _commit_descriptor(self, commit):
         return f"{quote(self.store_id, safe='')}/{quote(self.database, safe='')}/{quote(self.remote, safe='')}/commit/{quote(commit, safe='')}"
+
+    def current_branch_head(self, store_id: str, database: str, branch_id: str) -> str | None:
+        """Return the current immutable commit identifier for a branch, if confirmed."""
+        if not store_id or not database or not branch_id:
+            return None
+        try:
+            status, _, body = self._request(
+                "GET", self._log_url_for(store_id, database, branch_id) + "?count=1"
+            )
+            if not 200 <= status < 300:
+                return None
+            entries = json.loads(body.decode("utf-8"))
+            if not isinstance(entries, list) or not entries or not isinstance(entries[0], dict):
+                return None
+            identifier = entries[0].get("identifier")
+            return identifier if isinstance(identifier, str) and identifier else None
+        except (OSError, TimeoutError, urllib.error.URLError, UnicodeDecodeError, json.JSONDecodeError):
+            return None
+
+    def _log_url_for(self, store_id, database, branch):
+        return (f"{self.base_url}/api/log/{quote(store_id, safe='')}/{quote(database, safe='')}/"
+                f"{quote(self.remote, safe='')}/branch/{quote(branch, safe='')}")
+
+    def create_formal_snapshot(
+        self, store_id: str, database: str, branch_id: str, commit_hash: str, operation_id: str
+    ) -> SnapshotRead:
+        """Promote by immutable reference: the locked candidate Commit is the formal graph snapshot.
+
+        SQLite activation is the only publication switch. Reusing the exact commit avoids
+        copying or mutating graph documents and makes retries idempotent.
+        """
+        if not operation_id:
+            return SnapshotRead.unavailable("formalization_operation_missing")
+        return self.read_exact_snapshot(store_id, database, branch_id, commit_hash)
 
     def read_exact_snapshot(
         self, store_id: str, database: str, branch_id: str, commit_hash: str

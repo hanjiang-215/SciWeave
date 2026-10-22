@@ -19,6 +19,10 @@ src/research_mapping/schema.sql  最小治理记录 DDL
 src/research_mapping/sqlite_store.py 外键启用的 SQLite 治理存储
 src/research_mapping/terminus_store.py 精确 Commit 读取 seam 与 HTTP 适配器
 src/research_mapping/formal_query.py  FormalQueryService
+src/research_mapping/review.py       固定候选差异预览与审核 Buffer
+src/research_mapping/formalization.py Owner 批准、正式化与恢复
+src/research_mapping/sqlite_store.py SQLite 治理记录与激活事务
+src/research_mapping/terminus_store.py 精确 Commit 读取和候选/正式快照适配器
 tests/                           标准库 unittest
 ```
 
@@ -40,11 +44,12 @@ tests/                           标准库 unittest
 ## 验证
 
 ```bash
-cd sci-weave/centre-control/research-map
 uv sync --locked
-uv run --env-file .env python -m unittest discover -s tests -v
-uv run --env-file .env python src/main.py
+uv run --locked python -m unittest discover -s tests -v
+uv run --locked python -m compileall -q src tests
 ```
+
+单元测试使用临时 SQLite，不需要 `.env`。需要运行应用入口或连接真实 TerminusDB 时，再按 `.env.example` 提供配置并使用 `uv run --env-file .env ...`。
 
 集成测试默认跳过；显式运行需要仓库固定的 TerminusDB 12.0.8 服务、可读的数据库和一次已存在的 Commit：
 
@@ -57,9 +62,11 @@ SCIWEAVE_MAPPING_INTEGRATION_HEAD_COMMIT=<branch-head-commit> \
 uv run --env-file .env python -m unittest discover -s tests -p "test_terminus_integration.py" -v
 ```
 
-`SCIWEAVE_MAPPING_INTEGRATION_HEAD_COMMIT` 可选；提供后会额外断言历史 Commit 与 branch head 的文档集合不同，用于证明读取没有回退到最新版本。跳过或缺少配置都不算集成验证通过。Windows PowerShell 可分别设置这些环境变量后再执行同一 `unittest` 命令。
+验证记录（2026-10-22）：`uv run --locked python -m compileall -q src tests` 成功；`uv run --locked python -m unittest discover -s tests -v` 70 项中 68 项通过、2 项跳过。新增测试模拟 SQLite 激活事务已持久化后 `commit()` 再抛异常，验证服务通过持久化 SQLite 与 TerminusDB 精确快照证据返回成功，且只生成一个正式版本。真实服务验证命令：`$env:SCIWEAVE_RUN_TERMINUSDB_INTEGRATION='1'; uv run --locked python -m unittest discover -s tests -p 'test_terminus_integration.py' -v`，4 项中 2 项通过、2 项因未提供历史 Commit 配置跳过；候选分支创建/重放、正式快照精确引用及未知 Commit 检查在真实 TerminusDB 上通过。完整 SQLite 激活服务与真实 TerminusDB 联合链路尚未验证；历史 Commit 比较也需配置指定 Commit。
 
-本机 2026-10-21 已用仓库固定的 `terminusdb/terminusdb-server:v12.0.8` 容器完成真实读回：3 个集成用例通过。容器只接受 HTTP Basic（默认容器存储密钥即密码），因此用 `SCIWEAVE_MAPPING_TERMINUSDB_USERNAME` / `_PASSWORD` 而不是 JWT 令牌。
+```bash
+uv run --env-file .env python -m unittest discover -s tests -p "test_terminus_integration.py" -v
+```
 
 ## 查询结果
 

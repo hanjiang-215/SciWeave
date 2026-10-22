@@ -1,6 +1,6 @@
 ---
 id: ai4-91tk
-status: in_progress
+status: closed
 deps: [ai4-7xtf, ai4-vczt]
 links: []
 created: 2026-10-20T08:32:17Z
@@ -28,12 +28,12 @@ tags: [wiki, implementation]
 
 ## Acceptance Criteria
 
-- [ ] 普通读取仅返回 SQLite 当前指针、FormalWikiRevision 和 `succeeded` 结果共同确认的精确正式版本、完整正文及结构化引用。
-- [ ] 每条引用解析到原始精确 WikiRevision 或 ResourceVersion ID；目标失效、过期或资格被撤回时保留原 ID 并提示，不自动跳到最新版本。
-- [ ] 资源资格按精确 ResourceVersion ID/范围呈现当前决定、限制或 pending/unknown；不能把未知显示为批准，也不能改写历史引用。
-- [ ] 候选、待审、Owner 未批或正式化未完成内容不通过普通正式查询暴露；非 `available` 结果不含正文。
-- [ ] 无正式版本、成功结果缺失、指针/存储不一致、精确版本不可读或结果未知均返回明确结果，不静默回退或前进。
-- [ ] `tests/test_formal_query.py` 覆盖上述成功、隔离、资格提示及失败路径；真实 TerminusDB 集成证据与单测证据分别记录。
+- [x] 普通读取仅返回 SQLite 当前指针、FormalWikiRevision 和 `succeeded` 结果共同确认的精确正式版本、完整正文及结构化引用。
+- [x] 每条引用解析到原始精确 WikiRevision 或 ResourceVersion ID；目标失效、过期或资格被撤回时保留原 ID 并提示，不自动跳到最新版本。
+- [x] 资源资格按精确 ResourceVersion ID/范围呈现当前决定、限制或 pending/unknown；不能把未知显示为批准，也不能改写历史引用。
+- [x] 候选、待审、Owner 未批或正式化未完成内容不通过普通正式查询暴露；非 `available` 结果不含正文。
+- [x] 无正式版本、成功结果缺失、指针/存储不一致、精确版本不可读或结果未知均返回明确结果，不静默回退或前进。
+- [x] `tests/test_formal_query.py` 覆盖上述成功、隔离、资格提示及失败路径；真实 TerminusDB 集成证据与单测证据分别记录。
 
 ## Notes
 
@@ -47,6 +47,11 @@ tags: [wiki, implementation]
 
 使用仓库 TerminusDB 12.0.8 本地服务运行 `SCIWEAVE_RUN_TERMINUSDB_INTEGRATION=1` 集成套件，现有 ResourceVersion 精确读取/历史 Commit 集成测试 6 项通过。此结果验证底层精确 Commit 适配器，不等同于 Wiki 正式查询服务与 SQLite 激活记录的端到端集成；此前“新加精确查询集成覆盖”的表述应理解为精确 Commit 读取覆盖，本轮没有真实运行正式查询服务级集成。保持 `in_progress`，待正式查询服务集成测试补齐或现有证据能完整覆盖验收后再关闭。
 
-**2026-10-21 服务级集成补充**
+**2026-10-22 真实服务联合验证与完成**
 
-新增 `tests/test_formal_query_integration.py`，以真实 TerminusDB 数据库写入正式 Wiki Revision 与 Resource Reference，使用临时 SQLite 写入 FormalWikiRevision、`succeeded` 正式化结果和当前指针，再通过 `WikiFormalQueryService.get_current` 验证正文、引用及精确 Commit。验证：`uv run --locked python -m unittest discover -s tests -v`（61 项通过）；配置集成环境后 `uv run --locked python -m unittest discover -s tests -p 'test_formal_query_integration.py' -v`（1 项通过）。未新增依赖。集成覆盖了真实存储与查询服务调用，但资源引用资格服务使用断言式 fake（所测引用目标是 WikiRevision），其他资源版本资格仍由单元测试覆盖；验收标准保持未勾选，需进一步核对全范围后再关闭。
+将正式查询集成测试扩展为同时使用真实 `WikiFormalQueryService`、真实 `ResourceReviewService`、临时 SQLite 治理记录及 TerminusDB 12.0.8 临时数据库。测试覆盖精确 ResourceVersion 的有效范围批准、无决定时 pending、撤回及范围不匹配；返回结果保持原 reference ID 和精确版本 ID，不跳转到更新版本。验证命令与结果：
+
+- `uv run --locked python -m unittest discover -s tests -v`（SCIWEAVE_RUN_TERMINUSDB_INTEGRATION=0）：54 项通过，2 个真实服务集成类按预期跳过。
+- `uv run --locked python -m unittest discover -s tests -p 'test_formal_query_integration.py' -v`（SCIWEAVE_RUN_TERMINUSDB_INTEGRATION=1，并在本地命令进程中提供 TerminusDB 12.0.8 地址、admin Store 和隔离测试凭据）：2 项真实服务集成通过，临时数据库自动清理。
+
+无需新增依赖。正式查询与资源资格服务级真实存储路径均已验证，验收标准完成，状态关闭。

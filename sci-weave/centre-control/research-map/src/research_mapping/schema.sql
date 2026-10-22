@@ -35,6 +35,7 @@ CREATE TABLE IF NOT EXISTS mapping_candidate_commit (
     commit_hash TEXT NOT NULL,
     base_formal_revision_id TEXT,
     content_digest TEXT NOT NULL,
+    candidate_snapshot_digest TEXT,
     created_by TEXT NOT NULL,
     created_at TEXT NOT NULL,
     UNIQUE (terminus_store_id, commit_hash),
@@ -57,6 +58,55 @@ CREATE TABLE IF NOT EXISTS mapping_audit_event (
 
 CREATE INDEX IF NOT EXISTS mapping_submission_idempotency
     ON mapping_submission(mapping_domain_id, submitter_id, idempotency_key);
+
+CREATE TABLE IF NOT EXISTS mapping_review_attempt (
+    attempt_id TEXT PRIMARY KEY,
+    proposal_id TEXT,
+    requested_base_formal_revision_id TEXT,
+    requested_candidate_head_commit_hash TEXT,
+    result_code TEXT NOT NULL,
+    occurred_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS mapping_review_preview (
+    preview_id TEXT PRIMARY KEY,
+    evidence_id TEXT NOT NULL UNIQUE,
+    proposal_id TEXT NOT NULL,
+    mapping_domain_id TEXT NOT NULL,
+    base_formal_revision_id TEXT NOT NULL,
+    candidate_commit_id TEXT NOT NULL,
+    candidate_head_commit_hash TEXT NOT NULL,
+    evidence_json TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    UNIQUE (proposal_id, base_formal_revision_id, candidate_head_commit_hash),
+    FOREIGN KEY (proposal_id) REFERENCES mapping_proposal(proposal_id),
+    FOREIGN KEY (candidate_commit_id) REFERENCES mapping_candidate_commit(candidate_commit_id)
+);
+
+CREATE TABLE IF NOT EXISTS mapping_merge_request_buffer (
+    buffer_id TEXT PRIMARY KEY,
+    preview_id TEXT NOT NULL UNIQUE,
+    proposal_id TEXT NOT NULL,
+    mapping_domain_id TEXT NOT NULL,
+    base_formal_revision_id TEXT NOT NULL,
+    candidate_commit_id TEXT NOT NULL,
+    candidate_head_commit_hash TEXT NOT NULL,
+    status TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (preview_id) REFERENCES mapping_review_preview(preview_id),
+    FOREIGN KEY (proposal_id) REFERENCES mapping_proposal(proposal_id),
+    FOREIGN KEY (candidate_commit_id) REFERENCES mapping_candidate_commit(candidate_commit_id)
+);
+
+CREATE TABLE IF NOT EXISTS mapping_review_event (
+    event_id TEXT PRIMARY KEY,
+    buffer_id TEXT NOT NULL,
+    actor_id TEXT NOT NULL,
+    decision TEXT NOT NULL,
+    reason TEXT NOT NULL,
+    occurred_at TEXT NOT NULL,
+    FOREIGN KEY (buffer_id) REFERENCES mapping_merge_request_buffer(buffer_id)
+);
 
 CREATE TABLE IF NOT EXISTS formal_mapping_revision (
     formal_revision_id TEXT PRIMARY KEY,
@@ -91,6 +141,57 @@ CREATE TABLE IF NOT EXISTS mapping_formalization_result (
     recorded_at TEXT NOT NULL,
     FOREIGN KEY (formal_revision_id)
         REFERENCES formal_mapping_revision (formal_revision_id)
+);
+
+CREATE TABLE IF NOT EXISTS mapping_candidate_disposition (
+    candidate_commit_id TEXT PRIMARY KEY,
+    disposition TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    FOREIGN KEY (candidate_commit_id) REFERENCES mapping_candidate_commit(candidate_commit_id)
+);
+
+CREATE TABLE IF NOT EXISTS mapping_formalization_attempt (
+    result_id TEXT PRIMARY KEY,
+    formalization_operation_id TEXT NOT NULL,
+    merge_request_id TEXT NOT NULL,
+    mapping_domain_id TEXT NOT NULL,
+    base_formal_revision_id TEXT NOT NULL,
+    candidate_head_commit_hash TEXT NOT NULL,
+    approval_event_id TEXT NOT NULL,
+    attempt_number INTEGER NOT NULL,
+    result_status TEXT NOT NULL CHECK (result_status IN (
+        'requested', 'in_progress', 'graph_ready', 'reconciliation_required', 'succeeded', 'failed'
+    )),
+    reason TEXT,
+    formal_revision_id TEXT,
+    terminus_store_id TEXT,
+    formal_branch_id TEXT,
+    formal_commit_hash TEXT,
+    recorded_at TEXT NOT NULL,
+    UNIQUE (formalization_operation_id, attempt_number)
+);
+
+CREATE TABLE IF NOT EXISTS mapping_formalization_event (
+    event_id TEXT PRIMARY KEY,
+    formalization_operation_id TEXT NOT NULL,
+    result_id TEXT NOT NULL,
+    mapping_domain_id TEXT NOT NULL,
+    actor_id TEXT NOT NULL,
+    operation TEXT NOT NULL,
+    result TEXT NOT NULL,
+    occurred_at TEXT NOT NULL,
+    details_json TEXT NOT NULL,
+    FOREIGN KEY (result_id) REFERENCES mapping_formalization_attempt(result_id)
+);
+
+CREATE TABLE IF NOT EXISTS mapping_notification (
+    notification_id TEXT PRIMARY KEY,
+    formalization_operation_id TEXT NOT NULL,
+    formal_revision_id TEXT NOT NULL,
+    status TEXT NOT NULL,
+    reason TEXT,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (formal_revision_id) REFERENCES formal_mapping_revision(formal_revision_id)
 );
 
 CREATE INDEX IF NOT EXISTS mapping_formalization_result_lookup
