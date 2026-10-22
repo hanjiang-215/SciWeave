@@ -37,7 +37,7 @@ tags: [wayfinder:map, centre-agents, governance]
 
 <!-- 已关闭的子票在这里各占一行；未关闭的子票通过查询获得，不在此列出 -->
 
-- [中央服务留痕工具：写入方统一调用的审计接口](ai4-upsm.md)：统一发生在接口层而非存储层。共享包 `sci-weave/shared/audit-trail` 提供 `write_audit_event(conn, event)`，校验 `conn.in_transaction` 拒独立调用，只追加、无幂等键；Mapping/Wiki/Buffer 各自落审计 SQLite；首版 5 个 operation 枚举；字段为 `ai4-vbnr` 与两份领域 AuditEvent 的 superset；测试写入方回归，真实接入由 `ai4-xem8` 与领域实现票完成。
+- [中央服务留痕工具：写入方统一调用的审计接口](ai4-upsm.md)：统一发生在**接口层**而非存储层。2026-10-22 修订后，留痕只记接口层对外调用（调用者、通道、服务、工具、目标、结果、耗时），不记业务语义；中央一个审计库、路径由环境变量提供；读操作单条 fail-open，写操作两阶段 fail-closed；包位置 `sci-weave/centre-control/shared/audit-trail`。规格见 [中央留痕工具共享包实现规格](ai4-tg3v.md)，代码落地见 [留痕包迁移到 centre-control 并改造为接口层调用账本](ai4-gvan.md)。领域审计表与调用账本作用域分开、互不写入。
 
 ## Not yet specified
 

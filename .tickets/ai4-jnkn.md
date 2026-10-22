@@ -2,7 +2,7 @@
 id: ai4-jnkn
 status: open
 deps: []
-links: [ai4-6ljq, ai4-orpg, ai4-emsk]
+links: [ai4-6ljq, ai4-orpg, ai4-emsk, ai4-gvan]
 created: 2026-10-21T08:58:49Z
 type: task
 priority: 1
@@ -28,3 +28,12 @@ tags: [architecture]
 
 Research Mapping、LLM-Wiki、TerminusDB、Redpanda 的后续实现位置已写明，并与 research-map、research-wiki 两张实现地图关联。
 
+
+**2026-10-22T13:20:00Z**
+
+补充实现位置：中央留痕工具共享包。
+
+- 原路径 `sci-weave/shared/audit-trail`，迁到 `sci-weave/centre-control/shared/audit-trail`。迁移由 [留痕包迁移到 centre-control 并改造为接口层调用账本](ai4-gvan.md) 执行。
+- `centre-control` 仍不是项目组、各目录仍不共用锁文件；`centre-control/shared/` 是**代码归属边界**，表示「部署在中央的多个独立项目共用这段代码」，不表示同一个部署单元，也不产生组级 `pyproject.toml` 或组级 `uv.lock`。
+- 各调用方以 uv `[tool.uv.sources]` path 可编辑依赖引用该包，各自提交自己的锁文件。
+- 迁移后 `sci-weave/shared/` 目录清空，规则上也不再保留这个顶层共享目录的名称。

@@ -78,4 +78,6 @@ tags: [centre-control, centre-agents, candidate-prereview]
 
 2026-10-22：四个待定项全部定案，写入正文 `## Resolution`。依据 Project Owner 裁决与 `docs/data-flow/work-agent.md`。同时新增两条验收：入口不直连领域 Store、只可新建混合候选分支不改写已有候选。
 
-阻塞状态：本票 `deps` 为 `ai4-upsm`（中央服务留痕工具）。该票已有 Resolution 与共享包 `sci-weave/shared/audit-trail`，但状态仍为 open，因此本票仍在阻塞中，解除由该票负责人与地图 owner 复核。
+阻塞状态：本票 `deps` 为 `ai4-upsm`（中央服务留痕工具），该票已关闭，本票不再受阻。
+
+> 更正（2026-10-22T14:10:00Z）：上一条写于 2026-10-22 09:15 的说明已过期并保留原文。留痕工具的语义已改为「接口层对外调用账本」，包位置改为 `sci-weave/centre-control/shared/audit-trail`，`ai4-upsm` 已关闭。详见 [中央留痕工具共享包实现规格](ai4-tg3v.md) 与其代码落地票 [留痕包迁移到 centre-control 并改造为接口层调用账本](ai4-gvan.md)。本票的「留痕」指的是预审结论经领域管理 MCP 落库时的对外调用记录，不再要求领域代码在写事实的同一事务里调 `write_audit_event`。

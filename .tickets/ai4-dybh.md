@@ -1,8 +1,8 @@
 ---
 id: ai4-dybh
-status: open
+status: closed
 deps: []
-links: [ai4-tg3v, ai4-ze1x, ai4-rh97, ai4-upsm]
+links: [ai4-tg3v, ai4-ze1x, ai4-rh97, ai4-upsm, ai4-gvan]
 created: 2026-10-22T02:31:06Z
 type: feature
 priority: 1
@@ -24,127 +24,57 @@ tags: [audit, shared, mapping, wiki]
 
 三者字段名、字段集与主键类型都不同：`operation` / `action` / `event_type`；主键分别是 TEXT UUID、TEXT UUID、INTEGER AUTOINCREMENT。同一件事在审计链上有三种形状。
 
-`task-agent` 那套属于端侧执行遥测，`ai4-upsm` 的 Resolution 已明确端侧不是共享包的调用方，不在本票范围内（但见下方「顺带」一节）。本票只处理中央侧的 map 与 wiki。
+## Resolution
 
-本票不是实现票：两张领域表归 `ai4-6ljq`（Research Mapping 实现地图）与 `ai4-orpg`（LLM-Wiki 实现地图）的负责人，本票只承载「要不要收敛、怎么收敛」的决策与待裁决的冲突事实。按仓库属人规则，本票未与那两张票建立双向 `links`（那会改动它们的 frontmatter），改以正文引用；两个地图的负责人看到本票后自行决定是否采纳，并由其在票内建立关联。
+**结论：作用域分开，互不写入。** 本票提出的三处冲突与五个待裁决项，全部由「统一留痕的语义从『正式事实变更』改为『接口层对外调用』」一次性消解。共享包不再是领域审计的落地层，因此不存在「领域表接入共享包」这件事。
 
-## 三处必须先裁决的冲突
+冲击本票的决策记录在 [中央服务留痕工具共享包实现规格](ai4-tg3v.md)（2026-10-22 改写），本票的五个 Q 逐条结案如下。
 
-三处都有可复现证据，任一条不定，接入都会失败。
+### Q1 领域表与共享表的关系 → 第四个答案：作用域分开
 
-### 1. `operation` 枚举盖不住领域已在写的值
+原设的三个选项（收敛 / 双写 / 投影）都假设两者记同一件事。改正语义后不是：
 
-共享枚举首版 5 个，全是「预审 / 正式化」视角：
+| 记录 | 记什么 | 谁来写 | 落哪 |
+| --- | --- | --- | --- |
+| 领域审计表 | 正式事实变更（谁在什么基准上改了什么、结果如何） | 领域服务在写事实的同一事务内 | 各领域自己的 SQLite |
+| 中央审计账本 | 接口层对外调用（谁通过什么通道调了哪个工具、目标、结果、耗时） | MCP 接口层的装饰器 | 中央统一审计库 |
 
-```text
-draft.status_changed
-mapping.prereview_log_appended
-mapping.formal_revision_promoted
-wiki.prereview_log_appended
-wiki.formal_revision_promoted
-```
+两者不重叠、不双写、不投影。领域表是**领域治理记录**，继续由领域自己在事务内写；中央账本是**访问账本**，只管接口层。跨两者的关联只靠 `target_object_id` 弱引用（账本记对象标识，不记对象历史）。
 
-而领域代码现在实际写入的值是：
+这解掉了「双写两个失败点」与「投影要维护同步」的全部代价——因为根本没有第二份。
 
-| 组件 | 实际值 | 出处 |
-| --- | --- | --- |
-| research-map | `candidate_created` | `candidate_submission.py:123` |
-| research-wiki | `resource_version_review` | `resource_review.py:171` |
-| research-wiki | `resource_review_attempt` | `resource_review.py:295` |
+### Q2 `operation` 枚举怎么扩 → 枚举整体删除
 
-三个值都不在枚举内。`research-map` 一旦接入，第一次写就抛 `AuditValidationError`。
+共享包不再有 `operation` 字段。领域代码继续用自己的值（`candidate_created`、`resource_version_review`、`resource_review_attempt`），不受影响。原判断「B 会把候选被创建塞进预审报告被追加」仍然成立，只是问题本身随字段删除而消失。
 
-### 2. `reason_code` 无处安放
+### Q3 同事务怎么落地 → 领域内保持现状，共享包不再要求
 
-`wiki_audit_event` 有三个共享表没有的字段：`reason_code TEXT NOT NULL`、`detail`、`related_review_id`。
+共享包删除 `conn.in_transaction` 校验，`TransactionRequiredError` 移除。领域侧现有的写入方式**不需要改**：
 
-`detail` 与 `related_review_id` 可以进 `refs` JSON，`reason_code` 不行——它是数据库层的 `NOT NULL` 约束，`refs` 兜不住。而且 `reason_code`（机器可判的错误码，如 `authority_missing`）与共享表的 `reason`（人写的说明文字）是两个概念，合并会丢信息。
+- map 侧 `candidate_submission.py:109` 的 `BEGIN IMMEDIATE` 一次写完事实与审计——保持。
+- wiki 侧 `add_review()` 与 `add_audit_event()` 两次独立提交——**暂时保持**。这是 wiki 自身治理记录的一致性问题，属于领域内部质量，与中央账本无关，交由领域实现票自行决定是否收拢。本票不再以此作为阻塞项。
 
-`wiki` 现有测试直接断言 `reason_code` 的值（`tests/test_resource_review.py` 断言 `authority_missing`），改名或降级为自由文本会打破这些断言。
+### Q4 `reason_code` 归属 → 留在领域表，Shared 表不再有对应字段
 
-### 3. 「同事务」约束当前无法满足
+`wiki_audit_event.reason_code` 保持 `TEXT NOT NULL`，现有测试断言 `authority_missing` 不变。共享包不提供 `reason_code`，因为访问账本用的是 `error_code`（调用失败的可判代码），与领域审核结论的错误码是两个概念。
 
-共享包的核心约束是「留痕与事实写在同一个 SQLite 事务里」，实现方式为校验 `conn.in_transaction`。
+### Q5 字段改名谁负责 → 不必改名
 
-但 wiki 侧现在是两次独立提交、两条不同连接：
+`action`、`target_type`、`target_id`、`outcome` 都是领域表自己的字段，继续用。共享包用 `tool`、`target_object_type`、`target_object_id`、`result`，两套名字不冲突，因为不在同一张表。
 
-- `sqlite_store.py:45` 的 `add_review()` 自带 `connection.commit()`
-- `sqlite_store.py:207` 的 `add_audit_event()` 是另一个函数，也自带 `commit()`
-- `resource_review.py:168-181` 先后调这两个
-- `sqlite_store.py:36` 的 `connection()` 是生成器，每次新建连接再关闭
+### task-agent gateway
 
-map 侧相反，是对的：`candidate_submission.py:109` 用 `BEGIN IMMEDIATE` 在一条连接里写事实与审计。但它只写 `mapping_audit_event`，没走共享包。
-
-即：这个约束对 wiki 侧是结构性改动，不是加一行调用能解决的。
-
-## 需要裁决的问题
-
-### Q1 领域表与共享表的关系
-
-- **A 收敛**：领域表退役，只留共享 `audit_event`；领域专属字段进 `refs`，`reason_code` 提为共享表可选列。
-- **B 并存双写**：一次事实写两条审计。
-- **C 投影**：领域表是事实源，共享表在写入时同步派生。
-
-建议 A。B 让每次写入有两个失败点，且「哪个是真的」永远说不清；C 要维护同步机制，比双写更容易出错。A 的代价是重构 wiki 的连接管理和 map 的写入路径，但两个领域都还没接真实写入方，现在改最便宜。
-
-### Q2 `operation` 枚举怎么扩
-
-- **A 按事实源扩**：补 `mapping.candidate_created`、`wiki.resource_version_review`、`wiki.resource_review_attempt`。
-- **B 只留 5 个**：领域把值映射到最接近的枚举。
-- **C 去掉枚举**：`operation` 改自由文本加命名约定。
-
-建议 A。B 会把「候选被创建」塞进「预审报告被追加」，两件事再也分不开——而分开追溯正是这个包存在的理由；C 放弃的正是枚举带来的那点约束。
-
-### Q3 同事务怎么落地
-
-- **A 重构领域写入**：事实写与审计写合成一次连接生命周期。
-- **B 放宽为同连接独立提交**。
-- **C 由包接管事务**：包提供带连接的写入上下文。
-
-建议 A。这是共享包唯一真正的价值——把「改了事实没留痕」变成不可能。B 等于放弃这条保证；C 让包伸手进调用方的事务边界。
-
-### Q4 `reason_code` 归属
-
-- **A 提为共享表可选列**。
-- **B 进 `refs`，wiki 侧去掉 `NOT NULL`**。
-- **C 与 `reason` 合并**。
-
-建议 A。
-
-### Q5 字段改名谁负责
-
-`action`→`operation`、`target_type`→`target_object_type`、`target_id`→`target_object_id`、`outcome`→`result`。
-
-- **A 领域代码改用共享命名**。
-- **B 共享包提供别名适配层**。
-
-建议 A。同一概念两套名字，长期一定有人用错；`WikiAuditEvent` 是本地的 dataclass，改名只影响自身代码与测试，面可控；适配层则是给错误命名发长期通行证。
+`audit_events`（`gateway/mcp/src/gateway/store.py:36`，`event_type`/`task_node_id`/`command_id`/`execution_id`，整数自增主键）保持现状。它是端侧执行遥测，`ai4-upsm` 已排除端侧；按 2026-10-22 决策，端侧执行过程追溯由 fast-agent-mcp 自身日志与 ExecutionRecord 状态机承担，不接中央账本。
 
 ## Acceptance Criteria
 
-- [ ] 三处冲突各有明确裁决，并写明依据
-- [ ] 两张领域审计表与共享 `audit_event` 的关系确定（收敛 / 并存 / 投影 三选一）
-- [ ] `operation` 枚举覆盖两个领域实际写入的全部值，或给出可机械执行的映射
-- [ ] `reason_code` 有明确归属，且 wiki 现有断言 `reason_code` 取值的测试仍通过
-- [ ] 事实写入与留痕写入在同一 `sqlite3.Connection` 的同一事务内完成，并有回归测试证明独立调用被拒
-- [ ] 迁移后按目标与时间检索的能力不丢失，结果与迁移前一致
-- [ ] 采纳结论回写到 `ai4-6ljq` 与 `ai4-orpg` 的地图负责人，由其决定落地票
-
-## 关联
-
-双向关联自 `ai4-tg3v` / `ai4-ze1x` / `ai4-rh97` / `ai4-upsm` 建立（见本票 `links`）。`ai4-6ljq` 与 `ai4-orpg` 按属人规则未建双向链接，只在本票正文引用其 id；是否需要关联由那两张票的负责人决定。
-
-## 顺带：共享包自身的两处缺陷
-
-这两条不涉及领域归属，由 `ai4-tg3v` 那条线自己收，列在这里避免遗漏：
-
-1. **`init_audit_table` 只支持单语句 DDL**。`writer.py:29` 用 `conn.execute(_SCHEMA_SQL)`，`schema.sql` 目前只有一条 `CREATE TABLE` 所以能跑；一旦加索引就抛 `ProgrammingError: You can only execute one statement at a time`（已实测）。
-2. **README 示例跑不通**。`README.md` 示例写 `with conn: write_audit_event(conn, event)`，但 `with conn:` 只在退出时提交、进入时不开启事务，`sqlite3` 只在第一条 DML 执行时才隐式 `BEGIN`。照抄必抛 `TransactionRequiredError`（已实测）。正确写法是先 `conn.execute("BEGIN")`。
-
-另有两处文档不一致（同样归 `ai4-tg3v`）：
-
-- `ai4-tg3v` 写 `occurred_at` 为**秒精度**，实现是微秒（`writer.py:62` 用 `timespec="microseconds"`），`ai4-ze1x` 的 Notes 也写微秒。
-- `ai4-upsm` 写 `write_audit_event(...) -> None`，实现返回 `event_id`（`writer.py:41` 返回 `str`），测试依赖这个返回值。
+- [x] 三处冲突各有明确裁决，并写明依据
+- [x] 两张领域审计表与共享 `audit_event` 的关系确定（结论为作用域分开，二者不重叠）
+- [x] `operation` 枚举问题随字段删除消解，领域实际写入值不受影响
+- [x] `reason_code` 留在领域表，wiki 现有断言 `reason_code` 取值的测试不受影响
+- [x] 领域写入的事务形态无需为共享包改动，同事务约束从共享包移除
+- [x] 端侧 `audit_events` 明确保持现状
+- [x] 采纳结论回写到共享包规格票，并新开代码落地票
 
 ## Notes
 
@@ -159,3 +89,16 @@ map 侧相反，是对的：`candidate_submission.py:109` 用 `BEGIN IMMEDIATE` 
 已向 Gitee 提 issue 通知 zhanyunfei：[请 zhanyunfei 评估：Map 与 Wiki 接入统一审计留痕接口](https://gitee.com/qi-yueran/ai4science/issues/IKPL20)。正文含本票三处冲突与五个待裁决项，首行 @zhanyunfei。
 
 操作说明：Gitee CLI 的 `issue comment` 端点返回 authentication failed（`issue create` 与 `issue edit` 正常），因此 @ 通知写在 issue 正文首行而非单独评论；Gitee CLI 也不支持设置 issue 负责人。
+
+**2026-10-22T13:20:00Z**
+
+结案。2026-10-22 与 Frank Qi 的 wayfinder grilling 把统一留痕的语义收窄为「接口层对外调用账本」，本票的前提（共享包是领域审计的落地层）随之消失，五个待裁决项按「作用域分开」一次结清，见 Resolution。
+
+**对领域负责人的影响（不回写其票，仅在此记录）：**
+
+- `ai4-6ljq`（Research Mapping 实现地图）与 `ai4-orpg`（LLM-Wiki 实现地图）**不需要**为接入共享包安排任何工作。领域审计表保持原样，无需迁移、改名、扩枚举。
+- 若领域方希望自己的审计表与中央账本在查询上关联，用 `target_object_id` 弱引用即可，不需要结构改动。
+- wiki 侧 `add_review()` 与 `add_audit_event()` 两次独立提交的问题**仍然存在**，但它现在是 wiki 自身的治理记录一致性问题，优先级由领域负责人判定，不再是中央留痕的阻塞项。
+- 2026-10-22 10:40 那条 Gitee issue 通知的前提已不成立，需在对应 issue 下补充说明以免误导出结论的人。
+
+**本票原「顺带」一节的两处包缺陷**已转入 [留痕包迁移到 centre-control 并改造为接口层调用账本](ai4-gvan.md)：`init_audit_table` 单语句 DDL 限制在改造中解决；README 示例的 `with conn:` 误写在改造中重写。另两处文档不一致（`occurred_at` 精度、`write_audit_event` 返回值）随写入接口重写而消失。

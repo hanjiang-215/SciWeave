@@ -2,7 +2,7 @@
 id: ai4-tg3v
 status: open
 deps: []
-links: [ai4-dybh]
+links: [ai4-dybh, ai4-gvan]
 created: 2026-10-22T01:20:55Z
 type: feature
 priority: 1
@@ -12,65 +12,148 @@ tags: [spec, centre-control, audit, ready-for-agent]
 ---
 # 中央留痕工具共享包实现规格
 
+中央服务器的对外服务（草稿箱、Research Mapping 管理 MCP、LLM-Wiki 管理 MCP、注册表等）在**接口层**统一记录「谁通过什么通道调用了哪个工具、目标是什么、结果如何」。留痕只发生在对外接口，模块内部不调用。
+
 ## Problem Statement
 
-中央服务器上的多个组件——草稿箱（Draft Buffer）、Research Mapping 管理 MCP、LLM-Wiki 管理 MCP——在推进正式事实时都需要留下审计痕迹，但各自写各自的，形状不统一，审计链无法按统一口径重建「谁在什么基准上做了什么、结果如何、谁批准」。留痕不是中央 Agent 的私有能力，而是每个写入方在写事实的同一事务里必须调用的公共工具。
+中央服务器上的多个组件各自实现对外接口，但没有统一的调用记录：审计链无法回答「谁访问了什么、谁做了什么、哪次调用失败了」。既有尝试把留痕做成存储层能力（写入方在自己的 SQLite 事务里调用），实际只有改写正式事实的少数代码路径能接上，且把「正式事实变更」与「接口访问」两种语义混在一个事件形状里。
 
 ## Solution
 
-提供一个仅用 Python 标准库实现的共享包 `audit_trail`，作为所有中央写入方的统一审计接口：一个只追加的写入函数、一张标准审计表、一个只读查询函数。写入方必须在自己 SQLite 事务内调用；审计事件只追加、不可改不可删；Mapping、Wiki、Buffer 各自落自己的审计 SQLite，接口形状统一但存储不共享，守住领域隔离。
+提供一个仅用 Python 标准库实现的共享包 `audit_trail`，供中央各服务的**对外接口层**调用：登记一对外调用（谁、哪个通道、哪个服务、哪个工具、目标、结果、耗时），写入中央统一的审计 SQLite；读操作与写操作都记；写操作先记录后执行。
+
+## Destination 与边界
+
+**只记接口层的对外调用。** 语义留在业务侧：调用的业务含义（改了哪个字段、批了哪个提案）由消息内容、Mapping 或 Wiki 自己的治理记录承担，审计账本不重复表达。
+
+**模块内部不调用。** 领域服务内部的函数调用、事务、内部状态迁移不产生审计记录。
+
+**端侧不接。** `sci-weave/task-agent` 的执行遥测留在它自己的 `audit_events` 表，由 Gateway 与 fast-agent-mcp 自身日志承担；端侧不写中央审计账本。
 
 ## User Stories
 
-1. As a 草稿箱写入方, I want 在草稿状态变更的同一事务里追加一条审计事件, so that 草稿提交、审核、转候选的责任链可追溯。
-2. As a Research Mapping 管理 MCP 写入方, I want 在推进 Formal MappingRevision 的同一事务里追加审计, so that 记录谁批准了哪条路线变化。
-3. As a LLM-Wiki 管理 MCP 写入方, I want 在推进 Formal WikiRevision 的同一事务里追加审计, so that 记录 Wiki 正式化责任链。
-4. As a 领域管理 MCP 写入方, I want 在 append_prereview_log 落库时同事务留痕, so that 中央 Agent 的预审报告追加也进入审计链。
-5. As a Project Owner, I want 按任务、Proposal、正式版本、时间查询审计事件, so that 重建「谁在什么基准上做了什么、结果如何、谁批准」。
-6. As a 审计查询者, I want 查询只读且与写入分离, so that 审计视图不会被写入入口污染或绕过。
-7. As a 写入方开发者, I want 在没开事务时调用写入被明确拒绝, so that 不会产生「事实已改但没留痕」的记录。
-8. As a 写入方开发者, I want 字段缺失或枚举非法时立刻报错, so that 坏数据进不了审计链。
-9. As a 领域实现者, I want Mapping 与 Wiki 的审计存储彼此隔离, so that 符合领域隔离约束、不跨域共享审计链。
-10. As a 领域实现者, I want 统一接口字段是既有 MappingAuditEvent/WikiAuditEvent 的 superset, so that 已关闭规格不被推翻。
-11. As a 端侧研究者或 Agent 托管方, I want 不直接触碰中央留痕接口而由草稿箱统一留痕, so that 端侧不新增中央耦合。
-12. As a 后续接入方, I want 以 uv 可编辑依赖引用共享包, so that 不用复制代码也能用同一套接口。
+1. As a 中央服务运维者, I want 每个对外工具调用都留下一条记录, so that 能回答「谁在什么时候调用了什么、结果如何」。
+2. As a 中央服务运维者, I want 读调用也记录, so that 「谁访问了哪些内容」可追溯。
+3. As a Project Owner, I want 按调用者、服务、工具、目标对象、结果和时间过滤, so that 能重建某次访问或某段窗口内的调用链。
+4. As a 中央服务开发者, I want 用装饰器或上下文管理器包住工具函数就完成留痕, so that 不需要在每个工具里手写记录代码，也不会漏记。
+5. As a 中央服务开发者, I want 写操作在执行业务前先记录 invoked、成功后记录 completed, so that 审计库不可用时写操作直接失败而不是静默通过。
+6. As a 审计查询者, I want 能找出只有 invoked 没有 completed 的调用, so that 崩溃与中断可被检出。
+7. As a 数据治理责任方, I want 审计库只存参数摘要不存入参正文, so that 审计库不会变成第二份内容存储。
+8. As a 中央服务开发者, I want 审计库路径用环境变量配置, so that 各部署单元可指向同一库或各自的库。
+9. As a 端侧 Agent 维护者, I want 端侧不接入这个包, so that 端侧不新增中央耦合。
 
 ## Implementation Decisions
 
-- 共享包命名 `sciweave-audit-trail`，模块 `audit_trail`，`requires-python >= 3.11`，仅标准库，无第三方依赖。
-- 包结构从简：事件模型、标准审计表 DDL 与建表函数、写入函数、查询函数。
-- 唯一写入入口 `write_audit_event(conn, event)`：接受调用方自己的 `sqlite3.Connection` 与一条 `AuditEvent`。
-- 包不自开连接；先校验连接处于事务内，否则抛 `TransactionRequiredError`；再校验必填字段与枚举，非法抛 `AuditValidationError`。
-- `event_id`（UUID4）与 `occurred_at`（UTC ISO8601，秒精度）由包生成，调用方不可传。
-- 标准审计表 `audit_event`：必填 `event_id`、`occurred_at`、`actor_id`、`actor_type`、`operation`、`target_object_type`、`target_object_id`、`result`；可选 `previous_state`、`next_state`、`reason`、`base_revision`、`candidate_revision`、`proposal_id`、`task_id`、`resource_id`、`formal_revision_id`、`merge_request_id`、`refs`（JSON 兜底）。
-- `actor_type` 枚举：`human` / `agent` / `system`。
-- `operation` 首版枚举 5 个：`draft.status_changed`（草稿箱）、`mapping.prereview_log_appended`、`mapping.formal_revision_promoted`、`wiki.prereview_log_appended`、`wiki.formal_revision_promoted`。
-- `result` 为自由文本，不建枚举；建议值如 `accepted` / `rejected` / `succeeded` / `failed`。
-- 查询入口 `query_audit_events(conn, *, task_id, proposal_id, formal_revision_id, occurred_after, occurred_before)`：只读，按时间倒序返回事件字典列表；`refs` 以 JSON 往返。
-- 只追加：不提供任何 update/delete 函数；API 层保证，不建数据库触发器。
-- 不加幂等键：审计是追加式事实，业务防重由写入方自持，重复由「更正靠追加新事件」处理。
-- 存储隔离：Mapping、Wiki、Buffer 各自持有审计 SQLite；接口统一，存储不共享。草稿箱需新增一个最小审计 SQLite（只存审计事件，草稿正文仍在 TerminusDB）。
-- 调用方接入：草稿箱写 `draft.status_changed`；Research Mapping 管理 MCP 写 `mapping.formal_revision_promoted` 与 `mapping.prereview_log_appended`；LLM-Wiki 管理 MCP 写 `wiki.formal_revision_promoted` 与 `wiki.prereview_log_appended`。端侧不直接调用。
+### 位置
+
+`sci-weave/centre-control/shared/audit-trail`，包名 `sciweave-audit-trail`，模块名 `audit_trail`，`requires-python >= 3.11`，仅标准库。调用方以 uv `[tool.uv.sources]` path 可编辑依赖引用。
+
+`centre-control` 不是项目组、各目录不共用锁文件；`shared/` 在这里是**代码归属边界**，表示「部署在中央的多个独立项目共用这段代码」。这一点需要同步修订 `docs/TECH_STACK.md` 的共享代码规则（现文写的是「组内被至少两个子项目复用」）。
+
+### 存储
+
+中央只有一个审计 SQLite，路径由环境变量提供（如 `SCIWEAVE_AUDIT_SQLITE_PATH`）。多个服务的进程写同一个库文件：使用 `journal_mode=WAL`，`busy_timeout` 由配置提供，写入以 `BEGIN IMMEDIATE` 加锁后立即提交，单条追加不跨业务事务。
+
+存储不按服务分库：跨服务视图是选「一个库」的核心理由。领域治理记录（Mapping / Wiki / Buffer 各自的事实与状态）仍留在各自存储，不搬进审计库。
+
+### 事件形状（调用账本）
+
+必填：
+
+| 字段 | 含义 |
+| --- | --- |
+| `call_id` | 一条调用链的标识；两阶段写入时两条共用 |
+| `occurred_at` | 由包生成，UTC ISO8601 |
+| `caller_id` | 调用方标识，**由调用方套件提供**，MCP 入口不解析、不校验 |
+| `channel_id` | 连接通道标识，取自服务启动配置，用于与 `caller_id` 对照 |
+| `caller_type` | `human` / `agent` / `system` / `service` |
+| `service` | 被调用的中央服务名，如 `mapping-mcp` |
+| `tool` | 工具名 |
+| `phase` | `invoked` / `completed` / `attempted`（读操作单条用 `attempted`） |
+| `result` | `ok` / `error` / `denied` / `unknown` |
+
+可选：`error_code`、`duration_ms`、`args_digest`、`target_object_type`、`target_object_id`、`refs`（JSON 兜底）。
+
+**不留正文。** `args_digest` 是入参的规范化摘要（如 SHA-256），`target_object_id` 只放对象标识，任何入参正文、草稿内容、Wiki 正文都不落审计库。
+
+### 写入时机
+
+- **读工具**：调用结束后追加一条 `phase=attempted`。写审计失败只记本地告警，调用照常返回（fail-open）。
+- **写工具**：调用前追加 `phase=invoked`；**这次写入失败则不执行业务操作**（fail-closed），向调用方返回错误；业务成功后追加 `phase=completed`。业务失败也追加 `completed` 记 `result=error`。进程在两次写入之间崩溃时，库里留下一条没有配对的 `invoked`，即「中断或结果未知」。
+- 两阶段不保证跨库原子（审计库与领域存储是不同数据库），它保证的是**审计库不可用时写操作跑不起来**；业务已提交但 `completed` 写失败时，缺口表现为一条未配对的 `invoked`。
+
+### 接口
+
+- `CallRecord`：事件 dataclass 与字段校验。
+- `init_audit_table(conn)`：建表；DDL 必须支持多语句（现有实现用单条 `conn.execute` 跑多语句会抛 `ProgrammingError`）。
+- `record_attempted(conn, record)`：读工具单条记录。
+- `begin_call(conn, record) -> call_id` / `finish_call(conn, call_id, *, result, error_code, duration_ms)`：写工具两阶段。
+- `call_scope(...)`：上下文管理器，封装两阶段，供装饰器使用。
+- `query_audit_events(conn, *, caller_id=None, channel_id=None, service=None, tool=None, target_object_id=None, result=None, occurred_after=None, occurred_before=None)`：只读，时间倒序（`occurred_at DESC, rowid DESC`）。
+- `find_unfinished_calls(conn, *, occurred_after=None)`：返回只有 `invoked` 没有 `completed` 的调用。
+
+装饰器与 MCP 中间件**不在本包内**：包只提供可被它们调用的函数。装饰器由接入方在 MCP 层实现，工具函数把 `target_object_type` / `target_object_id` / `args_digest` 作为上下文传入。
+
+### 不做什么
+
+- 不提供更新或删除接口；只追加。
+- 不加幂等键。
+- 不做身份校验、不查注册表、不解析令牌。
+- 不定义业务语义字段（`operation` 枚举、`previous_state`、`next_state`、`base_revision`、`formal_revision_id` 等全部删除）。
+- 不建独立审计服务、不建 MCP 工具、不暴露给 Agent 自由写入。
 
 ## Testing Decisions
 
-- 唯一测试 seam 是 `audit_trail` 包公共 API：`init_audit_table`、`write_audit_event`、`query_audit_events`。
-- 测试用内存 SQLite，只验证外部行为：同事务写入成功且可查回、事务外调用被 `TransactionRequiredError` 拒绝、非 Connection 类型被拒、字段缺失/枚举非法抛 `AuditValidationError`、无 update/delete API、按任务/Proposal/正式版本/时间过滤与倒序、`refs` JSON 往返、全部 operation 枚举可写。
-- 测试风格与仓库现有 Python 子项目一致：标准库 `unittest`，`uv run python -m unittest discover`。
-- 不测试内部实现细节（如 SQL 语句形态）。
+唯一 seam 是包的公共 API。测试用临时 SQLite 文件（验证 WAL 与真实文件行为）与内存库（快速用例）。
+
+覆盖：
+
+- 单条追加与查询回读，时间倒序稳定
+- 两阶段：`begin` + `finish` 配对可查；只有 `begin` 的调用出现在 `find_unfinished_calls`；被 `finish` 后不再出现
+- fail-closed：审计库不可写时 `begin_call` 抛错（用只读文件或关闭的连接构造）
+- 按 `caller_id` / `channel_id` / `service` / `tool` / `target_object_id` / `result` / 时间区间过滤
+- `args_digest` 与 `refs` JSON 往返无损；确认表结构没有任何自由文本入参字段
+- 无 update / delete 公共 API
+- 多语句 DDL 可执行（加索引后仍能建表）
 
 ## Out of Scope
 
-- 不建 MCP 工具或 HTTP API 服务；写入口保持进程内函数，不暴露给 Agent 自由调用。
-- 不接入任何领域代码：Buffer、Research Mapping 管理 MCP、LLM-Wiki 管理 MCP 的真实接入由各自票完成。
-- 不建独立查询服务。
-- 不共享审计存储：Mapping/Wiki/Buffer 各自落库，不建中央审计库。
-- 不加幂等键、不建数据库触发器防 update/delete。
-- 不定义执行侧（端侧 Gateway、Execution Record）审计——端侧不进中央。
+- 真实接入任何中央服务：MCP 层尚不存在，接入由各服务实现票完成。
+- 端侧审计：`sci-weave/task-agent` 不在调用方集合内。
+- 领域治理记录：Mapping / Wiki / Buffer 的审计表属于领域自身，不接本包、不迁移、不合并。
+- 中央身份体系：`caller_id` 由套件提供，本包与 MCP 入口都不校验；多人共用套件时账本会合并为一条，这是已接受的限制。
+- 独立查询服务与看板：查询是进程内函数，看板后续自行包装。
 
-## Further Notes
+## Acceptance Criteria
 
-- 本规格的决策来源是已关闭的「中央服务留痕工具：写入方统一调用的审计接口」的 Resolution。
-- 字段是「中央协调 Agent 与审计体系」字段清单与 MappingAuditEvent / WikiAuditEvent 已关闭规格的 superset，不推翻既有领域规格。
-- 术语以根 `GLOSSARY.md` 为准：AuditEvent、领域隔离、只追加、Formal Revision。
+- [ ] 位置、包名、模块名与依赖形态按本票确定，`centre-control/README.md` 与 `docs/TECH_STACK.md` 同步
+- [ ] 事件形状为调用账本，不含任何业务语义字段
+- [ ] 读工具 fail-open 单条记录；写工具 fail-closed 两阶段记录，且能用测试证明审计不可用时写操作被阻断
+- [ ] `find_unfinished_calls` 能检出未配对调用
+- [ ] 审计库路径由环境变量提供，仓库只提交 `.env.example`
+- [ ] 审计库不含入参正文，只含摘要与对象标识
+- [ ] 无 update / delete API；多语句 DDL 可用
+- [ ] 回归测试全绿，README 示例可直接运行
 
+## Notes
+
+**2026-10-22T00:00:00Z**
+
+本票经 wayfinder grilling 收口。设计树见与 Frank Qi 的逐轮问答（2026-10-22 三轮）。
+
+决策记录：
+
+1. **语义边界**：统一留痕只记接口层对外调用，读写都记；业务语义留在消息、Mapping、Wiki 自己的记录里。
+2. **位置**：搬到 `sci-weave/centre-control/shared/audit-trail`；中心组件一起迁移，`shared/` 是中央代码归属边界。
+3. **端侧退出**：task-agent 保持现有 `audit_events`，执行过程追溯靠 fast-agent-mcp 自身日志与 ExecutionRecord 状态机。
+4. **存储**：中央一个审计库，路径可配置；跨服务视图依赖同库。
+5. **调用者身份**：`actor_id` 由调用方套件提供，MCP 入口不规定、不解析；另记 `channel_id` 供对照，不做一致性校验。
+6. **写入时机**：写操作先记录后执行（fail-closed），读操作后记录且 fail-open。
+7. **事件形状**：调用账本字段，删除全部业务语义字段；只留参数摘要，不留正文。
+8. **留痕位置**：装饰器包住工具函数，拿不到的业务语义不反推，只记工具名与对象标识。
+
+**2026-10-22T13:20:00Z**
+
+本票正文已按上述决策整体改写。原文（存储层审计、`write_audit_event(conn, event)` 同事务约束、5 个 operation 枚举、Mapping/Wiki/Buffer 各自落库）作废，作废依据记录在「中央服务留痕工具：写入方统一调用的审计接口」(ai4-upsm) 的修订说明中。
+
+代码落地由 [留痕包迁移到 centre-control 并改造为接口层调用账本](ai4-gvan.md) 承担。
