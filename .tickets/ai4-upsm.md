@@ -105,3 +105,29 @@ write_audit_event(conn: sqlite3.Connection, event: AuditEvent) -> None
 **2026-10-22T00:00:00Z**
 
 本票经 wayfinder grilling 收口（设计树见与 Frank Qi 的逐轮问答）。Design 中的旧调用方表述「Buffer 写预审结论」按第五轮讨论修正为「中央 Agent 预审报告经 `append_prereview_log` 落领域治理记录，由领域管理 MCP 作为写入方留痕」；草稿提交是否留痕的未定项已由事件枚举 `draft.status_changed` 覆盖，不再悬置。验收项全部勾选；真实接入的代码验证留给 ai4-xem8 与领域实现票。
+
+**2026-10-22T13:20:00Z**
+
+修订（本票 assignee 本人操作）。2026-10-22 的 wayfinder grilling 推翻了本票 Resolution 的一半，依据是 Frank Qi 的逐轮裁决。按仓库属人规则保留原文，只在下面写明推翻哪几条、为什么。
+
+**仍然成立：**
+
+- 「统一发生在**接口层**，不在存储层」——这句话是本票最先写下的，也是这次修订的出发点。后来的实现把它做成了「写入方在自己的事务里调 `write_audit_event`」，那是存储层，与本句相反。修订后回到字面意思。
+- 「只追加，不提供更新或删除」。
+- 「查询入口与写入分离，写入口不暴露给 Agent 自由调用」。
+- 「端侧 Task Agent Gateway 不是本接口的调用方」——进一步明确：端侧连自己的执行遥测都不接本包。
+
+**作废：**
+
+1. **「同事务」约束**（`write_audit_event` 校验 `conn.in_transaction`，独立调用被拒）作废。接口层与业务存储是不同数据库，跨库没有原子提交，这条约束在接口层无法兑现。替代方案是写操作两阶段记录（先 `invoked` 后 `completed`），fail-closed 的含义改为「审计库不可用时写操作跑不起来」，而不是「事实与审计同事务」。代价明说：业务已提交但 `completed` 写失败时，缺口表现为一条未配对的 `invoked`。
+2. **「Mapping、Wiki、Buffer 各自持有审计 SQLite，分别落库」**作废。改为中央一个审计库，路径由环境变量配置。理由：跨服务视图正是「谁访问了什么」这个问题的主要用法，分库后要跨三个库合并。领域治理记录仍留在各自存储，不进审计库。
+3. **事件形状与 5 个 operation 枚举**作废。`draft.status_changed`、`mapping.prereview_log_appended`、`mapping.formal_revision_promoted`、`wiki.prereview_log_appended`、`wiki.formal_revision_promoted` 全部删除；`previous_state`、`next_state`、`base_revision`、`candidate_revision`、`formal_revision_id`、`merge_request_id` 删除。新形状是调用账本：`caller_id`、`channel_id`、`caller_type`、`service`、`tool`、`phase`、`result`、`error_code`、`duration_ms`、`args_digest`、`target_object_type`、`target_object_id`、`refs`。
+4. **「actor 由写入方给出」的语义**保留字段但不做校验：`caller_id` 由调用方套件提供，MCP 入口不解析、不校验；另记 `channel_id` 供对照。
+
+**语义边界（新定）：** 统一留痕只记接口层的对外调用，读写都记；读操作 fail-open，写操作 fail-closed 两阶段。业务语义（改了哪个字段、批了哪个提案）留在消息、Mapping、Wiki 自己的治理记录里，审计账本不重复表达。
+
+**位置变更：** 包从 `sci-weave/shared/audit-trail` 迁到 `sci-weave/centre-control/shared/audit-trail`。
+
+**下游影响：** 本票 Resolution 与 Implementation Contract 中关于字段、枚举、事务、落库方式、位置的描述均已作废，以「中央留痕工具共享包实现规格」(ai4-tg3v) 改写后的正文为准；代码落地见「留痕包迁移到 centre-control 并改造为接口层调用账本」(ai4-gvan)。
+
+本票状态保持 `closed`：它承载的决策（接口层、只追加、查询分离、端侧退出）已落地为后续票；被推翻的部分是细节而非方向。
