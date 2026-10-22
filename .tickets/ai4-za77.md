@@ -1,7 +1,7 @@
 ---
 id: ai4-za77
 status: open
-deps: []
+deps: [ai4-z3z4]
 links: [ai4-we38, ai4-ujvn, ai4-v19u]
 created: 2026-10-21T22:43:00Z
 type: feature
@@ -29,14 +29,16 @@ tags: [toolkit, task-agent, researcher]
 
 | 组成 | 内容 |
 | --- | --- |
-| Gateway 模板 | 一份可运行的 Gateway：MCP 入口、消息订阅器、共享 SQLite、短生命周期 Worker、原子 Worker 租约 |
+| Work Agent 骨架模板 | 三组件的可运行骨架：`gateway/mcp`（处置面）、`gateway/subscriber`（消息监听）、`worker`；共享 SQLite、状态机、Worker Lease |
 | Agent 定义模板 | fast-agent 卡片模板，含任务指令、允许的模型、允许引用的领域 MCP |
 | 初始化脚本 | 复制模板到指定目录、生成 `.env.example`、初始化 SQLite schema、打印下一步 |
 | 使用说明 | 怎么填 `.env`、怎么启动、怎么验证、怎么重启、怎么查看执行记录 |
 
 ### 与已有实现的关系
 
-`sci-weave/task-agent/` 已有可运行的 Gateway 与 Worker（约 1550 行）。本套件以它为模板基线，不是另写一套。差异在于：模板需要参数化任务节点、队列地址与领域 MCP 引用，而现有实现把这些写死在配置里。
+`sci-weave/task-agent/` 已有可运行的 Gateway 与 Worker（约 1000 行）。本套件以它为模板基线，不另写一套。已有实现有三处必须先改才能当基线：`gateway/ingest` 还是空骨架需改成真实的 `gateway/subscriber`；`submit_owner_command` 与 `review_execution(accept)` 需删除；结果去处需从本地 SQLite 改为中央草稿箱。这三处由「最小 Work Agent 实现规格」(ai4-z3z4) 承担，本套件在它之后。
+
+形态依据见 `docs/data-flow/work-agent.md`。
 
 ### 套件不做的事
 
@@ -51,11 +53,12 @@ tags: [toolkit, task-agent, researcher]
 
 ## Acceptance Criteria
 
-- [ ] 套件包含 Gateway 模板、Agent 定义模板、初始化脚本、使用说明四部分，结构写明
-- [ ] 明确模板基线是 `sci-weave/task-agent/` 的现有实现，不另写一套
+- [ ] 套件包含 Work Agent 骨架模板、Agent 定义模板、初始化脚本、使用说明四部分，结构写明
+- [ ] 骨架模板含三组件（处置面 MCP、消息监听、Worker）与共享 SQLite、状态机、Worker Lease
+- [ ] 明确模板基线是 `sci-weave/task-agent/` 的现有实现，不另写一套；并写明它需要的三处改造
 - [ ] 明确套件不负责部署、不托管凭据、不包含中央侧组件
-- [ ] 明确 `.env.example` 需要哪些变量（队列地址、数据库位置、持久目录、领域 MCP 地址）
-- [ ] 使用说明能让研究员在无额外帮助的情况下建出一个能连上中央队列并提交草稿的 agent
+- [ ] 明确 `.env.example` 需要哪些变量（队列地址与消费者组、数据库位置、持久目录、领域 MCP 地址、草稿箱地址）
+- [ ] 使用说明能让研究员在无额外帮助的情况下建出一个能连上中央队列、执行任务并把结果写成草稿的 agent
 
 ## Notes
 
@@ -64,3 +67,14 @@ tags: [toolkit, task-agent, researcher]
 来源：2026-10-21 讨论。Project Owner 提出 task-agent 应「提供技能来建立新的 task-agent」。此前全仓库没有票承载这件事，`researcher-agent-toolkit/deploy-task-agent/` 目录为空。
 
 与 `ai4-v19u`（Agent 套件接入与协作边界分支）的关系：后者定套件的职责边界与接入方式，本票是它下面的一个具体套件。若 `v19u` 负责人认为应作为其子票，可调整层级。
+
+**2026-10-22T09:26:00Z**
+
+2026-10-22 修订，依据 Work Agent 统一架构（`docs/data-flow/work-agent.md`）与本票新增依赖：
+
+- 「Gateway 模板」改为「Work Agent 骨架模板」，明确三组件与共享 SQLite。
+- 现有实现行数由 1550 更正为约 1000（`gateway/ingest` 是 5 行空骨架）。
+- 新增明确：现有实现必须先经「最小 Work Agent 实现规格」(ai4-z3z4) 改造三处（subscriber 真实化、删除下发工具、结果改走草稿箱）才能作为模板基线。
+- `.env.example` 增加消费者组与草稿箱地址。
+
+本票 `deps` 增加 `ai4-z3z4`：骨架形态定了才谈得上打包成套件。
