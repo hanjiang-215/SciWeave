@@ -25,19 +25,35 @@ tags: [centre-control, centre-agents, candidate-prereview]
 - 中央 Agent 只处理候选：读取精确 candidate head、base formal revision 与候选内容，产出预审材料并回写结论。
 - 结论写回领域治理记录（不是草稿箱），并经留痕工具追加审计。
 
-待定：
+待定（已于 2026-10-22 全部定案，见下方「## Resolution」）：
 
 - 预审入口形态：由领域管理 MCP 新增只读候选查询工具，还是中央 Agent 直接用现有 Store 接口。
 - 取件是否带租约以避免两个中央 Agent 实例重复预审同一候选。
 - 预审结论的状态取值与它和 Proposal 状态（`candidate`、`mr_ready`、`stale`、`conflict`）的对应关系。
 - 中央 Agent 能否为「需要混合」的候选写新候选分支；若可以，它的写入位置与作者身份如何记录。
 
+## Resolution
+
+**入口：只走领域管理 MCP 的只读候选查询工具。** 两套管理 MCP 各提供一个只读工具，返回同一时点的全部可送审候选（未放弃、未正式化、未驳回）及其精确 `candidate_head`、`base_formal_revision_id` 与内容快照。Centre Agent 不持有领域 Store 的连接，不直连领域数据库。
+
+理由：Centre Agent 与领域治理之间只应有进程边界这一条通道。直连 Store 会让领域 schema 的每次变更都变成 Centre Agent 的破坏性变更，也会让「谁能读候选」这件事绕开 MCP 的授权面。查询是只读的，故不需要第二个写工具。
+
+**取件不带租约。** 单实例常驻，重复预审由「预审报告的追加日志契约」(ai4-oz3s) 的唯一键 `(candidate_id, candidate_head, rule_set_version)` 挡住，返回首次结论。本地 Worker Lease（见「最小 Work Agent 实现规格」ai4-z3z4）只用于同一 `candidate_id` 不并发跑两轮，不承担跨实例分发。
+
+**结论状态取值：不提交通用 Proposal 状态，只提交本报告的事实列。** 报告带 `verdict`（通过/不通过）与 `conflict_matrix`；`stale`（基准过期）与 `conflict`（同对象冲突）是报告里的事实，不是 Centre Agent 写入的 Proposal 状态。Proposal 状态由 Project Owner 在批准或驳回时处置，Centre Agent 不改 Proposal 状态、不写正式版本、不建 Merge Request Buffer。
+
+**可以为混合候选新建分支，仅此一种写入。** 通过 `create_merged_candidate` 写，与 `append_prereview_log` 是分开授权的两个工具。作者记为全部来源作者，来源作者对该混合候选没有任何操作权，且不可二次混合。细节见「混合候选的生成与作者身份」(ai4-8dgd)。
+
+**报告失效与重算。** 候选头变化产生新报告条目，旧条目保留并标 `superseded_by`；正式版本发布时，受影响候选的旧报告标 `stale` 并在下一次预审时重算，重算完成前该候选卡住。见「预审门禁、触发范围与故障处置」(ai4-a2ba) 与 `docs/data-flow/centre-agent.md`。
+
 ## Acceptance Criteria
 
 - 只能读到已存在的候选分支；草稿箱内容不进入预审输入
 - 不写草稿的接纳或驳回状态
+- 入口为领域管理 MCP 的只读候选查询工具，不直连领域 Store
 - 同一候选 head 不会被并发预审两次，或被重复预审时结论一致
-- 预审结论写回领域治理记录并留痕，不写正式版本
+- 预审结论写回领域治理记录并留痕，不写正式版本，不改 Proposal 状态
+- 只能通过 `create_merged_candidate` 新建混合候选分支，不改写已有候选
 - 候选 head 或 base formal revision 变化后，旧预审结论失效且有明确标记
 - 有回归测试覆盖重复取件、并发取件与预审对象变化
 
@@ -57,3 +73,9 @@ tags: [centre-control, centre-agents, candidate-prereview]
 - **写新候选分支确认为可以**：仅限混合候选，作者记为全部来源作者且来源作者无操作权，见「混合候选的生成与作者身份」(ai4-8dgd)。
 
 机械校验前移后，本票与「候选预审检查项」(ai4-5z9e) 的输入不再包含格式非法的候选，见「候选创建的机械校验前置」(ai4-eex0)。
+
+**2026-10-22T09:15:00Z**
+
+2026-10-22：四个待定项全部定案，写入正文 `## Resolution`。依据 Project Owner 裁决与 `docs/data-flow/work-agent.md`。同时新增两条验收：入口不直连领域 Store、只可新建混合候选分支不改写已有候选。
+
+阻塞状态：本票 `deps` 为 `ai4-upsm`（中央服务留痕工具）。该票已有 Resolution 与共享包 `sci-weave/shared/audit-trail`，但状态仍为 open，因此本票仍在阻塞中，解除由该票负责人与地图 owner 复核。
