@@ -120,6 +120,26 @@ class SqliteStore:
             proposal_id=str(row["proposal_id"]), submitted_at=str(row["submitted_at"]), status=str(row["status"]),
         ) for row in rows]
 
+    def list_dashboard_candidates(self, wiki_domain_id: str) -> list[dict[str, object]]:
+        """Return candidate identities and review state without copying document content."""
+        with self.connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT s.submission_id, s.proposal_id, s.submitted_at, s.status AS submission_status,
+                       p.status AS proposal_status, c.candidate_commit_id, c.terminus_store_id,
+                       c.branch_id, c.commit_hash, m.status AS merge_request_status,
+                       m.owner_decision
+                FROM wiki_buffer_submission AS s
+                LEFT JOIN wiki_proposal AS p ON p.proposal_id = s.proposal_id
+                LEFT JOIN wiki_candidate_commit AS c ON c.proposal_id = s.proposal_id
+                LEFT JOIN wiki_merge_request_buffer AS m ON m.proposal_id = s.proposal_id
+                WHERE s.wiki_domain_id = ?
+                ORDER BY s.submitted_at ASC, s.rowid ASC
+                """,
+                (wiki_domain_id,),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
     def add_formal_revision(
         self,
         *,

@@ -1,10 +1,14 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 from dataclasses import asdict
 
 from llm_wiki.config import WikiConfig
+from llm_wiki.dashboard_source import build_wiki_fragment, project_candidate_references, run_wiki_dashboard_from_environment
+from llm_wiki.formal_query import WikiFormalQueryService
+from llm_wiki.formal_domain import WikiSnapshotRead
 from llm_wiki.resource_review import ResourceReviewService
 from llm_wiki.sqlite_store import SqliteStore
 from llm_wiki.terminus_store import TerminusDBResourceStore
@@ -15,15 +19,52 @@ def main(argv: list[str] | None = None) -> int:
     config = WikiConfig.from_environment()
     sqlite_store = SqliteStore(config.sqlite_path)
     sqlite_store.initialize()
-    service = ResourceReviewService(
-        sqlite_store=sqlite_store,
-        terminus_store=TerminusDBResourceStore(
-            base_url=config.terminusdb_url,
-            token=config.terminusdb_token,
-            username=config.terminusdb_username,
-            password=config.terminusdb_password,
-        ),
+    terminus_store = TerminusDBResourceStore(
+        base_url=config.terminusdb_url,
+        token=config.terminusdb_token,
+        username=config.terminusdb_username,
+        password=config.terminusdb_password,
     )
+    service = ResourceReviewService(sqlite_store=sqlite_store, terminus_store=terminus_store)
+    formal_query = WikiFormalQueryService(
+        sqlite_store=sqlite_store,
+        terminus_store=terminus_store,
+        terminus_database=config.terminusdb_database,
+        resource_review_service=service,
+    )
+    if os.environ.get("SCIWEAVE_WIKI_DASHBOARD_MODE") == "1":
+        def read_dashboard_fragment():
+            candidates = []
+            for row in sqlite_store.list_dashboard_candidates(config.domain_id):
+                candidate = dict(row)
+                candidate["candidate_snapshot_status"] = "pending"
+                if candidate.get("terminus_store_id") and candidate.get("branch_id") and candidate.get("commit_hash"):
+                    try:
+                        snapshot = terminus_store.read_exact_snapshot(
+                            candidate["terminus_store_id"],
+                            config.terminusdb_database,
+                            candidate["branch_id"],
+                            candidate["commit_hash"],
+                        )
+                    except Exception:
+                        snapshot = None
+                    if isinstance(snapshot, WikiSnapshotRead) and snapshot.status == "confirmed" and (
+                        snapshot.store_id, snapshot.database, snapshot.branch_id, snapshot.commit_hash
+                    ) == (candidate["terminus_store_id"], config.terminusdb_database, candidate["branch_id"], candidate["commit_hash"]):
+                        documents = list(snapshot.documents)
+                        revision = next((document for document in documents if document.get("@type") == "WikiRevision"), {})
+                        candidate["candidate_snapshot_status"] = "confirmed"
+                        candidate["title"] = revision.get("title") or "Wiki 候选文档"
+                        candidate["references"] = project_candidate_references(
+                            documents,
+                            lambda version_id, scope: service.get_current_qualification(version_id, scope),
+                        )
+                    else:
+                        candidate["candidate_snapshot_status"] = "unavailable"
+                candidates.append(candidate)
+            return build_wiki_fragment(formal_query.get_current(config.domain_id), candidates)
+
+        return run_wiki_dashboard_from_environment(read_dashboard_fragment)
     if len(arguments) > 1:
         qualification = service.get_current_qualification(arguments[1])
         print(json.dumps(asdict(qualification), ensure_ascii=False))
