@@ -37,7 +37,7 @@ tags: [wayfinder:map, centre-agents, governance]
 
 <!-- 已关闭的子票在这里各占一行；未关闭的子票通过查询获得，不在此列出 -->
 
-本图当前没有已关闭的子票。
+- [中央服务留痕工具：写入方统一调用的审计接口](ai4-upsm.md)：统一发生在接口层而非存储层。共享包 `sci-weave/shared/audit-trail` 提供 `write_audit_event(conn, event)`，校验 `conn.in_transaction` 拒独立调用，只追加、无幂等键；Mapping/Wiki/Buffer 各自落审计 SQLite；首版 5 个 operation 枚举；字段为 `ai4-vbnr` 与两份领域 AuditEvent 的 superset；测试写入方回归，真实接入由 `ai4-xem8` 与领域实现票完成。
 
 ## Not yet specified
 
@@ -56,5 +56,5 @@ tags: [wayfinder:map, centre-agents, governance]
 2026-10-22 更新（本票 assignee 本人操作）：
 
 - **`Not yet specified` 中「预审与正式版本发布之间的时序」已定案，移出**：正式版本发布也发一条领域事件，受影响候选的旧报告标 `stale` 并在下一次预审时重算，重算完成前该候选卡住。落在「预审报告的追加日志契约」(ai4-oz3s) 与「预审门禁、触发范围与故障处置」(ai4-a2ba)。
-- **Decisions so far 中「中央服务留痕工具」一行已移出**：该票当前仍是 `open`，按要求 Decisions so far 只收已关闭的子票，故不在此列出，待其关闭后再转载。
+- **Decisions so far 中「中央服务留痕工具」一行**：该票后来已关闭，按地图规则转载回索引，见上方条目。
 - **地图形态补充**：Centre Agent 与 Task Agent 共用 Work Agent 架构，见 `docs/data-flow/work-agent.md` 与 [ADR-0001](../../docs/adr/0001-task-dispatch-via-message-queue.md)。本图的产物、存储、门禁与接口边界不受影响，变的是它跑在三个组件上而非单个常驻进程。
