@@ -479,6 +479,12 @@ class TerminusDBWikiCandidateStore(TerminusDBResourceStore):
         snapshot = self.read_exact_snapshot(store_id, database, branch_id, commit_hash)
         return snapshot.status == "confirmed" and snapshot.commit_hash == commit_hash
 
+    def read_branch_head(self, store, database, branch):
+        if (store, database) != (self.store_id, self.database):
+            return None
+        head = self._candidate_head(branch)
+        return head.get("identifier") if isinstance(head, dict) else None
+
     def _request(self, method, url, body=None):
         headers = {"Accept": "application/json"}
         if self._authorization:

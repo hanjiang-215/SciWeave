@@ -44,6 +44,9 @@ class SqliteStore:
         schema = self._schema_path.read_text(encoding="utf-8")
         with self.connection() as connection:
             connection.executescript(schema)
+            columns={row[1] for row in connection.execute("PRAGMA table_info(wiki_merge_request_buffer)")}
+            if "owner_resource_approval_ids" not in columns:
+                connection.execute("ALTER TABLE wiki_merge_request_buffer ADD COLUMN owner_resource_approval_ids TEXT NOT NULL DEFAULT '{}' ")
             connection.commit()
 
     @contextmanager

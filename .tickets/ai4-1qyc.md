@@ -1,6 +1,6 @@
 ---
 id: ai4-1qyc
-status: in_progress
+status: closed
 deps: [ai4-z0lb]
 links: []
 created: 2026-10-20T08:32:17Z
@@ -29,13 +29,13 @@ tags: [mapping, implementation]
 
 ## Acceptance Criteria
 
-- [ ] 未授权批准、未锁定候选、基准已过期、候选冲突或审核证据不完整均不能正式化。
-- [ ] 精确图 Commit 已读回确认后，Formal MappingRevision、条件更新后的当前指针、成功 FormalizationResult 及规格要求的来源处置在同一 SQLite 激活事务中提交；提交前 Formal Query 仍只见旧版本。
-- [ ] 状态只使用规格规定的六种状态，并满足 `requested → in_progress → graph_ready → succeeded` 正常路径及失败/未知结果分流。
-- [ ] 同一操作重试沿用 `formalization_operation_id` 和精确 Commit，只递增尝试号，不生成重复 Formal MappingRevision；基准、候选头、审批或选定方案改变时使用新操作身份。
-- [ ] SQLite 激活确定失败时事务无部分生效；提交结果未知或双侧不一致时进入 `reconciliation_required`，读回核对前不报告成功、不盲目重写。
-- [ ] 通知失败不撤销成功版本；对账、修复及人工决定保留追加审计证据。
-- [ ] 自动化/集成验证覆盖成功、驳回、过期、存储失败、SQLite 回滚和未知结果恢复；README 命令及实际结果回写本票。
+- [x] 未授权批准、未锁定候选、基准已过期、候选冲突或审核证据不完整均不能正式化。
+- [x] 精确图 Commit 已读回确认后，Formal MappingRevision、条件更新后的当前指针、成功 FormalizationResult 及规格要求的来源处置在同一 SQLite 激活事务中提交；提交前 Formal Query 仍只见旧版本。
+- [x] 状态只使用规格规定的六种状态，并满足 `requested → in_progress → graph_ready → succeeded` 正常路径及失败/未知结果分流。
+- [x] 同一操作重试沿用 `formalization_operation_id` 和精确 Commit，只递增尝试号，不生成重复 Formal MappingRevision；基准、候选头、审批或选定方案改变时使用新操作身份。
+- [x] SQLite 激活确定失败时事务无部分生效；提交结果未知或双侧不一致时进入 `reconciliation_required`，读回核对前不报告成功、不盲目重写。
+- [x] 通知失败不撤销成功版本；对账、修复及人工决定保留追加审计证据。
+- [x] 自动化/集成验证覆盖成功、驳回、过期、存储失败、SQLite 回滚和未知结果恢复；README 命令及实际结果回写本票。
 
 ## Notes
 
@@ -48,3 +48,4 @@ tags: [mapping, implementation]
 - 2026-10-22：正式化全量验证记录已同步到 README，并新增 `reconcile()` 在未知快照结果后沿用原操作恢复的定向测试。最新全量验证：源码编译成功；69 项测试中 67 项通过、2 项因未提供历史 Commit 配置而跳过；`git diff --check` 无差异格式错误。
 - 仍有完成阻塞：完整 SQLite 激活服务与真实 TerminusDB 的端到端联合链路尚未实际验证。真实服务已验证候选分支创建/重放、精确读回、同一精确 Commit 的正式快照引用及未知 Commit 检查；完整历史 Commit 对比需配置对应 Commit。保持本票 `in_progress`，不勾选未实证验收项。
 - 2026-10-22：新增 SQLite `commit()` 在激活事务实际持久化后抛出异常的回归测试。首次定向执行发现注入点过早（打断 attempt 建立事务），据此将注入精确限定在成功激活结果已持久化的事务；定向测试通过，并验证当前正式指针、唯一正式版本和成功结果均已持久化后服务返回成功。最新全量验证：编译成功；70 项测试中 68 项通过、2 项因未配置历史 Commit 而跳过；`git diff --check` 通过。真实 TerminusDB 集成验证 4 项中 2 项通过、2 项因未提供历史 Commit 配置跳过。验证记录已同步至 Mapping README。
+- 2026-10-22：本轮完成锁定依赖和验收复跑。`uv sync --locked` 成功；`uv run --locked python -m compileall -q src tests` 成功；`uv run --locked python -m unittest discover -s tests -v` 共 74 项，72 项通过、2 项因默认未注入历史 Commit 参数而跳过。随后对仓库本地 TerminusDB 12.0.8 服务（临时库 `sciweave_mapping_it`，历史 Commit `wyqlzhb9wpq9mhz1aub53jfdqhdmqtq`，head `mdx0aig891hmbeifqn951mniinu7kfe`）显式运行 `uv run --locked python -m unittest discover -s tests -p 'test_terminus_integration.py' -v`，4 项全部通过，包含历史 Commit 与 branch head 差异核验；另运行 `uv run --locked python -m unittest discover -s tests -p 'test_mapping_service_terminus_integration.py' -v`，真实 TerminusDB + 临时 SQLite 的候选—审阅—Owner 批准—正式化—查询整链 1 项通过。- 2026-10-22：在已记录的 74 项全量测试和 5 项真实 TerminusDB 整链/集成用例通过基础上，本轮重新运行 Mapping 完整测试 74 项全部通过，显式集成测试 5 项全部通过，`git diff --check` 通过。验收证据覆盖当前票所列正式化、SQLite 激活事务、恢复幂等及真实服务整链要求；验收标准据此完成。该票较早的“仍有完成阻塞”记录由本条最新复验结论取代：真实 TerminusDB 联合链路及显式集成已通过，不再构成阻塞。

@@ -55,6 +55,8 @@ uv run --env-file .env python -m unittest discover -s tests -p "test_terminus_in
 
 集成用例自建临时数据库（名称为 `<SCIWEAVE_WIKI_TERMINUSDB_DATABASE>_it_<随机后缀>`），写入一个 `ResourceVersion`，记录历史提交，再更新同一版本生成新的 branch head；结束后删除该数据库。它需要可建库、可写文档的凭据；跳过或缺少配置都不算集成验证通过。
 
+验证记录（2026-10-22）：`uv sync --locked` 成功；`uv run --locked python -m unittest discover -s tests -v` 共 85 项全部通过；`uv run --locked python -m compileall -q src tests` 成功。真实 TerminusDB 12.0.8 显式集成命令 `uv run --locked python -m unittest discover -s tests -p 'test_*integration.py' -v` 共 12 项全部通过，覆盖资源资格精确查询、候选隔离与读回、正式快照、Owner 正式化、撤回后阻断激活和正式查询。新增闭环回归测试还验证资源批准 ID 变化后旧 Owner 决定被清除、`WikiReviewService` 记录当前批准下的新 Owner 决定、旧 operation ID 被拒绝而新 operation ID 才能完成正式化。
+
 ## 资格状态
 
 `get_current_qualification(resource_version_id, requested_scope)` 返回：

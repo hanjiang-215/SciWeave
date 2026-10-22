@@ -62,7 +62,7 @@ SCIWEAVE_MAPPING_INTEGRATION_HEAD_COMMIT=<branch-head-commit> \
 uv run --env-file .env python -m unittest discover -s tests -p "test_terminus_integration.py" -v
 ```
 
-验证记录（2026-10-22）：`uv run --locked python -m compileall -q src tests` 成功；`uv run --locked python -m unittest discover -s tests -v` 70 项中 68 项通过、2 项跳过。新增测试模拟 SQLite 激活事务已持久化后 `commit()` 再抛异常，验证服务通过持久化 SQLite 与 TerminusDB 精确快照证据返回成功，且只生成一个正式版本。真实服务验证命令：`$env:SCIWEAVE_RUN_TERMINUSDB_INTEGRATION='1'; uv run --locked python -m unittest discover -s tests -p 'test_terminus_integration.py' -v`，4 项中 2 项通过、2 项因未提供历史 Commit 配置跳过；候选分支创建/重放、正式快照精确引用及未知 Commit 检查在真实 TerminusDB 上通过。完整 SQLite 激活服务与真实 TerminusDB 联合链路尚未验证；历史 Commit 比较也需配置指定 Commit。
+验证记录（2026-10-22）：`uv sync --locked` 成功；`uv run --locked python -m compileall -q src tests` 成功；`uv run --locked python -m unittest discover -s tests -v` 共 74 项，72 项通过、2 项因全量测试默认未设置历史 Commit 参数而跳过。随后显式提供本地服务中两个不同的已存在 Commit，再运行 `uv run --locked python -m unittest discover -s tests -p 'test_terminus_integration.py' -v`，4 项全部通过，包含历史快照与 branch head 差异验证。另运行真实服务整链命令 `uv run --locked python -m unittest discover -s tests -p 'test_mapping_service_terminus_integration.py' -v`，1 项通过，覆盖临时 SQLite 与真实 TerminusDB 的候选、审阅、Owner 批准、正式化和正式查询。故集成验证并非跳过；全量默认运行中的两项需注入历史 Commit 参数才会执行。
 
 ```bash
 uv run --env-file .env python -m unittest discover -s tests -p "test_terminus_integration.py" -v

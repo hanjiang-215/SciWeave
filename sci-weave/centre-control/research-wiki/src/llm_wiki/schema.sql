@@ -112,7 +112,8 @@ CREATE TABLE IF NOT EXISTS wiki_merge_request_buffer (
     merge_request_id TEXT PRIMARY KEY, proposal_id TEXT NOT NULL, wiki_domain_id TEXT NOT NULL,
     base_formal_revision_id TEXT NOT NULL, candidate_head TEXT NOT NULL, candidate_commit_id TEXT NOT NULL,
     status TEXT NOT NULL, reviewer_id TEXT NOT NULL, owner_id TEXT, owner_decision TEXT NOT NULL,
-    owner_event_id TEXT, created_at TEXT NOT NULL, locked_preview_id TEXT
+    owner_event_id TEXT, created_at TEXT NOT NULL, locked_preview_id TEXT,
+    owner_resource_approval_ids TEXT NOT NULL DEFAULT '{}'
 );
 CREATE TABLE IF NOT EXISTS wiki_review_evidence (
     preview_id TEXT PRIMARY KEY, merge_request_id TEXT NOT NULL, evidence_json TEXT NOT NULL,

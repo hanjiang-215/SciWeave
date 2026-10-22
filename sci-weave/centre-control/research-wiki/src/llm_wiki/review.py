@@ -39,6 +39,14 @@ class WikiReviewService:
         if not proposal or not candidate: return WikiReviewResult("unavailable","proposal_missing")
         if self.db.get_current_formal_revision_id(proposal['wiki_domain_id']) != proposal['base_formal_revision_id']:
             return WikiReviewResult("stale_base","stale_base",proposal_id=proposal_id,base_formal_revision_id=proposal['base_formal_revision_id'],candidate_head=candidate['commit_hash'])
+        head_reader = getattr(self.store, "read_branch_head", None)
+        if callable(head_reader):
+            try:
+                current_head = head_reader(candidate['terminus_store_id'], self.database, candidate['branch_id'])
+            except Exception:
+                current_head = None
+            if current_head != candidate['commit_hash']:
+                return WikiReviewResult("stale_candidate", "candidate_head_changed", proposal_id=proposal_id, base_formal_revision_id=proposal['base_formal_revision_id'], candidate_head=candidate['commit_hash'])
         base=self.db.get_formal_revision(proposal['base_formal_revision_id'])
         reads=[]
         for store,branch,commit in ((candidate['terminus_store_id'],candidate['branch_id'],candidate['commit_hash']),(base.terminus_store_id,base.formal_branch_id,base.formal_commit_hash)):
@@ -76,22 +84,45 @@ class WikiReviewService:
         with self.db.connection() as c:
             mr=c.execute("SELECT * FROM wiki_merge_request_buffer WHERE merge_request_id=?",(merge_request_id,)).fetchone()
         if not mr: return WikiDecisionResult("rejected","merge_request_missing")
+        if not self._candidate_head_matches(mr):
+            return WikiDecisionResult("rejected", "candidate_head_changed")
         try:
             authorized = self.owner_authorization_verifier is not None and self.owner_authorization_verifier.verify_owner(actor_id, mr['wiki_domain_id']) is True
         except Exception:
             authorized = False
         if not authorized: return WikiDecisionResult("rejected", "owner_authorization_unverified")
+        approval_ids={}
         if decision=="approved":
             if selected_solution_id!=mr['candidate_commit_id']: return WikiDecisionResult("rejected","solution_mismatch")
             if self.db.get_current_formal_revision_id(mr['wiki_domain_id'])!=mr['base_formal_revision_id']: return WikiDecisionResult("rejected","stale_base")
             refs=self._references(mr['candidate_commit_id'],mr['candidate_head'])
             if refs is None: return WikiDecisionResult("rejected","candidate_unavailable")
-            if refs and (self.resources is None or not all(self._eligible(ref) for ref in refs)): return WikiDecisionResult("rejected","resource_qualification_required")
+            if refs:
+                if self.resources is None: return WikiDecisionResult("rejected","resource_qualification_required")
+                for ref in refs:
+                    try: qualification=self.resources.get_current_qualification(ref['target_resource_version_id'],ref.get('requested_scope') or ref.get('reference_role'))
+                    except Exception: return WikiDecisionResult("rejected","resource_qualification_required")
+                    scope=ref.get('requested_scope') or ref.get('reference_role')
+                    if qualification.status!='approved' or not qualification.review_id or (qualification.use_scope and scope not in qualification.use_scope): return WikiDecisionResult("rejected","resource_qualification_required")
+                    approval_ids[ref['target_resource_version_id']]=qualification.review_id
         status="approved" if decision=="approved" else "rejected"; event="wiki-owner-"+hashlib.sha256((merge_request_id+actor_id+decision+reason).encode()).hexdigest()[:20]; now=_now()
         with self.db.connection() as c:
-            c.execute("UPDATE wiki_merge_request_buffer SET status=?,owner_id=?,owner_decision=?,owner_event_id=? WHERE merge_request_id=?",(status,actor_id,decision,event,merge_request_id))
+            c.execute("BEGIN IMMEDIATE")
+            latest=c.execute("SELECT status,owner_event_id FROM wiki_merge_request_buffer WHERE merge_request_id=?",(merge_request_id,)).fetchone()
+            if latest is None or latest['status'] not in ('ready_for_owner','approved','rejected','reapproval_required'):
+                c.rollback()
+                return WikiDecisionResult("rejected","merge_request_state_invalid")
+            c.execute("UPDATE wiki_merge_request_buffer SET status=?,owner_id=?,owner_decision=?,owner_event_id=?,owner_resource_approval_ids=? WHERE merge_request_id=?",(status,actor_id,decision,event,canonical_json(approval_ids),merge_request_id))
             c.execute("INSERT INTO wiki_audit_event VALUES (?,?,?,?,?,?,?,?,?,?)",(event,now,actor_id,"owner_formal_publication_review","WikiMergeRequestBuffer",merge_request_id,decision,"owner_decision",canonical_json({"reason":reason,"selected_solution_id":selected_solution_id}),None)); c.commit()
         return WikiDecisionResult(status,"owner_decision_recorded",event)
+
+    def _candidate_head_matches(self, mr):
+        with self.db.connection() as c:
+            row=c.execute("SELECT terminus_store_id,branch_id FROM wiki_candidate_commit WHERE candidate_commit_id=?",(mr['candidate_commit_id'],)).fetchone()
+        reader=getattr(self.store,"read_branch_head",None)
+        if not row or not callable(reader): return False
+        try: return reader(row['terminus_store_id'],self.database,row['branch_id'])==mr['candidate_head']
+        except Exception: return False
 
     def _references(self, candidate_id, commit):
         try:
