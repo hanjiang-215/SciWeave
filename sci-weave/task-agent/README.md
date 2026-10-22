@@ -1,5 +1,7 @@
 # SciWeave Task Agent
 
+> **形态已更新（2026-10-22）**：本目录的实现仍按旧的「中央部署、MCP 下发任务」形态写，尚未改造。现行架构见 [`docs/data-flow/work-agent.md`](../../docs/data-flow/work-agent.md) 与工单「最小 Work Agent 实现规格」(ai4-z3z4)：三组件改为 `gateway/mcp`（处置面）、`gateway/subscriber`（消息监听）、`worker`；删除 `submit_owner_command` 与 `review_execution(accept)`；执行结果改由 Worker 内的 agent 写入中央草稿箱。以下为当前代码的实际状态。
+
 `task-agent` 是 SciWeave 的 Task Agent 项目组。它以独立 Python 子项目划分三个进程角色：
 
 - `gateway/mcp`：常驻 Gateway MCP 接入与当前 HTTP 回环调试 seam；接收 Owner 命令并保存执行状态。

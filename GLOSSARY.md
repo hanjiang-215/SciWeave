@@ -10,7 +10,7 @@
 
 **LLM-Wiki Store（LLM-Wiki 存储）**：独立处理 LLM-Wiki 的 TerminusDB 实例或逻辑存储边界，保存 WikiDocument、WikiRevision、Resource、ResourceVersion、RawArtifact 元数据及其引用关系。它不保存 TaskNode 或 Dependency Edge。
 
-**Domain Isolation（领域隔离）**：Research Mapping 与 LLM-Wiki 在第一阶段采用独立的领域运行边界，分别拥有自己的管理 MCP、Buffer、内存数据边界、校验器、TerminusDB、candidate branch、Revision 和审计链。一个 Central Agent 可以通过两个独立的管理 MCP 分别处理两个领域，但不得共享领域对象、数据库连接、Buffer 或跨域写入状态；两个领域只能通过稳定的对象 ID 和版本 ID 建立显式弱引用，第一阶段不支持单个 MCP Submission 或 Proposal 同时修改两个领域。
+**Domain Isolation（领域隔离）**：Research Mapping 与 LLM-Wiki 在第一阶段采用独立的领域运行边界，分别拥有自己的管理 MCP、Buffer、内存数据边界、校验器、TerminusDB、candidate branch、Revision 和审计链。一个 Centre Agent 可以通过两个独立的管理 MCP 分别处理两个领域，但不得共享领域对象、数据库连接、Buffer 或跨域写入状态；两个领域只能通过稳定的对象 ID 和版本 ID 建立显式弱引用，第一阶段不支持单个 MCP Submission 或 Proposal 同时修改两个领域。
 
 > 修订（2026-10-21）：隔离粒度从「服务」下调为「内容与事务」。两个领域共用中央草稿箱（Draft Buffer）的同一个数据库，但按命名空间分离 schema、审核人、读写授权和事务，仍不共享领域对象 ID，也不做跨域原子写入。原文保留。
 
@@ -56,7 +56,15 @@
 
 > 修订（2026-10-21）：删去「Task Agent 设计稿由 Project Owner 审核」，端侧自持后没有这一类草稿。
 
-**Candidate Pre-Review（候选预审）**：第二阶段审核的初步部分，由中央 Agent 对**已存在的候选分支**做结构、引用、权限、依赖、基准版本、冲突和影响范围检查，必要时生成混合候选。它作用在候选上，不作用在草稿上；它不构成批准，也不能代替 Project Owner 的正式发布审核。
+**Candidate Pre-Review（候选预审）**：第二阶段审核的初步部分，由 Centre Agent 对**已存在的候选分支**做权限范围、对象冲突和影响范围检查，必要时生成混合候选。格式、对象引用与依赖关系三类确定性检查已前移到领域管理 MCP 在创建候选时拒绝，不再属于预审。它作用在候选上，不作用在草稿上；它不构成批准，也不能代替 Project Owner 的正式发布审核。
+
+> 修订（2026-10-22）：原表述含「结构、引用、依赖」三类检查。这三类改由领域 MCP 写入时拒绝，依据「候选创建的机械校验前置」(ai4-eex0)。
+
+**Pre-Review Report（预审报告）**：Centre Agent 对某个候选在某一确切候选头与判据版本下得出的结论，含逐项检查结果、冲突矩阵与通过或不通过的判定。它以只追加日志写入领域治理记录，唯一键为 `(candidate_id, candidate_head, rule_set_version)`；它不是批准，也不改变 Proposal 状态。
+
+**Rule Set Version（判据版本）**：预审判据的版本号。判据本身是受 Git 管理的规则文件；报告只记录版本号与检查项清单，不记录提示词全文，以便事后判断两次结论的差异来自候选变化还是判据变化。
+
+**Stale Pre-Review Report（失效预审报告）**：候选头或基准正式版本在报告生成后再次移动时，该报告进入的状态。失效的报告不能作为批准依据；受影响候选在重算完成前卡住，未受影响的候选照常可批。
 
 **Formal Publication Review（正式发布审核）**：草稿转为正式版本前，由项目负责人进行的第二阶段审核。只有审核通过并更新 Formal WikiRevision 或 Formal Mapping Revision 指针后，内容才能进入正式查询和正式调度。
 
@@ -90,17 +98,31 @@
 
 **MCP Submission（MCP 提交）**：端侧 Agent 通过标准化 MCP 工具提交任务结果、失败报告或 Proposal 的行为；它是平台接收 Agent 变更的统一入口，不等于正式批准。
 
-**Central Agent（中央 Agent）**：对 Research Mapping 与 LLM-Wiki 的候选分支做候选预审并生成必要的混合候选的 Agent。它不参与草稿的一审、不代替研究负责人进行科研内容判断和最终批准、不写正式版本、不发起执行、不部署或托管 Task Agent。任何正式 Mapping 或正式科研结果发布都必须由 Project Owner 明确批准。
+**Agent Gateway（Agent 网关）**：一个 Work Agent 里返修处置 MCP 与消息监听两个功能的复合，不是一个独立进程。它只承担人要做的事（返修、放弃、转人工、观察）与出站消息订阅，不下发任务，也不写草稿。task-agent 的网关随任务负责人部署，centre-agent 的网关随中央控制面部署。
 
-> 修订（2026-10-21）：删去「按 Project Owner 已批准的绑定部署 Task Agent」。Task Agent 改由研究员端侧自持，中央不再承担其部署。
+> 修订（2026-10-22）：原定义为「为一个 Agent 提供 MCP 入口、消息入口与执行控制边界的常驻进程」。现明确网关是 `gateway/mcp` 与 `gateway/subscriber` 两个组件的复合；执行控制由 Worker Lease 与状态机承担，不另设网关进程。
 
-**Execution Submission（执行提交）**：Task Agent 一轮执行结束后提交给 Task Node Owner 审核的不可变结果记录，保存在 Task Agent Gateway 的 SQLite 中，与 Execution Record、审核决定和通知 outbox 同库。它不进入中央草稿箱，也不称为 Buffer。
+**Work Agent（工作 Agent）**：Task Agent 与 Centre Agent 的统一上位词。两种实例共用一套架构：返修处置 MCP、消息监听、短生命周期 Worker 三个组件，加一份本地 SQLite、一套 Execution Record 状态机与 Worker Lease。它们只在订阅什么、一轮 loop 做什么、处置面承接什么动作上不同。
 
-**Execution Record（执行记录）**：对任务执行开始、暂停、重试、失败、完成和人工接管等运行过程的结构化记录。Execution Record 可以由 Central Agent 调度和追加，但不等于正式 Research Mapping 变更，也不单独授予科研结果正式地位。
+_Avoid_: 用 Work Agent 替代 Task Agent 或 Centre Agent 这两个实例名。
 
-**Worker Lease（Worker 租约）**：端侧 Task Agent Gateway 在本地 SQLite 中为一个 `task_node_id` 领取短生命周期 Worker 启动权的、可过期的执行协调记录。同一任务节点同时只能存在一个有效租约；未取得租约的入口不得启动第二个 Worker。
+**Task Agent（任务 Agent）**：研究员在自己的电脑上编写和运行的 Work Agent 实例，用于执行边界明确、重复、耗时或结构化的科研任务；它不是平台自研的通用 harness，也不由平台部署或托管。它主动连接中央消息队列接收上游交接，按中央服务对端侧开放的能力面调用服务，执行结果作为草稿写入中央草稿箱。
 
-> 修订（2026-10-21）：租约所在的 Gateway 由中央移到研究员本机，语义不变。
+**Centre Agent（中央 Agent）**：部署在中央控制面上的 Work Agent 实例，对 Research Mapping 与 LLM-Wiki 的候选分支做候选预审并生成必要的混合候选。它与 Task Agent 共用架构，但订阅候选事件与正式版本发布事件，处置面当前不提供功能。它不参与草稿的一审、不代替研究负责人进行科研内容判断和最终批准、不写正式版本、不发起执行、不部署或托管 Task Agent。任何正式 Mapping 或正式科研结果发布都必须由 Project Owner 明确批准。
+
+> 修订（2026-10-22）：原条目名为 Central Agent，现统一为 Centre Agent 并明确它是 Work Agent 的中央实例。删去「按 Project Owner 已批准的绑定部署 Task Agent」（2026-10-21）。
+
+**Execution Submission（执行提交）**：Task Agent 一轮执行结束后作为草稿写入中央草稿箱的不可变结果。它不保存在 Gateway 的 SQLite 中，也不称为 Buffer。
+
+> 修订（2026-10-22）：原定义为「提交给 Task Node Owner 审核、保存在 Task Agent Gateway SQLite 中，与审核决定和通知 outbox 同库」。一审现在发生在中央草稿箱，Gateway 只记录 `draft_id`，不再承载待审结果。
+
+**Execution Record（执行记录）**：Work Agent 对一轮 loop 的开始、运行、暂停、失败、完成和人工接管等运行过程的结构化记录，保存在该 Agent 自己的 SQLite 中。它不等于正式 Research Mapping 变更，也不单独授予科研结果正式地位；草稿的审核进度不在其中投影。
+
+> 修订（2026-10-22）：删去「可以由 Central Agent 调度和追加」，调度已取消。
+
+**Worker Lease（Worker 租约）**：Work Agent 在本地 SQLite 中为一个订阅目标（Task Agent 是 `task_node_id`，Centre Agent 是 `candidate_id`）领取短生命周期 Worker 启动权的、可过期的执行协调记录。同一目标同时只能存在一个有效租约；未取得租约的入口不得启动第二个 Worker。它只做本地单实例互斥，不是跨实例的分发租约。
+
+> 修订（2026-10-22）：原条目只覆盖端侧 Task Agent 的 `task_node_id`。统一架构后 Centre Agent 同样持有租约表，目标换成 `candidate_id`，语义仍是本地互斥。
 
 **AuditEvent（审计事件）**：对受控提交、调度、执行、预审、审核、批准、驳回和正式化等操作的不可变过程记录。AuditEvent 至少说明操作者、操作类型、目标、基准版本、结果、时间、原因以及关联的 Proposal 或任务标识，用于按任务、提案、正式版本或时间重建责任链。
 
@@ -108,13 +130,9 @@
 
 **Personal Agent（Personal Agent）**：研究人员使用自己的 harness 配置的 Agent，通过 MCP、Skills、系统提示词和 Hooks 接入科研协作平台。
 
-**Task Agent（任务 Agent）**：研究员在自己的电脑上编写和运行的轻量化 Agent，用于执行边界明确、重复、耗时或结构化的科研任务；它不是平台自研的通用 harness，也不由平台部署或托管。它主动连接中央消息队列接收上游交接，按中央服务对端侧开放的能力面调用服务，执行结果作为草稿提交到中央草稿箱。
+**Agent Registration（Agent 登记）**：Work Agent 部署完成后由部署者写入的一条事实记录，说明该 Agent 的标识、所属主体和部署位置。它不参与鉴权、不阻断调用，只用于事后回答「谁在跑什么 Agent」。
 
-**Agent Registration（Agent 登记）**：端侧 Agent 部署完成后由部署者写入的一条事实记录，说明该 Agent 的标识、所属主体和部署位置。它不参与鉴权、不阻断调用，只用于事后回答「谁在跑什么 Agent」。
-
-**Central Control（中央控制面）**：部署在中央服务器上的全部服务集合，包括 Research Mapping、LLM-Wiki、草稿箱、中央 Agent、注册表、Web 看板、消息队列与图存储。它不包含任何 Task Agent。
-
-**Agent Gateway（Agent 网关）**：为一个 Agent 提供 MCP 入口、消息入口与执行控制边界的常驻进程。它与若干 fast-agent 模板构成一个部署单元；task-agent 的网关随任务负责人部署，centre-agent 的网关随中央控制面部署。Owner 命令不再经网关下发任务，网关的 MCP 面只承担返修与观察。
+**Central Control（中央控制面）**：部署在中央服务器上的全部服务集合，包括 Research Mapping、LLM-Wiki、草稿箱、Centre Agent、注册表、Web 看板、消息队列与图存储。它不包含任何 Task Agent。
 
 ## 版本与存储
 
@@ -145,8 +163,10 @@
 | TaskNode/DependencyEdge 版本 | 查看路线草稿、比较路线、查看正式路线 | `candidate`、`formal`、`superseded`、`rejected`、`invalidated` | 通过 Proposal 和 Project Owner 的 Formal Publication Review |
 | Mapping 草稿 | 提交、修改、查看退回原因 | `drafting`、`submitted`、`under_review`、`accepted`、`rejected`、`promoted`、`abandoned` | 一审通过后由人调用 Mapping 管理 MCP 写入候选分支 |
 | Mapping Proposal | 查看路线变更、影响和审核意见 | `draft`、`candidate`、`mr_ready`、`stale`、`conflict`、`merged`、`rejected`、`abandoned` | 创建新的 Formal MappingRevision |
-| Execution Record | 执行、重试、转交、人工接管、补充结果 | `queued`、`running`、`succeeded`、`awaiting_acceptance`、`supplement_requested`、`needs_revision`、`accepted`、`rejected`、`failed`、`cancelled` | 首版不单独发布“正式科研结论”；结果接纳后可作为后续任务输入或受控资源引用 |
-| TaskNode 运行投影 | 查看“待执行、执行中、待补充、已接纳、需调整路线” | `not_ready`、`ready`、`in_progress`、`awaiting_acceptance`、`accepted`、`blocked`、`route_change_required` | 由正式 Mapping 和 Execution Record 计算，不覆盖版本状态 |
+| Execution Record | 执行、重试、转人工、回答提问、查看草稿 | `queued`、`running`、`waiting`、`completed`、`needs_revision`、`rejected`、`human_takeover`、`failed`、`cancelled` | 首版不单独发布“正式科研结论”；执行完成时草稿已写入中央草稿箱，草稿的审核与正式化属领域治理 |
+| TaskNode 运行投影 | 查看“待执行、执行中、待补充、需调整路线” | `not_ready`、`ready`、`in_progress`、`blocked`、`route_change_required` | 由正式 Mapping 和 Execution Record 计算，不覆盖版本状态 |
+
+> 修订（2026-10-22）：Execution Record 原取值含 `succeeded`、`awaiting_acceptance`、`supplement_requested`、`accepted`。一审移到中央草稿箱后，Gateway 不再承载接纳：正常终点为 `completed` 并记录 `draft_id`，TaskNode 运行投影同步删去 `awaiting_acceptance` 与 `accepted`。
 
 ## 面向研究人员的首版操作语言
 
@@ -156,7 +176,7 @@
 2. 创建任务路线，填写目标、完成条件、输入、预期输出和需要人工判断的环节。
 3. 选择负责人或 Agent 执行任务，查看任务是否“待执行”以及前置条件是否满足。
 4. 提交结果和证据，查看“执行记录”和“证据来源”，必要时补充材料、重试、转交或请求人工接管。
-5. TaskNode Owner 接受、要求补充、要求重做或拒绝结果；被拒绝结果不会消失，仍可在审计记录中查看。
+5. TaskNode Owner 在中央草稿箱里审阅草稿：通过就把该草稿作为候选分支提交，这即是一审通过；不通过就退回并说明原因。执行记录本身不承载接纳。
 6. 只有路线、依赖、任务目标或激活条件发生变化时，才点击“创建路线变更草稿”，查看 Diff 和影响范围。
 7. Project Owner 查看完整候选、影响范围和审核意见后，选择“批准为正式路线”或“驳回并说明原因”。
 8. 研究人员在正式路线、任务进度和审计时间线中查看结果；候选路线不会混入正式查询或正式调度。
