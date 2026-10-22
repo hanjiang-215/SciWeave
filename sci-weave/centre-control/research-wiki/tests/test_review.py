@@ -16,6 +16,9 @@ class Snapshots:
         docs = self.candidate if commit == "candidate-head" else []
         return WikiSnapshotRead.confirmed(store_id=store, database=db, branch_id=branch, commit_hash=commit, documents=docs, content_digest=sha256_json(docs))
 
+    def read_branch_head(self, store, db, branch):
+        return getattr(self, "head", "candidate-head")
+
 
 class Reviews(unittest.TestCase):
     def setUp(self):
@@ -62,5 +65,14 @@ class Reviews(unittest.TestCase):
     def test_stale_head_or_base_cannot_be_approved(self):
         self.db.set_current_formal_revision("d", None)
         self.assertEqual(self.service.preview("p").status, "stale_base")
+
+    def test_preview_and_owner_decision_reject_candidate_branch_head_changes(self):
+        preview = self.service.preview("p")
+        self.assertEqual(preview.status, "ready")
+        self.assertEqual(self.service.create_merge_request("p", "mr", "curator").status, "ready_for_owner")
+        self.store.head = "new-head"
+        self.assertEqual(self.service.preview("p").reason_code, "candidate_head_changed")
+        result = self.service.decide("mr", actor_id="owner", decision="approved", reason="publish", selected_solution_id="cc")
+        self.assertEqual((result.status, result.reason_code), ("rejected", "candidate_head_changed"))
 
 if __name__ == "__main__": unittest.main()

@@ -1,6 +1,6 @@
 ---
 id: ai4-jdjx
-status: open
+status: closed
 deps: [ai4-7xtf, ai4-txhf, ai4-vczt]
 links: []
 created: 2026-10-20T08:32:17Z
@@ -29,11 +29,16 @@ tags: [wiki, implementation]
 
 ## Acceptance Criteria
 
-- [ ] 差异和冲突检查绑定精确 candidate head 与 base FormalWikiRevision；基准前进或 head 变化时旧预览不可直接批准。
-- [ ] Merge Request Buffer、Owner 选择/驳回、理由、锁定输入和审计可追踪；候选内容和历史 Commit 不被改写。
-- [ ] 资源资格检查、文档/引用审核和 Project Owner Formal Publication Review 分别保存证据；没有当前有效、范围适配的资源批准时不能发起 Owner 正式审核或正式化。
-- [ ] 资源批准在 Owner 批准后、激活前发生变化时，SQLite 激活被条件阻断；重新取得资源批准后须重新获得 Owner 批准并创建新正式化操作身份。
-- [ ] 新 FormalWikiRevision、条件指针切换、成功结果及成功所需来源处置在同一个 SQLite 激活事务中提交；此前普通查询仍返回旧版本。
-- [ ] 状态采用规格规定的 `requested`、`in_progress`、`store_ready`、`reconciliation_required`、`succeeded`、`failed`；明确失败、未知结果及恢复不会混淆或跳过双侧确认。
-- [ ] 同一操作幂等重试复用原身份与精确 Commit，不产生第二个正式版本；通知失败不回滚正式版，所有对账/修复/人工处置追加审计。
-- [ ] `tests/test_review.py`、`tests/test_formalization.py` 和集成测试覆盖冲突、驳回、成功及跨存储失败恢复；记录测试命令、服务配置和结果。
+- [x] 差异和冲突检查绑定精确 candidate head 与 base FormalWikiRevision；基准前进或 head 变化时旧预览不可直接批准。
+- [x] Merge Request Buffer、Owner 选择/驳回、理由、锁定输入和审计可追踪；候选内容和历史 Commit 不被改写。
+- [x] 资源资格检查、文档/引用审核和 Project Owner Formal Publication Review 分别保存证据；没有当前有效、范围适配的资源批准时不能发起 Owner 正式审核或正式化。
+- [x] 资源批准在 Owner 批准后、激活前发生变化时，SQLite 激活被条件阻断；重新取得资源批准后须重新获得 Owner 批准并创建新正式化操作身份。
+- [x] 新 FormalWikiRevision、条件指针切换、成功结果及成功所需来源处置在同一个 SQLite 激活事务中提交；此前普通查询仍返回旧版本。
+- [x] 状态采用规格规定的 `requested`、`in_progress`、`store_ready`、`reconciliation_required`、`succeeded`、`failed`；明确失败、未知结果及恢复不会混淆或跳过双侧确认。
+- [x] 同一操作幂等重试复用原身份与精确 Commit，不产生第二个正式版本；通知失败不回滚正式版，所有对账/修复/人工处置追加审计。
+- [x] `tests/test_review.py`、`tests/test_formalization.py` 和集成测试覆盖冲突、驳回、成功及跨存储失败恢复；记录测试命令、服务配置和结果。
+
+## Notes
+
+- 2026-10-22：当前身份核对通过：本票 assignee 为 `hanjiang`，当前分支为 `feature/hanjiang`，`git config user.name` 为 `hanjiang`。
+- 2026-10-22：本轮复验 `uv sync --locked` 成功；`uv run --locked python -m unittest discover -s tests -v` 共 82 项，全部通过；`uv run --locked python -m compileall -q src tests` 成功。真实 TerminusDB 12.0.8 服务已启动，使用当前 PowerShell 进程环境注入本地配置；`uv run --locked python -m unittest discover -s tests -p 'test_*integration.py' -v` 共 12 项全部通过，其中服务整链用例验证候选审阅、Owner 正式化及正式查询，撤回回归用例验证 Owner 批准后资源资格被撤回时 SQLite 激活失败关闭；其余用例验证真实精确 Commit 的候选/正式快照、资源资格读取与历史版本读回。临时数据库由测试创建并清理，- 2026-10-22：完成闭环验收补测：新增 `test_resource_approval_change_requires_new_owner_decision_and_operation_identity`，验证资源批准变更后旧 Owner 事件失效；经 `WikiReviewService` 用当前批准重新批准后，旧 operation ID 返回 `operation_id_conflict`，仅新 operation ID 激活成功。Wiki `uv sync --locked` 成功，完整测试 85 项全通过，真实 TerminusDB 集成 12 项全通过，编译和 `git diff --check` 均通过；验收标准已据此完成。

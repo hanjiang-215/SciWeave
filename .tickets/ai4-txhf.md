@@ -34,3 +34,8 @@ tags: [wiki, implementation]
 - [ ] 接纳后生成独立 Proposal/candidate branch 与不可变候选版本，并记录提交者、提交身份、正式基准、精确 Commit 及审计关联。
 - [ ] 同一幂等身份及内容返回原结果；不同内容冲突且不覆盖其他候选。存储未知结果可读回对账，不盲目创建重复 Commit/Proposal。
 - [ ] `tests/test_candidate_submission.py` 覆盖成功、完整引用、非法目标、基准过期、幂等、资格门槛及存储失败/未知；实际运行命令和验证结果回写本票。
+
+## Notes
+
+- 2026-10-22：当前身份核对通过：本票 assignee 为 `hanjiang`，当前分支为 `feature/hanjiang`，`git config user.name` 为 `hanjiang`。
+- 2026-10-22：本轮复验 `uv sync --locked` 成功；`uv run --locked python -m unittest discover -s tests -v` 共 82 项，全部通过；`uv run --locked python -m compileall -q src tests` 成功。真实 TerminusDB 12.0.8 服务已启动，使用当前 PowerShell 进程变量指定本地地址 `http://127.0.0.1:6363`、本地临时验证数据库前缀 `sciweave_wiki_it` 和 Basic 凭据；命令 `uv run --locked python -m unittest discover -s tests -p 'test_*integration.py' -v` 共 12 项全部通过，覆盖真实 ResourceReviewService 精确资源资格查询、候选隔离分支及精确 Commit 写读回、Formal Wiki 快照、Owner 正式化、正式查询，以及 Owner 批准后资源撤回阻止激活。临时数据库由用例创建并清理，凭据未写入文件或仓库。

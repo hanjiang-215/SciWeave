@@ -41,12 +41,21 @@ class WikiFormalizationService:
         with self.db.connection() as c:
             cand=c.execute("SELECT * FROM wiki_candidate_commit WHERE candidate_commit_id=?",(mr['candidate_commit_id'],)).fetchone()
         if not base or not cand: return self._persist(operation_id,merge_request_id,'failed','candidate_missing')
+        head_reader=getattr(self.store,'read_branch_head',None)
+        try: current_head=head_reader(cand['terminus_store_id'],self.database,cand['branch_id']) if callable(head_reader) else None
+        except Exception: current_head=None
+        if current_head != mr['candidate_head']:
+            return self._persist(operation_id,merge_request_id,'failed','candidate_head_changed')
         docs=self._read(cand['terminus_store_id'],cand['branch_id'],mr['candidate_head'])
         if docs is None: return self._persist(operation_id,merge_request_id,'reconciliation_required','candidate_unavailable')
         approvals=self._resource_approvals(docs)
-        if approvals is None: return self._persist(operation_id,merge_request_id,'failed','resource_qualification_required')
-        if prior and prior['resource_approval_ids'] and json.loads(prior['resource_approval_ids']) != approvals:
-            return self._persist(operation_id,merge_request_id,'failed','resource_qualification_changed',approvals=approvals)
+        if approvals is None:
+            self._require_owner_reapproval(operation_id, merge_request_id, None)
+            return self._persist(operation_id,merge_request_id,'failed','resource_qualification_required')
+        locked_approvals=json.loads(mr['owner_resource_approval_ids'] or '{}')
+        if locked_approvals != approvals:
+            self._require_owner_reapproval(operation_id, merge_request_id, approvals)
+            return self._persist(operation_id,merge_request_id,'failed','owner_reapproval_required',approvals=approvals)
         if prior and prior['commit_hash']:
             marker_check=getattr(self.store,'verify_formalization_commit',None)
             try: marker_verified=callable(marker_check) and marker_check(prior['store_id'],self.database,prior['branch_id'],prior['commit_hash'],operation_id) is True
@@ -65,7 +74,12 @@ class WikiFormalizationService:
         if formal_docs is None or sha256_json(formal_docs)!=sha256_json(expected_formal_docs): return self._persist(operation_id,merge_request_id,'reconciliation_required','formal_snapshot_unverified',store,branch,commit,approvals)
         if self.db.get_current_formal_revision_id(mr['wiki_domain_id'])!=mr['base_formal_revision_id']:
             return self._persist(operation_id,merge_request_id,'failed','stale_base',store,branch,commit,approvals)
-        if self._resource_approvals(docs)!=approvals: return self._persist(operation_id,merge_request_id,'failed','resource_qualification_changed',store,branch,commit,approvals)
+        if self._resource_approvals(docs) != approvals:
+            return self._persist(operation_id,merge_request_id,'failed','resource_qualification_changed',approvals=approvals)
+        locked_approvals=json.loads(mr['owner_resource_approval_ids'] or '{}')
+        if locked_approvals != approvals:
+            self._require_owner_reapproval(operation_id, merge_request_id, approvals)
+            return self._persist(operation_id,merge_request_id,'failed','owner_reapproval_required',approvals=approvals)
         formal_revision_ids = [
             str(doc.get("wiki_revision_id")) for doc in docs
             if doc.get("@type") == "WikiRevision"
@@ -83,6 +97,7 @@ class WikiFormalizationService:
                 current=c.execute('SELECT current_formal_revision_id FROM wiki_current_formal_revision WHERE wiki_domain_id=?',(mr['wiki_domain_id'],)).fetchone()
                 if not current or current[0]!=mr['base_formal_revision_id']: raise ValueError('stale base')
                 if self._resource_approvals(docs)!=approvals: raise ValueError('resource qualification changed')
+                if json.loads(mr['owner_resource_approval_ids'] or '{}') != approvals: raise ValueError('owner reapproval required')
                 c.execute('INSERT INTO formal_wiki_revision VALUES (?,?,?,?,?,?)',(revision,mr['wiki_domain_id'],store,branch,commit,sha256_json(formal_docs)))
                 c.execute('UPDATE wiki_current_formal_revision SET current_formal_revision_id=? WHERE wiki_domain_id=? AND current_formal_revision_id=?',(revision,mr['wiki_domain_id'],mr['base_formal_revision_id']))
                 if c.execute('SELECT changes()').fetchone()[0]!=1: raise ValueError('stale base')
@@ -92,7 +107,7 @@ class WikiFormalizationService:
                 c.execute("UPDATE wiki_merge_request_buffer SET status='merged' WHERE merge_request_id=?",(merge_request_id,))
                 op_attempt=c.execute("SELECT attempt_number FROM wiki_formalization_operation WHERE operation_id=?",(operation_id,)).fetchone()
                 successful_attempt=(op_attempt[0]+1 if op_attempt else 1)
-                c.execute("INSERT INTO wiki_formalization_operation (operation_id,merge_request_id,state,attempt_number,formal_revision_id,store_id,branch_id,commit_hash,reason_code,resource_approval_ids,owner_event_id,candidate_head,base_formal_revision_id,notification_status,notification_reason,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(operation_id) DO UPDATE SET state=excluded.state,attempt_number=excluded.attempt_number,store_id=COALESCE(excluded.store_id,store_id),branch_id=COALESCE(excluded.branch_id,branch_id),commit_hash=COALESCE(excluded.commit_hash,commit_hash),reason_code=excluded.reason_code,resource_approval_ids=excluded.resource_approval_ids,owner_event_id=COALESCE(owner_event_id,excluded.owner_event_id),candidate_head=COALESCE(candidate_head,excluded.candidate_head),base_formal_revision_id=COALESCE(base_formal_revision_id,excluded.base_formal_revision_id),updated_at=excluded.updated_at",(operation_id,merge_request_id,'succeeded',successful_attempt,revision,store,branch,commit,None,json.dumps(approvals,sort_keys=True),mr['owner_event_id'],mr['candidate_head'],mr['base_formal_revision_id'],'pending',None,now))
+                c.execute("INSERT INTO wiki_formalization_operation (operation_id,merge_request_id,state,attempt_number,formal_revision_id,store_id,branch_id,commit_hash,reason_code,resource_approval_ids,owner_event_id,candidate_head,base_formal_revision_id,notification_status,notification_reason,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(operation_id) DO UPDATE SET state=excluded.state,attempt_number=excluded.attempt_number,formal_revision_id=COALESCE(excluded.formal_revision_id,formal_revision_id),store_id=COALESCE(excluded.store_id,store_id),branch_id=COALESCE(excluded.branch_id,branch_id),commit_hash=COALESCE(excluded.commit_hash,commit_hash),reason_code=excluded.reason_code,resource_approval_ids=excluded.resource_approval_ids,owner_event_id=COALESCE(owner_event_id,excluded.owner_event_id),candidate_head=COALESCE(candidate_head,excluded.candidate_head),base_formal_revision_id=COALESCE(base_formal_revision_id,excluded.base_formal_revision_id),updated_at=excluded.updated_at",(operation_id,merge_request_id,'succeeded',successful_attempt,revision,store,branch,commit,None,json.dumps(approvals,sort_keys=True),mr['owner_event_id'],mr['candidate_head'],mr['base_formal_revision_id'],'pending',None,now))
                 c.commit()
         except Exception as exc:
             return self._persist(operation_id,merge_request_id,'reconciliation_required','sqlite_activation_unknown' if not isinstance(exc,ValueError) else 'activation_blocked',store,branch,commit,approvals)
@@ -101,6 +116,17 @@ class WikiFormalizationService:
             except Exception:
                 self._notification_failed(operation_id,merge_request_id,revision)
         return WikiFormalizationResult('succeeded','activated',revision,operation_id,commit)
+
+    def _require_owner_reapproval(self, operation_id, merge_request_id, approvals):
+        now = _now()
+        event = 'wiki-audit-' + hashlib.sha256((operation_id + ':owner-reapproval-required').encode()).hexdigest()[:20]
+        with self.db.connection() as c:
+            c.execute('BEGIN IMMEDIATE')
+            row = c.execute("SELECT owner_event_id,owner_resource_approval_ids FROM wiki_merge_request_buffer WHERE merge_request_id=?", (merge_request_id,)).fetchone()
+            if row and row['owner_event_id']:
+                c.execute("UPDATE wiki_merge_request_buffer SET status='reapproval_required',owner_id=NULL,owner_decision='pending',owner_event_id=NULL,owner_resource_approval_ids='{}' WHERE merge_request_id=?", (merge_request_id,))
+                c.execute("INSERT OR IGNORE INTO wiki_audit_event VALUES (?,?,?,?,?,?,?,?,?,?)", (event,now,'system','owner_approval_invalidated','WikiMergeRequestBuffer',merge_request_id,'reapproval_required','resource_qualification_changed',json.dumps({'operation_id':operation_id,'previous_owner_event_id':row['owner_event_id'],'previous_resource_approval_ids':json.loads(row['owner_resource_approval_ids'] or '{}'),'current_resource_approval_ids':approvals}),None))
+            c.commit()
 
     def _notification_failed(self, operation_id, merge_request_id, revision):
         now=_now()
@@ -150,7 +176,7 @@ class WikiFormalizationService:
             if old and mr_row and any(old[key] and old[key] != mr_row[key] for key in ('owner_event_id','candidate_head','base_formal_revision_id')):
                 return WikiFormalizationResult('failed','operation_id_conflict',operation_id=op)
             attempt=(old['attempt_number']+1 if old else 1)
-            c.execute("INSERT INTO wiki_formalization_operation (operation_id,merge_request_id,state,attempt_number,formal_revision_id,store_id,branch_id,commit_hash,reason_code,resource_approval_ids,owner_event_id,candidate_head,base_formal_revision_id,notification_status,notification_reason,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(operation_id) DO UPDATE SET state=excluded.state,attempt_number=excluded.attempt_number,store_id=COALESCE(excluded.store_id,store_id),branch_id=COALESCE(excluded.branch_id,branch_id),commit_hash=COALESCE(excluded.commit_hash,commit_hash),reason_code=excluded.reason_code,resource_approval_ids=excluded.resource_approval_ids,owner_event_id=COALESCE(owner_event_id,excluded.owner_event_id),candidate_head=COALESCE(candidate_head,excluded.candidate_head),base_formal_revision_id=COALESCE(base_formal_revision_id,excluded.base_formal_revision_id),updated_at=excluded.updated_at",(op,mr,state,attempt,None,store,branch,commit,reason,json.dumps(approvals,sort_keys=True),mr_row['owner_event_id'] if mr_row else None,mr_row['candidate_head'] if mr_row else None,mr_row['base_formal_revision_id'] if mr_row else None,'not_sent',None,now))
+            c.execute("INSERT INTO wiki_formalization_operation (operation_id,merge_request_id,state,attempt_number,formal_revision_id,store_id,branch_id,commit_hash,reason_code,resource_approval_ids,owner_event_id,candidate_head,base_formal_revision_id,notification_status,notification_reason,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(operation_id) DO UPDATE SET state=excluded.state,attempt_number=excluded.attempt_number,formal_revision_id=COALESCE(excluded.formal_revision_id,formal_revision_id),store_id=COALESCE(excluded.store_id,store_id),branch_id=COALESCE(excluded.branch_id,branch_id),commit_hash=COALESCE(excluded.commit_hash,commit_hash),reason_code=excluded.reason_code,resource_approval_ids=excluded.resource_approval_ids,owner_event_id=COALESCE(owner_event_id,excluded.owner_event_id),candidate_head=COALESCE(candidate_head,excluded.candidate_head),base_formal_revision_id=COALESCE(base_formal_revision_id,excluded.base_formal_revision_id),updated_at=excluded.updated_at",(op,mr,state,attempt,None,store,branch,commit,reason,json.dumps(approvals,sort_keys=True),mr_row['owner_event_id'] if mr_row else None,mr_row['candidate_head'] if mr_row else None,mr_row['base_formal_revision_id'] if mr_row else None,'not_sent',None,now))
             event='wiki-audit-'+hashlib.sha256((op+':'+str(attempt)+':'+reason).encode()).hexdigest()[:20]
             c.execute("INSERT OR IGNORE INTO wiki_audit_event VALUES (?,?,?,?,?,?,?,?,?,?)",(event,now,'system','formalization_state', 'WikiMergeRequestBuffer',mr,state,reason,json.dumps({'operation_id':op,'attempt':attempt,'commit_hash':commit}),None))
             c.commit()
