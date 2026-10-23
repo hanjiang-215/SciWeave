@@ -1,6 +1,6 @@
 ---
 id: ai4-xem8
-status: open
+status: closed
 deps: []
 links: [ai4-he04, ai4-s12u]
 created: 2026-10-21T12:49:00Z
@@ -65,12 +65,12 @@ drafting → submitted → under_review → accepted → promoted
 
 ## Acceptance Criteria
 
-- [ ] 一个数据库、两个命名空间与 `Draft`、`NamespaceConfig` 字段按本票实现，`@key` 使用 `Random`
-- [ ] 草稿提交固定精确 Commit；提交后修改正文不改变本轮审核对象
-- [ ] 审核人从命名空间配置解析并留档，越权审核被拒绝
-- [ ] `review_draft` 幂等，重复调用返回首次结论且不产生第二次决定
-- [ ] 草稿箱不创建候选、不写领域存储、不发起执行；`promoted` 只记录候选标识与 Commit
-- [ ] MCP 工具在临时数据库上的自动化测试通过，且不依赖固定端口或真实凭据
+- [x] 一个数据库、两个命名空间与 `Draft`、`NamespaceConfig` 字段按本票实现，`@key` 使用 `Random`
+- [x] 草稿提交固定精确 Commit；提交后修改正文不改变本轮审核对象
+- [x] 审核人从命名空间配置解析并留档，越权审核被拒绝
+- [x] `review_draft` 幂等，重复调用返回首次结论且不产生第二次决定
+- [x] 草稿箱不创建候选、不写领域存储、不发起执行；`promoted` 只记录候选标识与 Commit
+- [x] MCP 工具在临时数据库上的自动化测试通过，且不依赖固定端口或真实凭据
 
 **2026-10-23T08:23:00+08:00**
 
@@ -108,6 +108,18 @@ drafting → submitted → under_review → accepted → promoted
 - 新增 `tests/test_mcp_http.py` 覆盖回环地址与临时端口 `0`：无令牌/未知令牌 401、合法令牌 initialize 与工具调用、提交者身份被 Bearer 身份覆盖、命名空间越权审核拒绝、非 MCP 路径 404、PUT/PATCH/DELETE 405、畸形 JSON 返回 -32700、通知返回 202、配置必须 host/port/令牌成对出现。
 - 验证：`uv sync --project sci-weave/centre-control/buffer --locked` 成功；`uv run --locked python -m unittest discover -s tests -v` 共 25 项（含 HTTP 传输 10 项、store 适配 3 项、dispatch 与服务状态 12 项），全部通过，集成用例默认跳过；`uv run --locked python -m compileall -q src tests` 成功；`git diff --check -- sci-weave/centre-control/buffer/` 无空白错误。
 - 范围说明：HTTP 端点不新增任何固定监听地址或端口语义，监听地址与端口全部来自环境变量；本轮未改变草稿箱的存储、审核与幂等语义。领域管理 MCP（Mapping/Wiki 对外接口）契约与实现由 `ai4-w73z` 单独推进，本票不越权承接。
+
+**2026-10-23 验收收尾与关闭**
+
+- 逐条核对六项验收标准，均有实现与测试证据支撑，全部勾选：
+  1. 唯一数据库、`mapping`/`wiki` 两命名空间、`Draft`/`NamespaceConfig` 字段与 `@key: Random` 由 `TerminusDBDraftStore.initialize_schema` 实现，`tests/test_store_adapter.py` 覆盖；
+  2. 提交固定精确 Commit、修改不改变审核对象由 `submit_draft` 冻结 `submitted_commit` 保证，单测与真实集成（`test_full_draft_lifecycle_persists_exact_commit`）覆盖；
+  3. 审核人按命名空间配置解析、越权拒绝由 `_authorize_namespace` 保证，单测与真实集成（`test_cross_namespace_review_is_rejected`）覆盖；
+  4. `review_draft` 幂等由 `_mutate` 幂等键机制保证，单测与真实集成（`test_idempotent_create_and_review_replay_produce_no_second_records`）覆盖；
+  5. 不创建候选、不写领域存储、`promoted` 只记录候选标识与 Commit 由 `_promote` 保证，单测 `test_candidate_promotion_records_exact_id_and_commit` 覆盖；
+  6. MCP 工具自动化测试使用内存 Store 与回环/临时端口，不依赖固定端口或真实凭据；真实 TerminusDB 集成使用临时数据库并由用例清理。
+- 收尾复验（2026-10-23）：`uv run --locked python -m unittest discover -s tests` 25 项通过（集成默认跳过）；以本机 `127.0.0.1:6363` + `admin:root` 运行 `tests/test_terminus_integration.py` 3 项全部通过；`compileall` 与 `git diff --check` 通过。
+- 本票六项验收全部满足，状态置为 `closed`。
 
 
 
