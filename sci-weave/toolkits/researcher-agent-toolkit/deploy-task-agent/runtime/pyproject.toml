@@ -7,7 +7,9 @@ name = "sciweave-work-agent-runtime"
 version = "0.1.0"
 description = "Independent runtime libraries for a researcher-owned Work Agent"
 requires-python = ">=3.12,<3.16"
-dependencies = []
+dependencies = [
+    "pyyaml>=6.0,<7",
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]

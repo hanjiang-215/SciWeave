@@ -36,6 +36,45 @@ class AgentConfigTests(unittest.TestCase):
                 with self.assertRaisesRegex(ConfigError, code):
                     load_config(raw, known_mcp_resources={"search", "draft"}, known_agent_resources={"routing", "research", "formatting"})
 
+    def test_loads_workflow_yaml_file_and_converts_to_fast_agent_input(self) -> None:
+        from tempfile import TemporaryDirectory
+        from pathlib import Path
+        from work_agent_runtime import load_workflow_yaml, workflow_to_fast_agent_input
+
+        document = """
+version: 1.0.0
+name: literature
+agents:
+  router: {identity: router, instruction: route, model: fake, allowed_mcp_resources: [], resources: []}
+  writer: {identity: writer, instruction: write, model: fake, allowed_mcp_resources: [draft], resources: []}
+workflows:
+  main:
+    type: Router
+    entry_agent: router
+    sub_agents: [router]
+    summarizer: router
+    final_writer: writer
+"""
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "workflow.yaml"
+            path.write_text(document, encoding="utf-8")
+            config = load_workflow_yaml(path, known_mcp_resources={"draft"})
+        self.assertEqual(config.workflows["main"].workflow_type, "Router")
+        converted = workflow_to_fast_agent_input(config, "main")
+        self.assertEqual(converted["entry_agent"], "router")
+        self.assertEqual(converted["final_writer"], "writer")
+
+    def test_rejects_workflow_yaml_version_and_directory_conflicts(self) -> None:
+        from tempfile import TemporaryDirectory
+        from pathlib import Path
+        from work_agent_runtime import load_workflow_yaml
+
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "a.yaml").write_text("version: 2.0.0\n", encoding="utf-8")
+            with self.assertRaisesRegex(ConfigError, "unsupported_config_version"):
+                load_workflow_yaml(root)
+
     def test_rejects_unknown_resources_and_cycles(self) -> None:
         raw = {"agents": {**AGENTS, "searcher": {**AGENTS["searcher"], "allowed_mcp_resources": ["missing"]}}, "workflows": {"main": {"type": "Parallel", "entry_agent": "router", "sub_agents": ["searcher"], "summarizer": "router", "final_writer": "writer"}}}
         with self.assertRaisesRegex(ConfigError, "unknown_mcp_resource"):

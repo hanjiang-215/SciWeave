@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+
+import yaml
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -114,6 +116,62 @@ def load_config(source: Mapping[str, Any] | str | Path, *, known_mcp_resources: 
         workflows[name] = WorkflowDefinition(name, workflow_type, str(_required(data, "entry_agent", f"config.workflows.{name}")), sub_agents, str(_required(data, "summarizer", f"config.workflows.{name}")), str(_required(data, "final_writer", f"config.workflows.{name}")))
     _validate_references(agents, workflows)
     return TaskAgentConfig(dict(agents), dict(workflows), mcp_catalog or {})
+
+
+def load_workflow_yaml(source: str | Path, *, known_mcp_resources: set[str] | frozenset[str] = frozenset(), known_agent_resources: set[str] | frozenset[str] = frozenset(), mcp_catalog: Mapping[str, Any] | None = None) -> TaskAgentConfig:
+    """Load one Workflow YAML file or all YAML files in a directory."""
+    path = Path(source)
+    paths = [path] if path.is_file() else sorted((*path.glob("*.yaml"), *path.glob("*.yml")))
+    if not paths:
+        raise ConfigError("config_read_error", str(path), "no YAML files found")
+    documents = []
+    for item in paths:
+        try:
+            data = yaml.safe_load(item.read_text(encoding="utf-8"))
+        except (OSError, yaml.YAMLError) as exc:
+            raise ConfigError("invalid_document", str(item), "expected valid YAML object") from exc
+        if not isinstance(data, Mapping):
+            raise ConfigError("invalid_document", str(item), "expected YAML object")
+        version = data.get("version", "1.0.0")
+        if not isinstance(version, str) or not version.startswith("1."):
+            raise ConfigError("unsupported_config_version", f"{item}.version", str(version))
+        documents.append(data)
+    merged: dict[str, Any] = {"agents": {}, "workflows": {}}
+    for document in documents:
+        for section in ("agents", "workflows"):
+            values = document.get(section, {})
+            if not isinstance(values, Mapping):
+                raise ConfigError("invalid_shape", f"config.{section}", "must be an object")
+            duplicate = set(merged[section]).intersection(values)
+            if duplicate:
+                raise ConfigError("duplicate_definition", f"config.{section}", ", ".join(sorted(duplicate)))
+            merged[section].update(values)
+    return load_config(merged, known_mcp_resources=known_mcp_resources, known_agent_resources=known_agent_resources, mcp_catalog=mcp_catalog)
+
+
+def workflow_to_fast_agent_input(config: TaskAgentConfig, workflow_name: str) -> dict[str, Any]:
+    """Convert validated project configuration to framework-neutral adapter input."""
+    try:
+        workflow = config.workflows[workflow_name]
+    except KeyError as exc:
+        raise ConfigError("unknown_workflow", "config.workflows", workflow_name) from exc
+    return {
+        "name": workflow.name,
+        "type": workflow.workflow_type,
+        "entry_agent": workflow.entry_agent,
+        "sub_agents": list(workflow.sub_agents),
+        "summarizer": workflow.summarizer,
+        "final_writer": workflow.final_writer,
+        "agents": {
+            name: {
+                "instruction": agent.instruction,
+                "model": agent.model,
+                "servers": list(agent.allowed_mcp_resources),
+                "tools": list(agent.tools),
+            }
+            for name, agent in config.agents.items()
+        },
+    }
 
 
 def _validate_references(agents: Mapping[str, AgentDefinition], workflows: Mapping[str, WorkflowDefinition]) -> None:

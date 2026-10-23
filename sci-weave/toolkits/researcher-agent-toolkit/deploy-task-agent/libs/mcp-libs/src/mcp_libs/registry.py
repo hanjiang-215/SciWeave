@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping
 
+import yaml
+
 
 class MCPResourceError(ValueError):
     def __init__(self, code: str, detail: str) -> None:
@@ -33,6 +35,9 @@ class MCPResource:
     tools: Mapping[str, MCPTool]
     environment: tuple[str, ...]
     source: str = "standard"
+    transport: str = "streamable-http"
+    startup: Mapping[str, Any] = None
+    endpoint: Mapping[str, Any] = None
 
 
 class MCPRegistry:
@@ -48,7 +53,7 @@ class MCPRegistry:
 
     def catalog(self, names: tuple[str, ...] | list[str] | None = None) -> dict[str, dict[str, Any]]:
         selected = self.resources if names is None else tuple(self.get(name) for name in names)
-        return {item.name: {"version": item.version, "tools": {
+        return {item.name: {"version": item.version, "transport": item.transport, "startup": dict(item.startup or {}), "endpoint": dict(item.endpoint or {}), "tools": {
             tool.name: {"description": tool.description, "input": dict(tool.input_schema),
                          "output": dict(tool.output_schema), "examples": list(tool.examples),
                          "allowed": list(tool.allowed), "failures": list(tool.failures)}
@@ -63,10 +68,30 @@ def _resource(data: Mapping[str, Any], source: str) -> MCPResource:
     name, version = data.get("name"), data.get("version")
     if not isinstance(name, str) or not name or not isinstance(version, str):
         raise MCPResourceError("invalid_resource", "name and version are required")
+    explicit_transport = "transport" in data
+    transport = str(data.get("transport", "streamable-http"))
+    if transport not in {"stdio", "streamable-http"}:
+        raise MCPResourceError("invalid_transport", transport)
+    startup = data.get("startup") or {}
+    endpoint = data.get("endpoint") or {}
+    if not isinstance(startup, Mapping) or not isinstance(endpoint, Mapping):
+        raise MCPResourceError("invalid_resource", f"connection settings for {name}")
+    if transport == "stdio":
+        if explicit_transport and (startup.get("executable") != "uv" or "args" not in startup or not startup.get("project_dir_env")):
+            raise MCPResourceError("unsafe_startup", name)
+        if explicit_transport:
+            args = startup.get("args")
+            expected = ["run", "--env-file", ".env", "python", "src/main.py"]
+            if args != expected:
+                raise MCPResourceError("unsafe_startup", name)
+    elif explicit_transport and (endpoint.get("url_env") is None or not isinstance(endpoint.get("url_env"), str)):
+        raise MCPResourceError("invalid_endpoint", name)
+    if startup and transport != "stdio":
+        raise MCPResourceError("unsafe_startup", name)
     tools = tuple(_tool(item) for item in data.get("tools", ()))
     if len({item.name for item in tools}) != len(tools):
         raise MCPResourceError("invalid_resource", f"duplicate tool in {name}")
-    return MCPResource(name, version, str(data.get("description", "")), {item.name: item for item in tools}, tuple(data.get("environment", ())), source)
+    return MCPResource(name, version, str(data.get("description", "")), {item.name: item for item in tools}, tuple(data.get("environment", ())), source, transport, startup, endpoint)
 
 
 def standard_mcp_resources() -> tuple[MCPResource, ...]:
@@ -89,8 +114,15 @@ def load_mcp_registry(*, local_mcp_libs: str | Path | None = None) -> MCPRegistr
     paths = [Path(item) for item in str(value).split(os.pathsep) if item]
     locals_: list[MCPResource] = []
     for directory in paths:
-        for path in sorted(directory.glob("*.json")):
-            locals_.append(_resource(json.loads(path.read_text(encoding="utf-8")), str(path)))
+        for path in sorted((*directory.glob("*.json"), *directory.glob("*.yaml"), *directory.glob("*.yml"))):
+            try:
+                content = path.read_text(encoding="utf-8")
+                data = json.loads(content) if path.suffix == ".json" else yaml.safe_load(content)
+                if not isinstance(data, Mapping):
+                    raise MCPResourceError("invalid_resource", str(path))
+                locals_.append(_resource(data, str(path)))
+            except (OSError, json.JSONDecodeError, yaml.YAMLError) as exc:
+                raise MCPResourceError("invalid_resource", str(path)) from exc
     grouped: dict[str, list[MCPResource]] = {}
     for item in locals_:
         grouped.setdefault(item.name, []).append(item)

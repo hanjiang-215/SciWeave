@@ -1,0 +1,14 @@
+name: local-literature
+version: 1.0.0
+description: Example custom literature MCP service
+transport: stdio
+startup:
+  executable: uv
+  args: [run, --env-file, .env, python, src/main.py]
+  project_dir_env: LITERATURE_MCP_PROJECT_DIR
+tools:
+  - name: search
+    description: Search literature
+    allowed: [read]
+    input: {query: string}
+    output: {items: array}

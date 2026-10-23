@@ -54,7 +54,44 @@ class McpRegistryTests(unittest.TestCase):
             with self.assertRaisesRegex(MCPResourceError, "incompatible_version"):
                 load_mcp_registry(local_mcp_libs=directory)
 
-    def test_environment_variable_selects_local_directory_without_network(self) -> None:
+    def test_loads_custom_service_yaml_card_without_embedded_code_or_secret(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            Path(directory, "literature.yaml").write_text("""
+name: local-literature
+version: 1.0.0
+description: Local literature service
+transport: stdio
+startup:
+  executable: uv
+  args: [run, --env-file, .env, python, src/main.py]
+  project_dir_env: LITERATURE_MCP_PROJECT_DIR
+endpoint:
+  url_env: LITERATURE_MCP_URL
+tools:
+  - name: search
+    description: Search literature
+    access: read
+    input: {query: string}
+    output: {items: array}
+""", encoding="utf-8")
+            registry = load_mcp_registry(local_mcp_libs=directory)
+            service = registry.get("local-literature")
+            self.assertEqual(service.transport, "stdio")
+            self.assertEqual(service.startup["executable"], "uv")
+            self.assertEqual(service.endpoint["url_env"], "LITERATURE_MCP_URL")
+            self.assertNotIn("code", service.startup)
+
+    def test_rejects_unsafe_custom_service_card(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            Path(directory, "unsafe.yaml").write_text("""
+name: unsafe
+version: 1.0.0
+startup:
+  executable: bash
+  args: [-c, echo unsafe]
+""", encoding="utf-8")
+            with self.assertRaisesRegex(MCPResourceError, "unsafe_startup"):
+                load_mcp_registry(local_mcp_libs=directory)
         with tempfile.TemporaryDirectory() as directory:
             Path(directory, "resource.json").write_text(json.dumps({
                 "name": "private", "version": "1.0.0", "tools": []
