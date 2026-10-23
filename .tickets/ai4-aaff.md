@@ -131,3 +131,8 @@ tags: [wayfinder:prototype, product, sciencepal, ai4science]
 - 新增 `humans/competition/demo-script.md`：3–5 分钟演示脚本草稿，六段编排（开场痛点、T1 检查、T2 基线、失败注入+重试、路线变更+Proposal、审计收尾），预计合计约 280 秒；每段含演示动作、口播要点与预期结果。实际计时与录制待 SciencePal 接入后复核，「已计时演示脚本」验收项暂不勾选。
 - 新增 `humans/competition/project-summary.md`：≤5 页项目说明草稿（技术方案、创新点、验证结果、局限、后续计划）与原创性/资源使用声明草稿，覆盖赛事要求的模型/数据/代码/API 来源与赛期边界。
 - 以上两项均不依赖 SciencePal，已一并提交；SciencePal 实演证据、真实成功/失败轨迹与 5 页定稿仍在赛事硬门槛之后。
+
+**2026-10-23 依赖状态核对（hanjiang）**
+
+- 本票 deps（`ai4-ay0e`、`ai4-r3so`、`ai4-m0vt`、`ai4-xrxw`、`ai4-vbnr`）已全部 closed，前置满足。
+- 场景、证据卡、T1 检查、T2 确定性基线、演示脚本草稿、项目说明草稿均已在 SciencePal 独立范围内交付完毕；剩余未勾选验收全部依赖 SciencePal 实际运行证据与赛事录制。
