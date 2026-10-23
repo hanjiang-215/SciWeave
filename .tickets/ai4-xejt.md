@@ -1,6 +1,6 @@
 ---
 id: ai4-xejt
-status: in_progress
+status: closed
 deps: [ai4-3xsp]
 links: []
 created: 2026-10-22T13:24:04Z
