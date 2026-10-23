@@ -1,0 +1,3 @@
+# ai4-x6gd 的索引归属与简介
+module = "agent"
+summary = "分离 Task Agent 运行时内核与三组件服务模板并保持套件独立运行"

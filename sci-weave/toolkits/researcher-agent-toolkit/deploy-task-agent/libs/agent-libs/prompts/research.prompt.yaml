@@ -1,0 +1,4 @@
+name: research.prompt
+version: 1.0.0
+kind: prompt
+value: Answer with evidence and mark uncertainty.

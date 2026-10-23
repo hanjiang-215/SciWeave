@@ -1,6 +1,6 @@
 ---
 id: ai4-gvan
-status: in_progress
+status: closed
 deps: []
 links: [ai4-tg3v, ai4-dybh, ai4-jnkn]
 created: 2026-10-22T05:20:54Z
@@ -170,3 +170,13 @@ tags: [audit, centre-control, implementation, enhancement, ready-for-agent]
 **2026-10-23：连接由调用方打开。** 原先 `open_connection(path=None)` 在缺路径时读 `SCIWEAVE_AUDIT_SQLITE_PATH`，`busy_timeout` 与 `journal_mode` 也各有环境变量。共享包没有自己的进程，改为路径必填、后两个参数带默认值，包内不读环境。变量名仍由各接入方写进自己的 `.env.example`。同日补上生命周期：启动时打开并建表一次，之后复用；保持 `check_same_thread=True`，包不加锁。打开或建表失败抛 `AuditUnavailableError`，调用方据此不起服务，包不自己退出进程。`caller_id` 是套件调用标识，不是 Gateway 的 Caller。读调用只有一条 `attempted`，删去「可用 `finish_call` 再补 `completed`」。`finish_call` 对不上未配对 `invoked` 时抛 `AuditValidationError`。
 
 **现状核对（2026-10-22）。** 目录迁移已完成且 Git 识别为 rename；迁移后旧测试 11 个项目全绿，说明迁移本身未破坏任何东西。包内源码仍是旧的存储层审计形态：`audit_event` 表、`Operation` 五枚举、`conn.in_transaction` 校验、`conn.execute(_SCHEMA_SQL)` 单语句 DDL。全仓库对本包零引用，无下游需要跟随。
+
+## Notes
+
+**2026-10-23T02:25:29Z**
+
+实现完成：共享包已迁移后的接口层调用账本已实现，包含调用记录模型、SQLite 初始化与连接管理、读调用 fail-open、写调用两阶段 fail-closed、未完成调用查询、上下文管理器、过滤查询和追加事务保护。未接入真实中央服务，符合本票 Out of Scope。验证命令：在 sci-weave/centre-control/shared/audit-trail 执行 PYTHONPATH=src uv run --with pytest pytest tests -q；14 passed。另执行 uv run python -m compileall -q src tests 与 git diff --check，均通过。
+
+**2026-10-23T02:39:21Z**
+
+审查修正：补齐 init_audit_table 的 busy_timeout/WAL 初始化；将 finish_call 的未完成检查与 completed 插入合并到同一 BEGIN IMMEDIATE 事务，避免并发重复收尾；将 pytest 声明为 test optional dependency 并更新 uv.lock。修正后 uv run --extra test pytest tests -q 为 14 passed，compileall 与 git diff --check 通过。

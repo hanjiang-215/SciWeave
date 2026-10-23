@@ -1,0 +1,3 @@
+# ai4-eikj 的索引归属与简介
+module = "agent"
+summary = "提供 Agent 定义与四类 fast-agent 工作流的配置加载和校验"

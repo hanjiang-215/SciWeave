@@ -1,0 +1,13 @@
+[Unit]
+Description=SciWeave researcher-owned Work Agent subscriber
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/.sciweave/task-agent
+EnvironmentFile=%h/.sciweave/task-agent/.env
+ExecStart=%h/.sciweave/task-agent/bin/start-subscriber
+Restart=on-failure
+
+[Install]
+WantedBy=default.target

@@ -2,7 +2,7 @@
 id: ai4-za77
 status: open
 deps: [ai4-z3z4]
-links: [ai4-we38, ai4-ujvn, ai4-v19u]
+links: [ai4-we38, ai4-ujvn, ai4-v19u, ai4-cdia, ai4-8aa0, ai4-o2n3]
 created: 2026-10-21T22:43:00Z
 type: feature
 priority: 1

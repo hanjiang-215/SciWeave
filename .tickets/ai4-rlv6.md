@@ -22,6 +22,36 @@ tags: [centre-control, centre-agents, interface]
 
 > 修订（2026-10-21）：原「复用 task-agent 的 Gateway 骨架与租约、审计写法」作废。task-agent 的 Gateway 已随任务负责人部署，与中央 Agent 分属不同部署单元，不再共用代码；中央 Agent 如需进程骨架，自建。
 
+## 首版能力规格（仅定义，不实现）
+
+中央 Agent 以一个常驻 Agent 套件提供以下能力。每项能力最终对应独立、可审计的工具；Mapping 与 Wiki 的工具保持领域隔离。
+
+### 读取能力
+
+- `read_mapping_formal`：读取 Research Mapping 正式内容。
+- `read_wiki_formal`：读取 LLM-Wiki 正式内容。
+- `list_mapping_candidates`、`read_mapping_candidate`：读取全部 Mapping 候选及其固定 head、正式基准、来源与状态。
+- `list_wiki_candidates`、`read_wiki_candidate`：读取全部 Wiki 候选及其固定 head、正式基准、来源与状态。
+- `read_agent_registry`：读取主体与 Agent 登记事实，包括中央 Agent 和 Project Owner 的通知联系方式；注册表不参与鉴权。
+
+中央 Agent 读取候选时不受端侧“只能看到自己提交内容”的限制。候选正文由对应领域管理 MCP 提供，中央 Agent 不直连 SQLite、TerminusDB 或其他领域存储。
+
+### 预审与候选写入能力
+
+- `append_mapping_prereview_log`、`append_wiki_prereview_log`：分别向对应领域治理记录追加预审报告；两个工具独立授权。
+- `create_mapping_merged_candidate`、`create_wiki_merged_candidate`：分别创建新的混合候选，并记录全部来源候选和来源作者；不修改已有候选，混合候选创建后不授予来源作者操作权。
+
+中央 Agent 不写正式版本、不执行 Owner 正式化、不改变已有候选、不写草稿箱接纳状态、不发起任务、不下发任务，也没有私有审计写入通道。
+
+### PO 通知能力
+
+- `enqueue_project_owner_notification`：根据注册表中的 PO 联系方式创建结构化通知请求。
+- 邮件是通知投递方式，不是审核或正式化接口；邮件回复不构成 PO 决定。
+- 邮件投递由独立通知组件完成，SMTP 地址、账号和令牌由该组件通过环境变量提供，中央 Agent 不持有邮件凭据。
+- 通知失败只记录投递失败并支持重试，不撤销预审报告或候选创建结果。
+
+首版不实现上述工具；本票先收口名称、职责、输入输出边界和禁止能力。详细面向实现者的说明见 `sci-weave/centre-control/centre-agents/README.md`。
+
 ## Acceptance Criteria
 
 - 工具清单与各能力票一一对应，无重复无遗漏

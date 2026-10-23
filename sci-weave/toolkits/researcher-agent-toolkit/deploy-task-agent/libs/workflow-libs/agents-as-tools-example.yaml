@@ -1,0 +1,6 @@
+agents:
+  main: {identity: main agent, instruction: call declared specialists, model: configure-locally, allowed_mcp_resources: [], resources: [], tools: [specialist]}
+  specialist: {identity: specialist, instruction: return intermediate evidence, model: configure-locally, allowed_mcp_resources: [research-wiki], resources: []}
+  writer: {identity: final writer, instruction: write one draft, model: configure-locally, allowed_mcp_resources: [draft-buffer], resources: []}
+workflows:
+  agents-as-tools-example: {type: Agents as Tools, entry_agent: main, sub_agents: [specialist], summarizer: main, final_writer: writer}

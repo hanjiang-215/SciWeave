@@ -1,6 +1,6 @@
 ---
 id: ai4-yzdd
-status: open
+status: closed
 deps: []
 links: []
 created: 2026-10-22T16:26:48Z
@@ -34,3 +34,9 @@ tags: [audit, centre-control, implementation, enhancement, ready-for-agent]
 
 None (can start immediately).
 
+
+## Notes
+
+**2026-10-23T02:25:03Z**
+
+实现与验证：已完成读调用账本公共 API、路径打开与幂等建表、内存库 WAL 降级、attempted 记录及查询回读、审计库不可用时 fail-open。验证命令：在 sci-weave/centre-control/shared/audit-trail 执行 PYTHONPATH=src uv run --with pytest pytest tests -q；14 passed。另执行 uv run python -m compileall -q src tests 与 git diff --check，均通过。

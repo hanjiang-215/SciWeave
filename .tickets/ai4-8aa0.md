@@ -1,8 +1,8 @@
 ---
 id: ai4-8aa0
-status: open
+status: closed
 deps: [ai4-tb9k]
-links: []
+links: [ai4-cdia, ai4-za77]
 created: 2026-10-22T13:24:04Z
 type: feature
 priority: 1
@@ -30,3 +30,9 @@ tags: [implementation, ready-for-agent, work-agent, task-agent]
 - [ ] hooks 只在打开 harness 时检查并补启动
 - [ ] skill 不包含修改状态机、租约或 Gateway 进程的步骤
 
+
+## Notes
+
+**2026-10-23T01:57:59Z**
+
+2026-10-23：完成套件 skill、卡片样例和常驻启动。新增给 Personal Agent 的 create-task-agent skill，限制其只复制/修改 Agent 定义并装入定义槽；新增两个 Linux systemd 用户服务单元和 harness 打开时仅检查/补启动的 hook，关闭 harness 不停止服务。套件 README 已补安装与启动边界。验证：libs 4 passed，hook bash -n 通过，git diff --check 通过。

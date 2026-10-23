@@ -1,6 +1,6 @@
 ---
 id: ai4-xejt
-status: open
+status: closed
 deps: [ai4-3xsp]
 links: []
 created: 2026-10-22T13:24:04Z
@@ -33,3 +33,9 @@ tags: [implementation, ready-for-agent, work-agent, centre-agent]
 - [ ] 返修、放弃、转人工、回答提问返回 `unimplemented`；不存在 `submit_owner_command` 和 `accept`
 - [ ] 测试不依赖真实队列或真实模型
 
+
+## Notes
+
+**2026-10-23T01:47:56Z**
+
+2026-10-23：完成 Centre Agent 固定定义一轮执行。新增候选事件入口（candidate_id、event_type、event_id），事件以业务键幂等，触发短生命周期 Worker；同一候选通过 Worker Lease 串行，重复事件不创建第二条 ExecutionRecord。固定占位运行时完成为 completed，不实现预审规则或草稿写入。Centre MCP 删除 submit_owner_command，不提供 accept；answer_question 与 review_execution 返回 unimplemented。验证：centre gateway 5 passed，worker 4 passed，compileall 通过，git diff --check 通过；测试使用临时 SQLite、假队列和占位运行时。

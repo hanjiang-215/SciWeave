@@ -1,6 +1,6 @@
 ---
 id: ai4-tb9k
-status: open
+status: closed
 deps: [ai4-xejt]
 links: []
 created: 2026-10-22T13:24:04Z
@@ -30,3 +30,9 @@ tags: [implementation, ready-for-agent, work-agent, task-agent]
 - [ ] 更换 Agent 定义不会改到状态机或租约
 - [ ] 与 Centre Agent 源码没有 path 依赖，测试不依赖真实队列、真实草稿箱或真实模型
 
+
+## Notes
+
+**2026-10-23T01:55:28Z**
+
+2026-10-23：完成研究员套件消息链路。新增独立 deploy-task-agent/libs（状态记录、Worker Lease、假队列、假草稿箱和一轮运行器）、三组件 service-template 壳、fast-agent 卡片样例与 .env.example。测试验证假上游交接写入 draft_id 并完成、重复投递幂等、同目标租约互斥、替换 Agent 定义不改变状态边界；套件不依赖 centre-agents。验证：libs 4 passed，模板 compileall 通过，git diff --check 通过。

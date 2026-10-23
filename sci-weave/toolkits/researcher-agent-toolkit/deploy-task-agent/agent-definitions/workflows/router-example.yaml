@@ -1,0 +1,6 @@
+agents:
+  router: {identity: task router, instruction: route the task, model: configure-locally, allowed_mcp_resources: [], resources: []}
+  searcher: {identity: evidence searcher, instruction: find evidence, model: configure-locally, allowed_mcp_resources: [research-mapping], resources: []}
+  writer: {identity: final writer, instruction: write one draft, model: configure-locally, allowed_mcp_resources: [draft-buffer], resources: []}
+workflows:
+  router-example: {type: Router, entry_agent: router, sub_agents: [searcher], summarizer: router, final_writer: writer}

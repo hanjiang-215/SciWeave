@@ -1,0 +1,3 @@
+# ai4-j5l0 的索引归属与简介
+module = "agent"
+summary = "将本地 Agent 与 MCP 扩展资源统一收纳到套件 libs 目录"

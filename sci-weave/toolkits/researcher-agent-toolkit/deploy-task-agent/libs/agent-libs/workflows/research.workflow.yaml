@@ -1,0 +1,5 @@
+name: research.workflow
+version: 1.0.0
+kind: workflow_helper
+value:
+  workflow: sequential-research

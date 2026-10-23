@@ -1,0 +1,3 @@
+# ai4-o2n3 的索引归属与简介
+module = "agent"
+summary = "统一 Task Agent 运行时、技能组、资源库与单 Worker 多 Agent 工作流规格"

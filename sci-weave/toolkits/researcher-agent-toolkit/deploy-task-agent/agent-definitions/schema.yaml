@@ -1,0 +1,25 @@
+# Agent 与 Workflow YAML schema v1
+
+Agent 定义至少包含：
+
+```yaml
+name: string
+identity: string
+instruction: string
+model: string
+allowed_mcp_resources: [string]
+resources: [string]
+tools: [string] # Agents as Tools 可选
+```
+
+Workflow 文件包含 `version: 1.x`、`agents` 和 `workflows`。每个工作流必须包含：
+
+```yaml
+type: Router | Orchestrator | Parallel | Agents as Tools
+entry_agent: string
+sub_agents: [string]
+summarizer: string
+final_writer: string
+```
+
+所有 Agent 引用必须指向同一文件或目录中声明的 Agent；Agent `tools` 引用图不能形成循环。`final_writer` 是最终写入角色，权限由 runtime 和 MCP 服务端共同执行。
