@@ -35,3 +35,7 @@ tags: [wayfinder:grilling]
 **2026-10-19T04:08:12Z**
 
 前沿决议：子票“Task Agent 与审核人协作及返修流程”已收束并关闭。端侧执行从正式上游交接启动，经不可变执行提交、Owner Codex MCP 审核、SQLite outbox 领域草稿创建，到 Central Agent 通知为止；任务仅在 PO 正式发布后结束并触发下游交接。详情见 ai4-wd5l 的 Resolution。
+
+**2026-10-22T12:23:45Z**
+
+2026-10-22：「Agent 以消息驱动，Gateway 的 MCP 只负责返修」收口。最终结论是否决保留 submit_owner_command，而不是 2026-10-21 的「保留但收窄」。详情在该票 Resolution。领域数据模型地图的 Decisions so far 属 hanjiang，本次未改。

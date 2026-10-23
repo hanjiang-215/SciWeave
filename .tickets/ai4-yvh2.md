@@ -113,3 +113,18 @@ PDF 等原件仅以 Wiki 资源卡记录定位、哈希、媒体类型、来源�
 - `ExecutionRecord.trigger` 中 `owner_command` 的语义随之改变：它表示「由人工处置要求触发」，不再表示「由任务命令触发」。
 
 依据：「Agent 以消息驱动，Gateway 的 MCP 只负责返修」(ai4-dhpv) 的 2026-10-21T22:35:00Z 澄清。
+
+**2026-10-22T12:23:45Z**
+
+2026-10-22 再修订（本票已关闭，正文与 2026-10-21「工具保留、trigger 改为人工处置」更正均保留）。
+
+推翻 2026-10-21T22:37:00Z 的更正，以及「仍然成立」里已被规格删掉的部分：
+
+- `submit_owner_command` 删除，不存在「人工处置要求入口」这个工具。
+- `trigger` 只有队列来源，不再有 `owner_command`。
+- 删除 `blocked`、`awaiting_acceptance`、`accepted`。`review_execution` 只有 request_revision、reject、request_human_takeover。
+- 正常终点是 completed 并保存 draft_id。草稿由 Worker 内的 agent 写入，不是「接纳后再由人另写」。
+
+依据：「Agent 以消息驱动，Gateway 的 MCP 只负责返修」(ai4-dhpv) 的 Resolution，以及「最小 Work Agent 实现规格」(ai4-z3z4)。
+
+仍然成立：单一 ExecutionRecord 状态机；同一 TaskNode 串行、跨 TaskNode 并发；AuditEvent 只追加。

@@ -150,6 +150,16 @@ running ├→ waiting            （Worker 提问，本轮终止；回答创建
 
 处置面工具名与签名保持一致，但 Centre Agent 当前不提供功能，统一返回 `unimplemented`——中央 Agent 的工作里没有返修。保留同名接口是为了两个实例共用一套骨架。租约在两种实例里都保留，定位是本地单实例互斥，不是跨实例分发。
 
+### 源码放置（2026-10-22）
+
+上文「一个项目组、三个子项目」描述的是**每一份** Work Agent 的进程形状，不是仓库里只有一棵源码树。放置以 [ADR-0002](../../docs/adr/0002-work-agent-two-codebases.md) 为准，本节约定实现必须同时满足的边界：
+
+- 两份源码，禁止互相 path 依赖，也不抽顶层共享包。状态机、Worker Lease、处置面工具改动必须两处一起改。Agent 定义允许不同。
+- Centre Agent 的家是 `sci-weave/centre-control/centre-agents`。它是中央服务器上的预审服务，Agent 定义写死，不做成给研究员安装的库。进程仍是两个常驻 gateway 再拉起 `fast-agent-mcp` 子进程。
+- 现有 `sci-weave/task-agent/` 只作为迁入 `centre-agents` 的 `git mv` 起点。两处都落地后删除该目录。起点里的 `submit_owner_command` 不是现行契约。
+- Task Agent 不在中央运行。发给研究员的是 `sci-weave/toolkits/researcher-agent-toolkit/deploy-task-agent`，形态由「建立新 Task Agent 的套件」(ai4-za77) 定义：skill、服务模板、libs。研究员只能改 Agent 定义。
+- 研究员机器上的 `gateway/mcp` 与 `gateway/subscriber` 用用户级自启动常驻。hooks 只在打开 harness 时检查，没跑就拉起，不掌管生命周期。
+
 ## Testing Decisions
 
 - 以认证后的 MCP 工具调用作为最高且主要的行为测试接缝；测试不检查私有类、表访问顺序、子进程实现细节或日志格式。
@@ -186,6 +196,8 @@ running ├→ waiting            （Worker 提问，本轮终止；回答创建
 - [ ] 健康状态、未配置组件、降级与不可用状态均可从规定的 MCP 或最小 HTTP 接缝观察
 - [ ] 全部测试决策所列行为均有自动化验证，且不依赖真实模型凭据、固定端口或真实队列
 
+> 增补（2026-10-22）：上面的验收仍描述**一份**运行时的行为。放置另见「源码放置」与 [ADR-0002](../../docs/adr/0002-work-agent-two-codebases.md)。实现时 Centre Agent 与研究员套件各有一份源码，行为都要满足上列验收；套件的组成与启动方式在「建立新 Task Agent 的套件」(ai4-za77)。
+
 ## Notes
 
 **2026-10-20T07:32:36Z**
@@ -216,3 +228,7 @@ running ├→ waiting            （Worker 提问，本轮终止；回答创建
 | 错误码四个 | 增加 `unimplemented`，用于 Centre Agent 未实现的处置面 |
 
 `deps` 已清空：原依赖 `ai4-yvh2`（执行与接纳状态机融合）早前已关闭，其状态机结论中「接纳」部分被本轮推翻，保留其执行部分。`links` 增加 `ai4-we38` 与 `ai4-za77`。
+
+**2026-10-22T13:16:53Z**
+
+2026-10-22 补入源码放置，不另写规格。两份源码、套件三块、用户级自启动与 hooks 只补启动，见正文「源码放置」与 ADR-0002。行为验收不变，Centre Agent 与研究员套件都要满足。

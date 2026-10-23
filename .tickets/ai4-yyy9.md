@@ -29,9 +29,13 @@ tags: [wayfinder:map]
 - [Owner 通道与上游交接队列物理隔离](ai4-353s.md)：Owner 的 Codex 通过 MCP 调用常驻 Gateway；上游 TaskNode 交接通过消息队列和上游收集器。A2A 不用于 Owner 通道，因为主流 harness 均未内置 A2A 客户端。
 
   > 修订（2026-10-21）：Owner 通道的用途收窄为返修与处置，任务下发改走消息队列；Gateway 位置由中央改为任务负责人处。见「Agent 以消息驱动，Gateway 的 MCP 只负责返修」与「Task Agent 改由研究员端侧自持」。
+
+  > 再修订（2026-10-22）：「Agent 以消息驱动，Gateway 的 MCP 只负责返修」收口。`submit_owner_command` 删除，不保留为返修入口。物理隔离仍然成立。
 - [执行与接纳状态机融合及 Owner 审核工具边界](ai4-yvh2.md)：Gateway 归入 `sci-weave/task-agent` 项目组；同一 TaskNode 串行、跨 TaskNode 可并发。MCP 与上游交接汇入 Gateway，使用 `blocked`、`queued`、`running`、`waiting`、`awaiting_acceptance` 等状态及 `review_execution` 完成可审计审核；接纳不自动创建领域草稿。
 
   > 修订（2026-10-21）：状态机、串行化与审核工具边界仍然成立；「MCP 与上游交接汇入 Gateway」改为「上游交接经消息队列汇入，MCP 只承担返修与处置」。
+
+  > 再修订（2026-10-22）：`blocked`、`awaiting_acceptance`、`accepted` 和 `owner_command` 删除。正常终点是 `completed` 并保存 `draft_id`；`review_execution` 没有 `accept`。现行状态机见「最小 Work Agent 实现规格」。
 - [Task Agent 项目组三角色部署与双入口调度边界](ai4-6fb7.md)：`mcp`、`ingest` 与短生命周期 `worker` 构成 Task Agent 项目组；两种入口通过共享 SQLite 持久化包、原子执行租约和稳定排序串行调度，健康按组件实际可用性聚合。Mapping 初始化查询另由受阻塞子票收敛。
 
   > 修订（2026-10-21）：三角色构成、共享 SQLite、原子租约与稳定排序都仍然成立；变化的是部署位置——整个项目组由中央移到任务负责人处，`ingest` 变成端侧主动连接中央队列的订阅器。
@@ -65,3 +69,7 @@ MVP 的调用者身份与 TaskNode Owner 授权绑定：当前只有本地开发
 **2026-10-19T20:14:00Z**
 
 地图修订（2026-10-19）：Owner 通道由 A2A 改为 MCP（Streamable HTTP）。事实依据：Codex CLI、Cursor、Claude Code 对外扩展面只有 MCP，均未内置 A2A 客户端；A2A 面向 Agent 间协作，harness 是 Agent 宿主，协议定位不匹配。修订后 Owner 侧由 Codex 在 `mcp_servers` 注册 Gateway 地址与令牌，Gateway 暴露 `submit_owner_command`、`query_execution`、`cancel_execution`、`list_pending`、`health` 五个工具。上游队列路径不变。A2A 不再出现在本地图的 Owner 链路中。
+
+**2026-10-22T13:16:53Z**
+
+2026-10-22：不新开规格。放置结论写入「最小 Work Agent 实现规格」的「源码放置」与 ADR-0002。Centre Agent 在 centre-agents，研究员套件在 deploy-task-agent，两份源码不对 path 依赖。sci-weave/task-agent 只作 git mv 起点。

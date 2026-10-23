@@ -23,6 +23,8 @@ tags: [toolkit, task-agent, researcher]
 
 `researcher-agent-toolkit/deploy-task-agent` 是一份可打包发给研究员的套件，包含三部分：模板、初始化脚本、使用说明。
 
+> 修订（2026-10-22）：上句保留作过程记录。现行组成是 skill、服务模板、libs，见文末同日修订与 [ADR-0002](../../docs/adr/0002-work-agent-two-codebases.md)。平台不在这个目录启动服务。
+
 ## Design
 
 ### 套件内容
@@ -60,6 +62,12 @@ tags: [toolkit, task-agent, researcher]
 - [ ] 明确 `.env.example` 需要哪些变量（队列地址与消费者组、数据库位置、持久目录、领域 MCP 地址、草稿箱地址）
 - [ ] 使用说明能让研究员在无额外帮助的情况下建出一个能连上中央队列、执行任务并把结果写成草稿的 agent
 
+> 修订（2026-10-22）：上列四部分验收改为下面三条，旧条目不删除。
+
+- [ ] 套件包含 skill、服务模板、libs。skill 教 Personal Agent 按样例改 Agent 定义并装进定义槽，不教改 Gateway
+- [ ] libs 含状态机、Worker Lease、拉起子进程，并预置 fast-agent 卡片样例。服务模板是三进程壳，调用 libs 启动，不把 Gateway 再实现一遍
+- [ ] 与 `centre-agents` 无 path 依赖。两个 gateway 进程用用户级自启动常驻；hooks 只在打开 harness 时检查并补启动
+
 ## Notes
 
 **2026-10-21T22:43:00Z**
@@ -78,3 +86,15 @@ tags: [toolkit, task-agent, researcher]
 - `.env.example` 增加消费者组与草稿箱地址。
 
 本票 `deps` 增加 `ai4-z3z4`：骨架形态定了才谈得上打包成套件。
+
+**2026-10-22T13:07:00Z**
+
+2026-10-22 修订，依据 ADR-0002。推翻「以 sci-weave/task-agent 为唯一模板基线、套件只是它的打包」。
+
+套件是三块，平台不在此启动服务：
+
+- skill：读者是研究员的 Personal Agent，教他按样例改 Agent 定义并装进定义槽，不教改 Gateway。
+- 服务模板：gateway/mcp、gateway/subscriber、worker 的壳，只负责启动，调用 libs。
+- libs：运行时（状态机、Worker Lease、拉起子进程）加上预置的 fast-agent 卡片样例。
+
+与 centre-agents 禁止 path 依赖。行为对齐「最小 Work Agent 实现规格」。两个 gateway 进程用研究员机器上的用户级自启动常驻；hooks 只在打开 harness 时检查并补启动。

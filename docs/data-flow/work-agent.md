@@ -14,6 +14,8 @@ Task Agent 与 Centre Agent 共用一个架构。二者只在三处不同：订�
 | Task Agent | 执行科研任务的 Work Agent 实例 | 研究员本机 |
 | Centre Agent | 做候选预审的 Work Agent 实例 | 中央服务器 |
 
+源码分两份，架构仍是这一套。Centre Agent 在 `sci-weave/centre-control/centre-agents`，Task Agent 发给研究员的套件在 `sci-weave/toolkits/researcher-agent-toolkit/deploy-task-agent`。两边不 path 依赖；状态机、Worker Lease 和处置面以「最小 Work Agent 实现规格」为准。详见 [ADR-0002](../adr/0002-work-agent-two-codebases.md)。
+
 ## 三个组件
 
 一个 Work Agent 是一个项目组，含三个独立 Python 子项目：

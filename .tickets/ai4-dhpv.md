@@ -1,6 +1,6 @@
 ---
 id: ai4-dhpv
-status: open
+status: closed
 deps: []
 links: [ai4-we38, ai4-353s, ai4-yvh2, ai4-gqj3, ai4-z3z4, ai4-te1v, ai4-csyj]
 created: 2026-10-21T22:12:00Z
@@ -93,6 +93,25 @@ centre-agent 也是消息驱动：草稿进入某状态、候选出现新 head �
 - [ ] 逐条列出被推翻的既有结论，并在对应票追加带日期的修订说明（不覆盖原文）
 - [ ] 明确消息驱动下执行记录的 `trigger` 取值，不再包含 `owner_command`
 
+> 修订（2026-10-22）：上列验收以本节 Resolution 为准。其中「`submit_owner_command` 保留、靠提示词约束」和「`review_execution` 含验收」被同日更晚的定案推翻，不按原文打勾。
+
+## Resolution
+
+2026-10-22 收口。通道分工以 [ADR-0001](../../docs/adr/0001-task-dispatch-via-message-queue.md)、`docs/data-flow/work-agent.md` 与「最小 Work Agent 实现规格」(ai4-z3z4) 为准。正文「Design」里 2026-10-21 的「工具保留、提示词约束」保留作过程记录，不再是结论。
+
+- 两类 MCP 仍然分开：Gateway 的 MCP 给人做处置与观察；领域 MCP（Mapping、Wiki、草稿箱）给 Agent 当工具。这句话只约束前者。
+- 任务下发只走消息队列。根任务的首条消息由 Project Owner 发到队列；上游交接由领域正式版本发布触发。
+- **删除 `submit_owner_command`。** 不保留为返修入口，也不靠提示词约束它。留一个能创建执行的工具，等于给「MCP 不下发任务」留后门。
+- 处置面是专用工具：`answer_question` 回答提问并创建 `resume_of`；`review_execution` 只有 `request_revision`、`reject`、`request_human_takeover`，没有 `accept`；`cancel_execution` 与这三种决定并列，不叫返修。认可结果是把草稿转成候选，发生在领域管理 MCP，不在 Gateway。
+- `trigger` 只有队列来源（`queue`），不再有 `owner_command`。没有 `blocked`：消息能到达即说明上游已发布。
+- Centre Agent 与 Task Agent 共用同一套工具签名。Centre Agent 的处置面当前一律返回 `unimplemented`；「列出待审、查看报告、要求重算」是以后启用时的语义，不是本阶段要做的功能。
+
+被推翻且已在对应票追加 2026-10-22 修订（不改原文）的结论：
+
+- 「Task Owner 通道（MCP）与上游交接队列物理隔离」(ai4-353s) 在 2026-10-21 把工具改回「保留但收窄」。该更正作废，工具删除；物理隔离本身仍成立。
+- 「执行与接纳状态机融合及 Owner 审核工具边界」(ai4-yvh2) 的 `accept`、`awaiting_acceptance`、`blocked`、`owner_command` 作废。
+- 「ExecutionRecord 控制、审核与恢复 MCP 工具」(ai4-gqj3) 里「经 `submit_owner_command` 回答提问」和「四种审核决定含 accept」作废；回答改走 `answer_question`。
+
 ## Notes
 
 **2026-10-21T22:12:00Z**
@@ -123,3 +142,7 @@ centre-agent 也是消息驱动：草稿进入某状态、候选出现新 head �
 - **根任务的首条消息由谁产生**：由 Project Owner 向队列发一条任务就绪消息，不经 MCP。上游交接则由领域正式版本发布触发。
 
 另一个不再需要的概念：Gateway 里的 `blocked` 状态。消息能到达即证明上游已发布，本地不再重复判断上游就绪，`submit_owner_command` 也随之下线。
+
+**2026-10-22T12:23:45Z**
+
+2026-10-22 Resolution 已写入正文。关闭本票。地图「Gateway 与最小 fast-agent 执行闭环规格地图」的相关索引已加再修订；「Research Mapping 与 Wiki 领域数据模型和持久化规格地图」未改，因其 assignee 不是本次操作者。
