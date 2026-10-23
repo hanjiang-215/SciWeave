@@ -2,7 +2,7 @@
 id: ai4-8aa0
 status: closed
 deps: [ai4-tb9k]
-links: []
+links: [ai4-cdia, ai4-za77]
 created: 2026-10-22T13:24:04Z
 type: feature
 priority: 1

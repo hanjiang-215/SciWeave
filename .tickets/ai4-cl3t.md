@@ -2,7 +2,7 @@
 id: ai4-cl3t
 status: open
 deps: [ai4-sxpw]
-links: []
+links: [ai4-s2nb]
 created: 2026-10-23T05:18:40Z
 type: feature
 priority: 1
