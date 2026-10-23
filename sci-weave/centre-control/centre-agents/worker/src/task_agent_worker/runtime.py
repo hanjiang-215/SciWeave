@@ -57,7 +57,7 @@ class FastAgentPassthroughRuntime:
                 }
             )
             history_path.write_text(json.dumps(history, sort_keys=True), encoding="utf-8")
-            return WorkerOutcome("awaiting_acceptance", result_summary="fast-agent passthrough completed")
+            return WorkerOutcome("completed", result_summary="fast-agent passthrough completed")
         except (OSError, ValueError):
             return WorkerOutcome("failed", error_summary="runtime_storage_unavailable")
         except Exception:
@@ -65,8 +65,8 @@ class FastAgentPassthroughRuntime:
 
     def resume(self, request: RuntimeRequest) -> WorkerOutcome:
         outcome = self.run(request)
-        if outcome.status == "awaiting_acceptance":
-            return WorkerOutcome("awaiting_acceptance", result_summary="fast-agent passthrough resumed")
+        if outcome.status == "completed":
+            return WorkerOutcome("completed", result_summary="fast-agent passthrough resumed")
         return outcome
 
     def cancel(self, execution_id: str) -> WorkerOutcome:
@@ -162,7 +162,7 @@ class FastAgentDeepSeekRuntime:
                     )
                     outcome = "fast-agent resumed" if resumed else "fast-agent completed"
                     worker_loop.outcome = WorkerOutcome(
-                        "awaiting_acceptance", result_summary=f"{outcome}: {summary}"
+                        "completed", result_summary=f"{outcome}: {summary}"
                     )
 
             await worker_loop()

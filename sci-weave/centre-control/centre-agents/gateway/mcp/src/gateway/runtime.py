@@ -47,7 +47,7 @@ class TestRuntimeAdapter:
         if self.duration_seconds:
             time.sleep(self.duration_seconds)
         if self.outcome == "success":
-            return RuntimeOutcome("awaiting_acceptance", result_summary="test runtime completed")
+            return RuntimeOutcome("completed", result_summary="centre agent placeholder completed")
         if self.outcome == "exception":
             raise RuntimeError("test runtime exception")
         if self.outcome == "timeout":
@@ -60,7 +60,7 @@ class TestRuntimeAdapter:
 
     def resume(self, request: RuntimeRequest) -> RuntimeOutcome:
         if self.outcome == "success":
-            return RuntimeOutcome("awaiting_acceptance", result_summary="test runtime resumed")
+            return RuntimeOutcome("completed", result_summary="centre agent placeholder resumed")
         return self.run(request)
 
     def cancel(self, execution_id: str) -> RuntimeOutcome:

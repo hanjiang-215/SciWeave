@@ -1,38 +1,22 @@
-# Task Agent Gateway MCP 角色
+# Centre Agent Gateway MCP
 
-此子项目提供 SciWeave Task Agent 的常驻 Gateway MCP v1 入口。Task Owner 的 MCP 客户端通过经认证的 Streamable HTTP 调用提交和查询命令；Gateway 将调用者、命令留痕、稳定 Task 会话、初始执行记录与审计事件保存到 SQLite。回环 HTTP 只暴露最小健康探针。
+中央 Centre Agent 的常驻 MCP 控制面。当前票只实现候选事件触发的一轮固定占位 Agent 执行；预审规则、报告写入和候选合并由后续规格负责。
 
-本阶段不包含消息队列消费、Worker 调度、fast-agent Runtime Adapter 或领域 Buffer。
+## 当前入口
 
-## 配置与运行
+- 上游候选事件由 `gateway/ingest` 接收并交给 Gateway；测试使用假队列直接调用候选事件入口。
+- `POST /mcp` 需要 `Authorization: Bearer <token>`。
+- MCP 提供 `query_execution`、`cancel_execution`、`list_pending`、`answer_question`、`review_execution` 和 `health`。
+- `answer_question` 与 `review_execution` 当前返回 `unimplemented`。
+- 不提供 `submit_owner_command`，也不提供 `accept`；任务触发来自候选事件，而不是 Owner MCP 命令。
 
-```bash
-cd sci-weave/centre-control/centre-agents/gateway/mcp
-cp .env.example .env
-# 编辑 .env
-uv run --env-file .env sciweave-task-agent-gateway-mcp
-```
-
-环境变量：
-
-- `SCIWEAVE_GATEWAY_TOKEN`：本地开发 Bearer 令牌。
-- `SCIWEAVE_GATEWAY_CALLER_ID`：写入命令与审计事实的本地调用者标识。
-- `SCIWEAVE_GATEWAY_DB`：SQLite 数据库位置。
-- `SCIWEAVE_GATEWAY_HOST`：监听地址。
-- `SCIWEAVE_WORKER_HOME`、`SCIWEAVE_WORKER_SESSION_DIR`、`SCIWEAVE_WORKER_CONNECTION_SCOPE`：Worker 专属持久目录、会话子目录和连接域。真实 DeepSeek 配置位于 Worker `.env`；联合启动方式见项目组 README。
-
-## 接口
-
-- `POST /mcp`：需要 `Authorization: Bearer <token>`。支持 MCP 初始化、`tools/list`，以及 `submit_owner_command`、`query_execution`、`health` 三个工具。
-- `GET /health`：仅返回 `status` 与 `gateway_api_version`，不需要令牌。
-
-`submit_owner_command` 的 `idempotency_key` 在该工具内全局唯一。相同键的重试返回第一次保存的命令和执行标识，并标记 `duplicate: true`。
-
-## 回归测试
-
-从项目组根执行：
+## 本地验证
 
 ```bash
+cd sci-weave/centre-control/centre-agents
+uv sync
 uv run --package sciweave-task-agent-gateway-mcp \
   python -m unittest discover -s gateway/mcp/tests -v
 ```
+
+服务路径、令牌、数据库位置和 Worker 运行目录由环境变量配置；仓库只提交 `.env.example`。测试使用临时 SQLite、系统分配端口和固定占位运行时，不连接真实队列或模型。
