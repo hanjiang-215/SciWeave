@@ -30,6 +30,8 @@ Task Agent 与 Centre Agent 共用一个架构。二者只在三处不同：订�
 
 消息监听是出站连接，端侧不需要公网可达地址。订阅器的价值在于长期持有 consumer group 与 offset：把消息监听并进 MCP 进程，会让 MCP 的生命周期绑上队列连接，任何一侧重启都牵连另一侧。
 
+消息队列从正式版本发布到下游执行的完整交接流程见 [`message-queue.md`](message-queue.md)。该流程区分下游通知、`PendingHandoff` 等待事实和真正触发 Worker 的 `task_handoff_ready`；队列不阻塞等待下游正式化。
+
 ## 消息进入路径
 
 一条消息到达后，订阅器做四件事，顺序固定：

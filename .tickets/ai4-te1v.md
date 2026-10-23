@@ -95,3 +95,9 @@ tags: [wayfinder:grilling]
 3. **offset 在执行完结后提交**：崩溃重启会重放，重复由业务键挡住；不追求精确一次。
 
 这是三条**假定**，不是本票的结论。若后续讨论推翻其中任何一条，受影响的是 `ai4-z3z4` 的消息进入路径与 `ai4-a2ba` 的预审触发去抖，需要一并改。本票其余的七项语义（topic 划分、分区键、消费者组命名、`auto.offset.reset`、保留期、载荷结构、订阅者变更）仍完全开放。
+
+## Decisions so far
+
+- [Agent 注册、Map 执行关系与消息订阅边界](ai4-0s02)：`TaskNode.executor_refs` 直接引用 Workflow Agent 的稳定 `agent_id`，是正式任务分配和消息路由依据；Registry 只登记主体、Workflow Agent 和运行实例的基本事实，不保存 TaskNode 关系，Agent 离线或注销不自动修改 Map。
+
+## Not yet specified
