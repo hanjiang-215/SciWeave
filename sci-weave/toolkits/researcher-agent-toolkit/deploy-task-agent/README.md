@@ -5,10 +5,10 @@
 - `runtime/`：状态记录、Worker Lease、配置模型和单 Worker 多 Agent 工作流。
 - `service-template/`：`gateway/mcp`、`gateway/subscriber`、`worker` 三个启动壳。
 - `agent-definitions/`：Agent 定义、四类工作流示例和 schema。
-- `agent-libs/`：标准 Agent 行为资源。
-- `mcp-libs/`：标准 MCP 工具描述资源。
-- `local-agent-libs/`、`local-mcp-libs/`：研究员自定义资源占位与说明。
-- `skills/deploy-task-agent-skills/`：创建、编排、配置 MCP、验证和排障技能组；每个技能带自己的 `references/`。
+- `libs/libs/agent-libs/`：标准 Agent 行为资源。
+- `libs/libs/mcp-libs/`：标准 MCP 工具描述资源。
+- `local-libs/agent-libs/`、`local-libs/mcp-libs/`：研究员自定义资源占位与说明。
+- `deploy-task-agent-skills/`：创建、编排、配置 MCP、验证和排障技能组；每个技能带自己的 `references/`。
 - `hooks/`、`systemd/`：harness 检查和用户级常驻服务。
 
 套件与 `sci-weave/centre-control/centre-agents` 独立，不使用 path 依赖。Personal Agent 只能修改 Agent 定义、工作流声明和资源配置，不能修改 runtime、Worker Lease、Gateway 或服务模板。
