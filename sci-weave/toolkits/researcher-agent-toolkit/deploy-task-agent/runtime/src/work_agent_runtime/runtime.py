@@ -14,6 +14,8 @@ class ExecutionRecord:
     target_id: str
     status: str
     draft_id: str | None = None
+    error_code: str | None = None
+    failed_agent: str | None = None
 
 
 # Short compatibility name for callers that used the initial runtime prototype.
@@ -52,6 +54,12 @@ class ExecutionStore:
     def complete(self, execution: ExecutionRecord, draft_id: str) -> ExecutionRecord:
         with self._lock:
             updated = ExecutionRecord(execution.execution_id, execution.target_id, "completed", draft_id)
+            self._replace(updated)
+            return updated
+
+    def fail(self, execution: ExecutionRecord, error_code: str, failed_agent: str | None = None) -> ExecutionRecord:
+        with self._lock:
+            updated = ExecutionRecord(execution.execution_id, execution.target_id, "failed", None, error_code, failed_agent)
             self._replace(updated)
             return updated
 
@@ -118,8 +126,23 @@ class WorkAgentRuntime:
     def handle_message(self, target_id: str, event_id: str, agent_definition: str = "") -> ExecutionRecord:
         return run_one(self.store, self.lease, self.drafts, target_id, event_id, agent_definition)
 
-    def run_one(self, target_id: str, event_id: str, agent_definition: str) -> ExecutionRecord:
-        return self.handle_message(target_id, event_id, agent_definition)
+    def run_workflow(self, target_id: str, event_id: str, config: object, agent: Callable[..., str], workflow_name: str, prompt: str) -> ExecutionRecord:
+        """Run a configured multi-agent workflow under this one lease/record."""
+        from .workflows import WorkflowExecutor
+
+        execution = self.store.enqueue(target_id, event_id)
+        if not self.lease.acquire(target_id):
+            return execution
+        try:
+            if not self.store.start(execution):
+                return execution
+            result = WorkflowExecutor(config, agent, self.drafts).run(workflow_name, prompt, target_id=target_id)
+            current = self.store.get(execution.execution_id) or execution
+            if result.status == "completed":
+                return self.store.complete(current, result.draft_id or "")
+            return self.store.fail(current, result.error_code or "workflow_failed", result.failed_agent)
+        finally:
+            self.lease.release(target_id)
 
 
 def run_one(

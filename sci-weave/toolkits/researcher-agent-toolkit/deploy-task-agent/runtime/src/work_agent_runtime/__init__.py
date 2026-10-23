@@ -1,6 +1,7 @@
 """Independent Work Agent runtime used by the service templates."""
 
 from .config import AgentDefinition, ConfigError, TaskAgentConfig, WorkflowDefinition, load_config
+from .workflows import WorkflowExecutor, WorkflowRunResult
 from .runtime import (
     Execution,
     ExecutionRecord,
@@ -18,6 +19,8 @@ __all__ = [
     "TaskAgentConfig",
     "WorkflowDefinition",
     "load_config",
+    "WorkflowExecutor",
+    "WorkflowRunResult",
     "Execution",
     "ExecutionRecord",
     "ExecutionStore",

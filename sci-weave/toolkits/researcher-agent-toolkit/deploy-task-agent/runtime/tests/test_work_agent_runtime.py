@@ -43,7 +43,18 @@ class WorkAgentRuntimeTests(unittest.TestCase):
             thread.join()
         self.assertEqual(sorted(outcomes), [False, True])
 
-    def test_agent_definition_is_only_runtime_input(self) -> None:
+    def test_configured_workflow_uses_one_platform_record_and_lease(self):
+        from test_workflows import config
+        runtime = WorkAgentRuntime()
+
+        def agent(name, prompt, tools=None):
+            return "specialist" if name == "entry" else f"{name}:{prompt}"
+
+        execution = runtime.run_workflow("task-node", "workflow-1", config("Router"), agent, "main", "question")
+        self.assertEqual(execution.status, "completed")
+        self.assertTrue(execution.draft_id)
+        self.assertEqual(execution.error_code, None)
+
         store, lease, drafts = ExecutionStore(), WorkerLease(), FakeDraftBox()
         first = run_one(store, lease, drafts, "task-node", "event-1", "card-a")
         second = run_one(store, lease, drafts, "task-node", "event-2", "card-b")
