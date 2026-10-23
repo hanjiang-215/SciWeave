@@ -20,7 +20,7 @@ tags: [wiki, implementation]
 
 ## Implementation Contract
 
-- **代码位置与接口：** 在 `sci-weave/llm-wiki/src/llm_wiki/candidate_submission.py` 实现 `WikiCandidateService.submit(document_change, idempotency_key)`；复用 `WikiFormalQueryService`、ResourceReviewService、SQLiteStore 与 TerminusStore，不另建服务。
+- **代码位置与接口：** 在 `sci-weave/centre-control/research-wiki/src/llm_wiki/candidate_submission.py` 实现 `WikiCandidateService.submit(document_change, idempotency_key)`；复用 `WikiFormalQueryService`、ResourceReviewService、SQLiteStore 与 TerminusStore，不另建服务。
 - **接纳原子单元：** 每个 BufferSubmission 必须以一份 WikiDocument 变更的完整正文、结构化字段和完整 Resource Reference 集合为不可拆分输入；多个文档可由一个 Proposal 聚合，但每份内容仍按其完整引用集合验收。候选引用必须绑定精确 ResourceVersion ID 或符合规格的精确 WikiRevision ID，拒绝不存在、跨领域和指向其他 Proposal 候选的非法目标。
 - **隔离与幂等：** 依据精确 FormalWikiRevision 基准写入 TerminusDB 隔离 candidate branch/head；扩展 `TerminusStore.create_candidate_snapshot(domain_id, base_commit_ref, canonical_snapshot, idempotency_key)`，仅确认时返回精确 commit ref。内容不可变，SQLite 事务写入 WikiBufferSubmission、WikiProposal、WikiCandidateCommit 和 AuditEvent。规范 JSON/SHA-256 与稳定业务 ID 绑定提交身份、提交者、领域、基准和内容；重复同一输入返回原结果，复用身份提交不同内容返回 `idempotency_conflict`，绝不覆盖其他候选。
 - **资源资格门槛：** 待审/拒绝/撤回的精确资源引用允许留在隔离候选并显示其真实状态，但不能呈现为已批准，也不能创建可供 Project Owner Formal Publication Review 的有效请求。此处不代替资源资格审核或文档/引用审核。
@@ -39,3 +39,4 @@ tags: [wiki, implementation]
 
 - 2026-10-22：当前身份核对通过：本票 assignee 为 `hanjiang`，当前分支为 `feature/hanjiang`，`git config user.name` 为 `hanjiang`。
 - 2026-10-22：本轮复验 `uv sync --locked` 成功；`uv run --locked python -m unittest discover -s tests -v` 共 82 项，全部通过；`uv run --locked python -m compileall -q src tests` 成功。真实 TerminusDB 12.0.8 服务已启动，使用当前 PowerShell 进程变量指定本地地址 `http://127.0.0.1:6363`、本地临时验证数据库前缀 `sciweave_wiki_it` 和 Basic 凭据；命令 `uv run --locked python -m unittest discover -s tests -p 'test_*integration.py' -v` 共 12 项全部通过，覆盖真实 ResourceReviewService 精确资源资格查询、候选隔离分支及精确 Commit 写读回、Formal Wiki 快照、Owner 正式化、正式查询，以及 Owner 批准后资源撤回阻止激活。临时数据库由用例创建并清理，凭据未写入文件或仓库。
+- 2026-10-23：候选提交补强（未提交在 feature/hanjiang）：候选引用校验不再对每个引用重复解析「最新正式版本」，改为一次性读入提交基准的精确 FormalWikiRevision 快照并对每条 `wiki_revision_id` 引用验证该快照中恰好存在一个 `lifecycle_state=formal` 且领域匹配的目标，不存在则拒绝 `invalid_wiki_revision_target`；正式基准快照不可读时返回 `formal_reference_target_unavailable`，不授予候选资格。候选分支重试加入按分支标记去重（消息/作者匹配后直接对账返回，不再误报 `candidate_branch_conflict`）；`_persist` 增加持久化冲突检测（同 idempotency key 的已存候选 Commit 与本次返回不一致时抛错）。资格判定改为「引用无资格记录或资格 approved 才算 eligible」，避免未知资格被误判为否决。本轮复验 `uv run --locked python -m unittest discover -s tests -q` 共 97 项全部通过；`SCIWEAVE_RUN_TERMINUSDB_INTEGRATION=1 uv run --locked python -m unittest discover -s tests -p 'test_*integration.py' -q` 共 12 项全部通过；`uv run --locked python -m compileall -q src tests`、`git diff --check` 通过。

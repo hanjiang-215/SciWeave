@@ -11,7 +11,7 @@ alwaysApply: false
 2. 当前开发者身份必须能由当前分支 `feature/<开发者>` 明确确认。当前项目已有：
    - `feature/qiyueran`
    - `feature/hefan`
-   - `feature/zhanyunfei`
+   - `feature/hanjiang`
 3. 身份或目标分支无法明确时，先向用户确认，再进行任何文件修改。
 4. 开发工作只能发生在与当前开发者对应的 `feature/<开发者>` 分支上。`develop` 是集成分支，`master` 是稳定分支；只通过合并或 PR 集成，不直接在这两个分支上开发。
 5. 开始前检查目标分支是否包含最新的 `develop` 变更；需要同步时先说明将要执行的操作，并保留用户未提交的修改。

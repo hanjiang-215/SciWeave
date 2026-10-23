@@ -26,7 +26,7 @@ diff 无变化时输出“生成文件已是最新”，有变化时只列出 hu
 
 **2026-10-20T08:13:07Z**
 
-提交与 PR（2026-10-20）：提交 93ffb44 已推送到 origin/feature/zhanyunfei；Gitee Pull Request #13 https://gitee.com/qi-yueran/ai4science/pulls/13，目标分支 develop。验证：ticket_index.py render/check 通过（59 张工单、7 个模块），py_compile 通过，git diff --check 通过。
+提交与 PR（2026-10-20）：提交 93ffb44 已推送到 origin/feature/hanjiang；Gitee Pull Request #13 https://gitee.com/qi-yueran/ai4science/pulls/13，目标分支 develop。验证：ticket_index.py render/check 通过（59 张工单、7 个模块），py_compile 通过，git diff --check 通过。
 
 **2026-10-20T15:05:09Z**
 

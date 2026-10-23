@@ -6,7 +6,7 @@ links: [ai4-9322, ai4-6ljq, ai4-orpg, ai4-ujvn]
 created: 2026-10-23T02:53:55Z
 type: feature
 priority: 1
-assignee: zhanyunfei
+assignee: hanjiang
 tags: [mcp, mapping, wiki, audit, centre-control, implementation, ready-for-agent]
 ---
 # Research Mapping 与 LLM-Wiki 对外管理接口及权限分层

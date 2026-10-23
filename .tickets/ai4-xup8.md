@@ -76,3 +76,8 @@ Out of scope 中「消息队列产品选型」这一项已被现实超越：2026
 建议把该项改为「消息队列的产品选型已完成（Redpanda）；主题、分区、消费者组与投递语义由 ai4-te1v 定义」，避免本图继续把已决定的事列为范围外。
 
 相关改动：ai4-te1v 已从「不选产品」改为「产品已定，只定语义」。
+
+**2026-10-23 分支状态（地图 owner hanjiang 记录）**
+
+- `ai4-v19u`（Agent 套件接入与协作边界分支）已由 hanjiang 认领并收敛：套件三件套（MCP、Skills、Hooks）的职责与接入边界规格落为 `docs/superpowers/specs/2026-10-23-agent-suite-boundary-design.md`，继承 `ai4-dhpv` 两类 MCP 分工、`ai4-353s` 物理隔离与 `docs/端侧Agent运行时调研.md` 的运行时装载边界；Agent Kit manifest / Skills-Hooks 模板 / ZIP 交付维持 `ai4-jfvy` 的范围外结论。该分支规格已交付，关闭待子票 owner 与后续实现规划使用确认。
+- 消息协作分支（`ai4-te1v`）与端侧 Agent 分支（`ai4-kpvp`）仍由 Frank Qi 收敛，不在本地图侧再展开。
