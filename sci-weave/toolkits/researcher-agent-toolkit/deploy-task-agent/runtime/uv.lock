@@ -3,6 +3,6 @@ revision = 3
 requires-python = ">=3.12, <3.16"
 
 [[package]]
-name = "sciweave-work-agent-libs"
+name = "sciweave-work-agent-runtime"
 version = "0.1.0"
 source = { editable = "." }

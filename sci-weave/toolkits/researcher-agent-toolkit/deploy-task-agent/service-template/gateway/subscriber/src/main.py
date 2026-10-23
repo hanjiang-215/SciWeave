@@ -1,9 +1,9 @@
-from work_agent_libs import FakeQueue, ExecutionStore, FakeDraftBox, WorkerLease
+from work_agent_runtime import FakeQueue, WorkAgentRuntime
+
 
 queue = FakeQueue()
-store = ExecutionStore()
-lease = WorkerLease()
-drafts = FakeDraftBox()
+runtime = WorkAgentRuntime()
+queue.subscribe(runtime.handle_message)
 
 
 def main() -> None:

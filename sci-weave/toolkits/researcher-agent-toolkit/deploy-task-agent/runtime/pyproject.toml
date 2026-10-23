@@ -3,7 +3,7 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "sciweave-work-agent-libs"
+name = "sciweave-work-agent-runtime"
 version = "0.1.0"
 description = "Independent runtime libraries for a researcher-owned Work Agent"
 requires-python = ">=3.12,<3.16"

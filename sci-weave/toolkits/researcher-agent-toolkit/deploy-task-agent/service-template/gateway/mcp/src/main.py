@@ -1,9 +1,7 @@
-from work_agent_libs import ExecutionStore, FakeDraftBox, WorkerLease
+from work_agent_runtime import WorkAgentRuntime
 
-# The real service template only wires configured libraries; it does not reimplement state.
-store = ExecutionStore()
-lease = WorkerLease()
-drafts = FakeDraftBox()
+
+runtime = WorkAgentRuntime()
 
 
 def main() -> None:

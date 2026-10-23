@@ -1,23 +1,29 @@
 import threading
 import unittest
 
-from work_agent_libs import ExecutionStore, FakeDraftBox, FakeQueue, WorkerLease, run_one
+from work_agent_runtime import (
+    ExecutionStore,
+    FakeDraftBox,
+    FakeQueue,
+    WorkAgentRuntime,
+    WorkerLease,
+    run_one,
+)
 
 
 class WorkAgentRuntimeTests(unittest.TestCase):
     def test_fake_handoff_writes_draft_and_completes(self) -> None:
-        store, lease, drafts = ExecutionStore(), WorkerLease(), FakeDraftBox()
+        runtime = WorkAgentRuntime()
         queue = FakeQueue()
-        queue.subscribe(lambda target, event: run_one(store, lease, drafts, target, event, "card"))
+        queue.subscribe(runtime.handle_message)
         execution = queue.deliver("task-node", "handoff-1")
         self.assertEqual(execution.status, "completed")
         self.assertTrue(execution.draft_id)
 
     def test_duplicate_delivery_does_not_create_second_execution(self) -> None:
-        store, lease, drafts = ExecutionStore(), WorkerLease(), FakeDraftBox()
-        handler = lambda target, event: run_one(store, lease, drafts, target, event, "card")
-        first = handler("task-node", "handoff-1")
-        duplicate = handler("task-node", "handoff-1")
+        runtime = WorkAgentRuntime()
+        first = runtime.handle_message("task-node", "handoff-1", "card")
+        duplicate = runtime.handle_message("task-node", "handoff-1", "card")
         self.assertEqual(first.execution_id, duplicate.execution_id)
         self.assertEqual(first.draft_id, duplicate.draft_id)
 

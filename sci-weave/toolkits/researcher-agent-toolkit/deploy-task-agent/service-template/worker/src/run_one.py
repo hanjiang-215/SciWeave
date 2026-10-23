@@ -1,11 +1,11 @@
-from work_agent_libs import ExecutionStore, FakeDraftBox, WorkerLease, run_one
+from work_agent_runtime import WorkAgentRuntime
+
+
+runtime = WorkAgentRuntime()
 
 
 def main() -> None:
-    store = ExecutionStore()
-    lease = WorkerLease()
-    drafts = FakeDraftBox()
-    result = run_one(store, lease, drafts, "task-node", "handoff-event", "researcher-task-agent")
+    result = runtime.run_one("task-node", "handoff-event", "researcher-task-agent")
     print(result)
 
 

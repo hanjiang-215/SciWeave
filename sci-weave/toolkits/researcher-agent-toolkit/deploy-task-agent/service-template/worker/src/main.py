@@ -1,8 +1,7 @@
-from work_agent_libs import FakeDraftBox, ExecutionStore, WorkerLease
+from work_agent_runtime import WorkAgentRuntime
 
-store = ExecutionStore()
-lease = WorkerLease()
-drafts = FakeDraftBox()
+
+runtime = WorkAgentRuntime()
 
 
 def main() -> None:

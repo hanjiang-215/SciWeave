@@ -7,53 +7,62 @@ from typing import Callable
 
 
 @dataclass(frozen=True)
-class Execution:
+class ExecutionRecord:
+    """Public projection of one Work Agent execution."""
+
     execution_id: str
     target_id: str
     status: str
     draft_id: str | None = None
 
 
+# Short compatibility name for callers that used the initial runtime prototype.
+Execution = ExecutionRecord
+
+
 class ExecutionStore:
-    """Minimal durable-shaped state boundary for the template runtime."""
+    """Thread-safe execution record store used by the runtime boundary."""
 
     def __init__(self) -> None:
         self._lock = threading.RLock()
-        self._by_event: dict[str, Execution] = {}
-        self._by_target: dict[str, Execution] = {}
+        self._by_event: dict[str, ExecutionRecord] = {}
+        self._by_target: dict[str, ExecutionRecord] = {}
 
-    def enqueue(self, target_id: str, event_id: str) -> Execution:
+    def enqueue(self, target_id: str, event_id: str) -> ExecutionRecord:
         with self._lock:
             existing = self._by_event.get(event_id)
             if existing is not None:
                 return existing
-            execution = Execution(str(uuid.uuid4()), target_id, "queued")
+            execution = ExecutionRecord(str(uuid.uuid4()), target_id, "queued")
             self._by_event[event_id] = execution
             current = self._by_target.get(target_id)
             if current is None or current.status in {"completed", "failed"}:
                 self._by_target[target_id] = execution
             return execution
 
-    def start(self, execution: Execution) -> bool:
+    def start(self, execution: ExecutionRecord) -> bool:
         with self._lock:
             current = self._by_target.get(execution.target_id)
             if current is not execution or execution.status != "queued":
                 return False
-            updated = Execution(execution.execution_id, execution.target_id, "running")
+            updated = ExecutionRecord(execution.execution_id, execution.target_id, "running")
             self._replace(updated)
             return True
 
-    def complete(self, execution: Execution, draft_id: str) -> Execution:
+    def complete(self, execution: ExecutionRecord, draft_id: str) -> ExecutionRecord:
         with self._lock:
-            updated = Execution(execution.execution_id, execution.target_id, "completed", draft_id)
+            updated = ExecutionRecord(execution.execution_id, execution.target_id, "completed", draft_id)
             self._replace(updated)
             return updated
 
-    def get(self, execution_id: str) -> Execution | None:
+    def get(self, execution_id: str) -> ExecutionRecord | None:
         with self._lock:
-            return next((item for item in self._by_event.values() if item.execution_id == execution_id), None)
+            return next(
+                (item for item in self._by_event.values() if item.execution_id == execution_id),
+                None,
+            )
 
-    def _replace(self, updated: Execution) -> None:
+    def _replace(self, updated: ExecutionRecord) -> None:
         for event_id, current in self._by_event.items():
             if current.execution_id == updated.execution_id:
                 self._by_event[event_id] = updated
@@ -62,7 +71,7 @@ class ExecutionStore:
 
 
 class WorkerLease:
-    """Process-local target lease; the service template owns the process boundary."""
+    """Process-local lease that serializes work for one target."""
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
@@ -87,15 +96,30 @@ class FakeDraftBox:
 
 class FakeQueue:
     def __init__(self) -> None:
-        self._handler: Callable[[str, str], Execution] | None = None
+        self._handler: Callable[[str, str], ExecutionRecord] | None = None
 
-    def subscribe(self, handler: Callable[[str, str], Execution]) -> None:
+    def subscribe(self, handler: Callable[[str, str], ExecutionRecord]) -> None:
         self._handler = handler
 
-    def deliver(self, target_id: str, event_id: str) -> Execution:
+    def deliver(self, target_id: str, event_id: str) -> ExecutionRecord:
         if self._handler is None:
             raise RuntimeError("subscriber is not configured")
         return self._handler(target_id, event_id)
+
+
+class WorkAgentRuntime:
+    """The sole runtime seam used by all three service templates."""
+
+    def __init__(self, drafts: FakeDraftBox | None = None) -> None:
+        self.store = ExecutionStore()
+        self.lease = WorkerLease()
+        self.drafts = drafts or FakeDraftBox()
+
+    def handle_message(self, target_id: str, event_id: str, agent_definition: str = "") -> ExecutionRecord:
+        return run_one(self.store, self.lease, self.drafts, target_id, event_id, agent_definition)
+
+    def run_one(self, target_id: str, event_id: str, agent_definition: str) -> ExecutionRecord:
+        return self.handle_message(target_id, event_id, agent_definition)
 
 
 def run_one(
@@ -105,7 +129,7 @@ def run_one(
     target_id: str,
     event_id: str,
     agent_definition: str,
-) -> Execution:
+) -> ExecutionRecord:
     execution = store.enqueue(target_id, event_id)
     if not lease.acquire(target_id):
         return execution
