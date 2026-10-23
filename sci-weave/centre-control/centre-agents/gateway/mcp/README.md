@@ -7,7 +7,7 @@
 ## 配置与运行
 
 ```bash
-cd sci-weave/task-agent/gateway/mcp
+cd sci-weave/centre-control/centre-agents/gateway/mcp
 cp .env.example .env
 # 编辑 .env
 uv run --env-file .env sciweave-task-agent-gateway-mcp

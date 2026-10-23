@@ -1,6 +1,6 @@
 ---
 id: ai4-3xsp
-status: open
+status: closed
 deps: []
 links: []
 created: 2026-10-22T13:24:04Z
@@ -28,3 +28,9 @@ tags: [implementation, ready-for-agent, work-agent, centre-agent]
 - [ ] 迁后 Gateway 的既有测试仍然通过
 - [ ] 不改变执行状态机、工具面和 Worker 行为
 
+
+## Notes
+
+**2026-10-23T01:33:09Z**
+
+2026-10-23：完成迁移。将原 sci-weave/task-agent 的已跟踪项目组文件迁入 sci-weave/centre-control/centre-agents，保留 gateway/mcp、gateway/ingest、worker、项目组 pyproject.toml 与 uv.lock；未改状态机、工具面、Worker 行为，未实现 subscriber。更新 Centre Agent README 与 MCP README 中的目录路径。验证：在新目录执行 uv sync；Gateway MCP 测试 20 passed，Worker 测试 4 passed，compileall 通过，git diff --check 通过。旧路径不再有已跟踪源码。
