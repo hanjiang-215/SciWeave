@@ -25,6 +25,8 @@ python humans/competition/demo-evidence/check_iris_input.py humans/competition/d
 
 结果：`status: ok`，150 行、4 个特征列齐全、3 类各 50 条、无缺失值、快照哈希匹配官方文件。完整 JSON 见 `demo-evidence/iris_input_check.json`。
 
+**失败注入样本**：`demo-evidence/iris_data_failure_inject.csv` 是移除目标列的临时副本，用于演示 T1 拦截。运行同一检查脚本得到 `status: failed`、`reason_code: source_hash_mismatch`，退出码 1，不产出后续分析结果；恢复官方输入后重试成功。失败记录见 `demo-evidence/iris_input_failure.json`。这对应演示脚本第 4 段「失败注入 + 普通重试」。
+
 ## 最小数字证据卡（首版字段）
 
 | 字段 | 值 |
