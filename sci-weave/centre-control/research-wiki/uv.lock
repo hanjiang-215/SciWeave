@@ -3,6 +3,21 @@ revision = 3
 requires-python = ">=3.11"
 
 [[package]]
+name = "sciweave-audit-trail"
+version = "0.2.0"
+source = { directory = "../shared/audit-trail" }
+
+[package.metadata]
+requires-dist = [{ name = "pytest", marker = "extra == 'test'", specifier = ">=8" }]
+provides-extras = ["test"]
+
+[[package]]
 name = "sciweave-llm-wiki"
 version = "0.1.0"
 source = { editable = "." }
+dependencies = [
+    { name = "sciweave-audit-trail" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "sciweave-audit-trail", directory = "../shared/audit-trail" }]
