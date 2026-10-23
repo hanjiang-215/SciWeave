@@ -77,7 +77,7 @@ class WikiCandidateService:
             return _result("rejected", "invalid_submission", "")
         if not _valid_document(document, submitter) or not isinstance(references, list):
             return _result("rejected", "invalid_document", submission_id)
-        reason = self._validate_references(references, domain, document)
+        reason = self._validate_references(references, domain, document, base_id)
         if reason:
             return _result("rejected", reason, submission_id, proposal_id)
 
@@ -140,9 +140,10 @@ class WikiCandidateService:
             commit = connection.execute("SELECT * FROM wiki_candidate_commit WHERE proposal_id=?", (proposal_id,)).fetchone()
         return self._result_from_rows(row, commit)
 
-    def _validate_references(self, references, domain, document):
+    def _validate_references(self, references, domain, document, base_id):
         seen = set()
         revision_id = document.get("wiki_revision_id")
+        formal_snapshot = None
         for ref in references:
             if not isinstance(ref, dict) or ref.get("@type") != "ResourceReference":
                 return "invalid_reference"
@@ -158,10 +159,31 @@ class WikiCandidateService:
                 return "duplicate_reference"
             seen.add(refid)
             if wid:
-                formal = self._sqlite.get_formal_revision(wid)
-                if not formal or formal.wiki_domain_id != domain:
+                if formal_snapshot is None:
+                    base_revision = self._sqlite.get_formal_revision(base_id)
+                    if base_revision is None or base_revision.wiki_domain_id != domain:
+                        return "stale_base"
+                    try:
+                        formal_snapshot = self._terminus.read_exact_snapshot(
+                            base_revision.terminus_store_id, self._database,
+                            base_revision.formal_branch_id, base_revision.formal_commit_hash,
+                        )
+                    except Exception:
+                        return "formal_reference_target_unavailable"
+                    if not isinstance(formal_snapshot, WikiSnapshotRead) or formal_snapshot.status != "confirmed" or (
+                        formal_snapshot.store_id, formal_snapshot.database,
+                        formal_snapshot.branch_id, formal_snapshot.commit_hash,
+                    ) != (
+                        base_revision.terminus_store_id, self._database,
+                        base_revision.formal_branch_id, base_revision.formal_commit_hash,
+                    ):
+                        return "formal_reference_target_unavailable"
+                matches = [item for item in formal_snapshot.documents if isinstance(item, dict)
+                           and item.get("wiki_revision_id") == wid
+                           and item.get("lifecycle_state") == "formal"
+                           and item.get("wiki_domain_id", domain) == domain]
+                if len(matches) != 1:
                     return "invalid_wiki_revision_target"
-                return "candidate_wiki_revision_target_not_allowed"
         return None
 
     def _persist(self, change, key, digest, snapshot_digest, outcome, base_id):
@@ -173,12 +195,20 @@ class WikiCandidateService:
         with self._sqlite.connection() as connection:
             connection.execute("BEGIN IMMEDIATE")
             current = connection.execute("SELECT current_formal_revision_id FROM wiki_current_formal_revision WHERE wiki_domain_id=?", (domain,)).fetchone()
+            existing = connection.execute("SELECT * FROM wiki_candidate_commit WHERE proposal_id=?", (proposal_id,)).fetchone()
+            if existing:
+                if (existing["terminus_store_id"], existing["branch_id"], existing["commit_hash"], existing["content_digest"]) != (outcome.store_id, outcome.branch_id, outcome.commit_hash, digest):
+                    raise ValueError("candidate identity conflicts with persisted snapshot")
+                connection.execute("UPDATE wiki_buffer_submission SET status='candidate_created' WHERE idempotency_key=?", (key,))
+                connection.execute("INSERT OR IGNORE INTO wiki_audit_event VALUES (?,?,?,?,?,?,?,?,?,?)", (event_id, now, submitter, "wiki_candidate_submitted", "WikiProposal", proposal_id, "confirmed", "candidate_created", canonical_json({"submission_id": submission_id, "candidate_commit_id": candidate_id}), None))
+                connection.commit()
+                return
             if (None if current is None else current[0]) != base_id:
                 raise ValueError("stale base")
             connection.execute("INSERT INTO wiki_proposal VALUES (?,?,?,?,?,?,?,?)", (proposal_id, domain, base_id, outcome.store_id, outcome.branch_id, "candidate", submitter, now))
             connection.execute("INSERT INTO wiki_candidate_commit VALUES (?,?,?,?,?,?,?,?,?,?,?)", (candidate_id, domain, proposal_id, outcome.store_id, outcome.branch_id, outcome.commit_hash, base_id, digest, snapshot_digest, submitter, now))
             connection.execute("UPDATE wiki_buffer_submission SET status='candidate_created' WHERE idempotency_key=?", (key,))
-            connection.execute("INSERT INTO wiki_audit_event VALUES (?,?,?,?,?,?,?,?,?,?)", (event_id, now, submitter, "wiki_candidate_submitted", "WikiProposal", proposal_id, "confirmed", "candidate_created", canonical_json({"submission_id": submission_id, "candidate_commit_id": candidate_id}), None))
+            connection.execute("INSERT OR IGNORE INTO wiki_audit_event VALUES (?,?,?,?,?,?,?,?,?,?)", (event_id, now, submitter, "wiki_candidate_submitted", "WikiProposal", proposal_id, "confirmed", "candidate_created", canonical_json({"submission_id": submission_id, "candidate_commit_id": candidate_id}), None))
             connection.commit()
 
     def _set_status(self, key, status):
@@ -199,10 +229,15 @@ class WikiCandidateService:
                 read.store_id, read.database, read.branch_id, read.commit_hash
             ) == (commit["terminus_store_id"], self._database, commit["branch_id"], commit["commit_hash"]):
                 docs = list(read.documents)
+            else:
+                return _result("confirmed", "candidate_snapshot_unavailable", submission["submission_id"], submission["proposal_id"], commit["candidate_commit_id"], commit["branch_id"], commit["commit_hash"], commit["candidate_snapshot_digest"])
         except Exception:
-            pass
+            return _result("confirmed", "candidate_snapshot_unavailable", submission["submission_id"], submission["proposal_id"], commit["candidate_commit_id"], commit["branch_id"], commit["commit_hash"], commit["candidate_snapshot_digest"])
         refs = tuple(WikiCandidateReference(_text(r.get("reference_id")) or "", _text(r.get("target_resource_version_id")), _text(r.get("target_wiki_revision_id")), _text(r.get("reference_role")) or "", _text(r.get("body_locator")), self._qualification(r)) for r in docs if isinstance(r, dict) and r.get("@type") == "ResourceReference")
-        eligible = bool(refs) and all(r.qualification and r.qualification.status == "approved" for r in refs if r.target_resource_version_id)
+        eligible = all(
+            r.qualification is None or r.qualification.status == "approved"
+            for r in refs
+        )
         return WikiCandidateSubmissionResult("confirmed", "ok", submission["submission_id"], submission["proposal_id"], commit["candidate_commit_id"], commit["branch_id"], commit["commit_hash"], commit["candidate_snapshot_digest"], refs, eligible)
 
     def _qualification(self, reference):
@@ -248,6 +283,10 @@ def _required(data, key):
 
 def _text(value): return value.strip() if isinstance(value, str) and value.strip() else None
 
-def _result(status, reason, submission, proposal=None): return WikiCandidateSubmissionResult(status, reason, submission, proposal)
+def _result(status, reason, submission, proposal=None, candidate=None, branch=None, commit=None, digest=None):
+    return WikiCandidateSubmissionResult(
+        status, reason, submission, proposal, candidate, branch, commit, digest,
+        references=(), owner_review_eligible=False,
+    )
 
 def _now(): return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")

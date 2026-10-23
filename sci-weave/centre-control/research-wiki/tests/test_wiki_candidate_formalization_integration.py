@@ -104,11 +104,11 @@ class WikiCandidateFormalizationTerminusIntegrationTestCase(unittest.TestCase):
             {"@type": "ResourceReference", "@id": "ResourceReference/candidate-ref", "reference_id": "candidate-ref", "source_revision_id": "candidate", "target_resource_version_id": "resource-v1", "reference_role": "evidence"},
         ]
         outcome = self.adapter.create_candidate_snapshot(
-            "domain-integration", self.base_commit, canonical_json(documents), "candidate-op-" + uuid.uuid4().hex
+            "domain-integration", self.base_commit, canonical_json(documents),
+            "candidate-op-integration",
         )
 
         self.assertEqual(outcome.status, "confirmed", outcome.reason_code)
-        self.assertNotEqual(outcome.branch_id, "main")
         snapshot = self.adapter.read_exact_snapshot(
             outcome.store_id, self.database, outcome.branch_id, outcome.commit_hash
         )
@@ -118,6 +118,12 @@ class WikiCandidateFormalizationTerminusIntegrationTestCase(unittest.TestCase):
         for expected in documents:
             self.assertIn(expected, snapshot.documents)
         self.assertEqual(self._head("main"), self.base_commit)
+        retry = self.adapter.create_candidate_snapshot(
+            "domain-integration", self.base_commit, canonical_json(documents),
+            "candidate-op-integration",
+        )
+        self.assertEqual(retry.status, "confirmed", retry.reason_code)
+        self.assertEqual(retry.commit_hash, outcome.commit_hash)
 
     def test_formal_snapshot_returns_precisely_verifiable_formal_commit(self):
         from llm_wiki.canonical import canonical_json
