@@ -1,5 +1,5 @@
 {
-  "name": "llm-wiki",
+  "name": "research-wiki",
   "version": "1.0.0",
   "description": "Read-only curated knowledge lookup for research context.",
   "environment": ["LLM_WIKI_MCP_URL", "LLM_WIKI_MCP_TOKEN"],

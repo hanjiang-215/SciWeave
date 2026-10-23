@@ -16,7 +16,7 @@ class McpRegistryTests(unittest.TestCase):
         registry = load_mcp_registry()
         self.assertEqual(
             {resource.name for resource in registry.resources},
-            {"research-mapping", "llm-wiki", "draft-box"},
+            {"research-mapping", "research-wiki", "draft-buffer"},
         )
         mapping = registry.get("research-mapping")
         self.assertIn("research_map_search", mapping.tools)

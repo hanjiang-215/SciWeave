@@ -1,5 +1,5 @@
 {
-  "name": "draft-box",
+  "name": "draft-buffer",
   "version": "1.0.0",
   "description": "Write and update the researcher's draft buffer.",
   "environment": ["DRAFT_BUFFER_MCP_URL", "DRAFT_BUFFER_MCP_TOKEN"],

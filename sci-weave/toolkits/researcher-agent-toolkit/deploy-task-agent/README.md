@@ -1,26 +1,34 @@
 # deploy-task-agent
 
-研究员端侧 Task Agent 套件。套件与 `sci-weave/centre-control/centre-agents` 独立，不使用 path 依赖。
+研究员端 Task Agent 套件，按目标交付结构组织：
 
-## 组成
+- `runtime/`：状态记录、Worker Lease、配置模型和单 Worker 多 Agent 工作流。
+- `service-template/`：`gateway/mcp`、`gateway/subscriber`、`worker` 三个启动壳。
+- `agent-definitions/`：Agent 定义、四类工作流示例和 schema。
+- `agent-libs/`：标准 Agent 行为资源。
+- `mcp-libs/`：标准 MCP 工具描述资源。
+- `local-agent-libs/`、`local-mcp-libs/`：研究员自定义资源占位与说明。
+- `skills/deploy-task-agent-skills/`：创建、编排、配置 MCP、验证和排障技能组；每个技能带自己的 `references/`。
+- `hooks/`、`systemd/`：harness 检查和用户级常驻服务。
 
-- `runtime/`：Work Agent 运行时内核，提供状态记录、Worker Lease、消息幂等和一轮运行的稳定接口；不依赖 `centre-agents`。
-- `service-template/`：`gateway/mcp`、`gateway/subscriber`、`worker` 三个服务壳。服务壳只负责启动和装配 runtime，不重复实现状态机或租约。
-- `agent-definitions/`：可复制的 fast-agent 卡片样例。研究员只能替换这里的 Agent 定义。
-- `skills/create-task-agent/`：给 Personal Agent 的操作 skill，只覆盖复制卡片、修改指令和允许的领域 MCP、装入定义槽。
-- `systemd/`：Linux 用户级常驻服务单元，分别启动 `gateway/mcp` 和 `gateway/subscriber`。
-- `hooks/check-services.sh`：harness 打开时检查并补启动两个用户服务；不会在 harness 关闭时停止服务。
+套件与 `sci-weave/centre-control/centre-agents` 独立，不使用 path 依赖。Personal Agent 只能修改 Agent 定义、工作流声明和资源配置，不能修改 runtime、Worker Lease、Gateway 或服务模板。
 
 ## 本地验证
 
 ```bash
-cd sci-weave/toolkits/researcher-agent-toolkit/deploy-task-agent/runtime
+cd runtime
+uv sync
+uv run python -m unittest discover -s tests -v
+cd ../agent-libs
+uv sync
+uv run python -m unittest discover -s tests -v
+cd ../mcp-libs
 uv sync
 uv run python -m unittest discover -s tests -v
 ```
 
-测试使用内存状态、假上游交接和假草稿箱，不连接真实队列、真实草稿箱或真实模型。真实部署时由研究员把队列地址、消费者组、SQLite 路径、持久目录、领域 MCP 地址和草稿箱地址填入自己的 `.env`；套件不保存凭据。
+测试使用内存状态、假上游交接和假草稿箱，不连接真实队列、真实草稿箱或真实模型。真实地址、令牌和本地扩展路径只通过环境变量配置。
 
 ## 启动边界
 
-安装两个 systemd 用户服务后执行 `systemctl --user enable --now sciweave-task-agent-mcp.service sciweave-task-agent-subscriber.service`。两个 Gateway 进程（`gateway/mcp` 与 `gateway/subscriber`）应由研究员机器上的用户级自启动机制常驻。Personal Agent 打开 harness 时只能检查并补启动，不能在关闭 harness 时停止它们，也不能修改状态机、租约或 Gateway 进程。
+安装两个 systemd 用户服务后执行 `systemctl --user enable --now sciweave-task-agent-mcp.service sciweave-task-agent-subscriber.service`。打开 harness 时只执行 `hooks/check-services.sh` 检查并补启动；关闭 harness 不停止用户级常驻服务。

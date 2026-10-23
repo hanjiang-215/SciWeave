@@ -1,0 +1,12 @@
+# Minimal Agent definition schema
+
+```yaml
+name: string
+identity: string
+instruction: string
+model: string
+allowed_domain_mcps: [string]
+resources: [string]
+```
+
+Workflow definitions add `type`, `entry_agent`, `sub_agents`, `summarizer`, and `final_writer`.
