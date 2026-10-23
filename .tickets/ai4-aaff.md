@@ -125,3 +125,9 @@ tags: [wayfinder:prototype, product, sciencepal, ai4science]
 - 本机已运行产出 `iris_baseline_result.json`：验证集 45 条，准确率 0.955556（43/45），混淆矩阵完整；命令与结果见证据卡。
 - 因此验收「提供可执行的初始 Research Mapping」已可勾选：T1 检查脚本 + T2 基线脚本 + 固定快照组合成可运行的演示输入链，TaskNode 依赖关系（T1→T2→T3，可选 T4 与失败注入）在证据卡中明确。
 - SciencePal 硬门槛保持不变：本机结果只证明闭环可复现，不替代 SciencePal 实际承接执行；SciencePal 接入后需封装同参数实现并回填环境版本与执行记录。剩余未勾选验收项（计时演示脚本、真实成功/失败证据、5 页说明）继续待 SciencePal 证据。
+
+**2026-10-23 演示脚本与项目说明草稿（hanjiang）**
+
+- 新增 `humans/competition/demo-script.md`：3–5 分钟演示脚本草稿，六段编排（开场痛点、T1 检查、T2 基线、失败注入+重试、路线变更+Proposal、审计收尾），预计合计约 280 秒；每段含演示动作、口播要点与预期结果。实际计时与录制待 SciencePal 接入后复核，「已计时演示脚本」验收项暂不勾选。
+- 新增 `humans/competition/project-summary.md`：≤5 页项目说明草稿（技术方案、创新点、验证结果、局限、后续计划）与原创性/资源使用声明草稿，覆盖赛事要求的模型/数据/代码/API 来源与赛期边界。
+- 以上两项均不依赖 SciencePal，已一并提交；SciencePal 实演证据、真实成功/失败轨迹与 5 页定稿仍在赛事硬门槛之后。
