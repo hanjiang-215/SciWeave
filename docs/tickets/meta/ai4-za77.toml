@@ -1,3 +1,3 @@
 # ai4-za77 的索引归属与简介（人工维护）
 module = ["agent"]
-summary = "定义建立新 Work Agent 的套件内容与形态，含三组件骨架模板、Agent 定义模板、初始化脚本与使用说明"
+summary = "研究员套件分为 skill、服务模板与运行时 libs，不与中央 Centre Agent 共享源码"

@@ -42,7 +42,7 @@ tags: [audit, centre-control, implementation, enhancement, ready-for-agent]
 12. 作为中央服务开发者，我想让上下文管理器自动填耗时，以便不必自己计时。
 13. 作为中央服务开发者，我想在审计库不可写时让写操作立刻失败，以便不会出现「业务改了但没留痕」。
 14. 作为中央服务开发者，我想让读操作在审计库不可写时只告警不中断，以便一次审计故障不会拖垮查询。
-15. 作为中央服务开发者，我想用一个函数按环境变量打开审计库连接，以便不必自己拼装 PRAGMA 配置。
+15. 作为中央服务开发者，我想用一个函数按调用方传入的路径打开审计库连接并设好 PRAGMA，以便本包不读取环境变量，也不必由调用方自己拼装 PRAGMA。
 16. 作为数据治理责任方，我想让审计库只存参数摘要与对象标识，以便审计库不会变成第二份内容存储。
 17. 作为数据治理责任方，我想让审计库拒绝任何入参正文字段，以便这一约束不靠接入方自觉。
 18. 作为中央服务开发者，我想让建表函数支持多语句 DDL，以便加索引时不会抛 `ProgrammingError`。
@@ -75,11 +75,11 @@ tags: [audit, centre-control, implementation, enhancement, ready-for-agent]
 
 ### 写入语义
 
-**读调用 fail-open。** 单条 `phase='attempted'` 记录，`result` 固定 `unknown`（读调用结束时调用方仍可用 `finish_call` 补一条 `completed`，本包不强求）。写入失败记一条 `WARNING` 级日志后返回 `None`，调用方照常返回业务结果。
+**读调用 fail-open。** 单条 `phase='attempted'` 记录，`result` 固定 `unknown`。成功返回 `call_id`，失败记一条 `WARNING` 后返回 `None`，不抛异常，调用方照常返回业务结果。不能对这条记录调用 `finish_call`。
 
 **写调用两阶段。** `begin_call` 落 `phase='invoked'`，失败抛异常且**业务一行都不执行**；业务结束调用 `finish_call` 落第二条 `phase='completed'`，两条共用同一个 `call_id`。业务失败同样要调 `finish_call`，`result` 记 `error` 并带 `error_code`。
 
-**`finish_call` 失败不回滚业务。** 它记一条 `WARNING` 后返回，库里留下一条未配对的 `invoked` 作为缺口证据。这与父票的表述一致：父票明说「业务已提交但 completed 写失败时，缺口表现为一条未配对的 invoked」，因此第二阶段的失败不能反过来要求回滚已提交的业务。两阶段的保证是**审计库不可用时写操作跑不起来**，不是跨库原子。
+**`finish_call` 的两种失败分开。** 数据库写失败记一条 `WARNING` 后返回，不抛，库里留下一条未配对的 `invoked` 作为缺口证据。这与父票的表述一致：父票明说「业务已提交但 completed 写失败时，缺口表现为一条未配对的 invoked」，因此第二阶段的数据库失败不能反过来要求回滚已提交的业务。对不上尚未完成的 `invoked`（没有这条、已经配过、或只有 `attempted`）是调用错误，抛 `AuditValidationError`，不另插一行。两阶段的保证是**审计库不可用时写操作跑不起来**，不是跨库原子。
 
 **审计库不与业务事务共用连接。** 每次追加前检查连接的 `in_transaction`：为真则抛异常，说明账本追加不能加入业务事务（否则业务回滚会连带删除审计记录，与 fail-closed 的前提相反）。为假时包自己用 `BEGIN IMMEDIATE` 开事务、追加、立即提交，不跨业务操作。
 
@@ -89,13 +89,13 @@ tags: [audit, centre-control, implementation, enhancement, ready-for-agent]
 
 `CallRecord`（dataclass）：调用记录形状与字段校验，不含 `call_id`、`occurred_at`、`phase`、`result`。
 
-`open_connection(path=None)`：按 `SCIWEAVE_AUDIT_SQLITE_PATH` 打开连接并设 PRAGMA，返回 `row_factory` 已设好的连接。本函数不读 `.env`、不建表——`.env` 由 `uv run --env-file` 注入。
+`open_connection(path, *, busy_timeout_ms=5000, journal_mode="WAL")`：按调用方传入的路径打开连接并设 PRAGMA，返回 `row_factory` 已设好的连接。`path` 必填。本函数不读环境变量、不读 `.env`、不建表。打不开时抛 `AuditUnavailableError`。不传 `check_same_thread=False`，包内不加锁。调用方在进程启动时打开一次、调用一次 `init_audit_table`、之后复用，退出时自己关闭；这两步任一失败则调用方不起服务，包不自己退出进程。并发请求由调用方在包外串行化。
 
-`init_audit_table(conn)`：建表并设 PRAGMA，幂等。必须用 `executescript` 执行多语句 DDL——旧实现用单条 `execute`，加索引即抛 `ProgrammingError`。
+`init_audit_table(conn)`：建表并设 PRAGMA，幂等。必须用 `executescript` 执行多语句 DDL——旧实现用单条 `execute`，加索引即抛 `ProgrammingError`。建表失败抛 `AuditUnavailableError`。
 
 `record_attempted(conn, record)`：读调用的单条记录，fail-open。
 
-`begin_call(conn, record)` / `finish_call(conn, call_id, *, result, error_code=None, duration_ms=None)`：写调用的两阶段。
+`begin_call(conn, record)` / `finish_call(conn, call_id, *, result, error_code=None, duration_ms=None)`：写调用的两阶段。`finish_call` 只配对还没有 `completed` 的 `invoked`。
 
 `call_scope(conn, record, *, error_code=None)`：上下文管理器，内部调上述两阶段并自动填 `duration_ms`；正常退出记 `ok`，抛异常记 `error` 后原样重抛。这是推荐的用法，接入方的装饰器只需包住这个上下文管理器。
 
@@ -109,13 +109,11 @@ tags: [audit, centre-control, implementation, enhancement, ready-for-agent]
 
 ### 配置
 
-| 变量 | 必填 | 默认 | 说明 |
-| --- | --- | --- | --- |
-| `SCIWEAVE_AUDIT_SQLITE_PATH` | 是 | 无 | 审计库文件路径 |
-| `SCIWEAVE_AUDIT_BUSY_TIMEOUT_MS` | 否 | `5000` | SQLite `busy_timeout` |
-| `SCIWEAVE_AUDIT_JOURNAL_MODE` | 否 | `WAL` | `journal_mode` |
+本包不读取环境变量，不提交 `.env.example`。它不是可独立启动的部署单元。
 
-数值与模式有默认值不违反「路径与地址不得硬编码」——那条约束管的是部署路径、监听地址与端口。本包不提交 `.env.example`：它不是一个可独立启动的部署单元，三个变量由各接入方写进自己的 `.env.example`。
+`open_connection` 的 `path` 必填。`busy_timeout_ms` 默认 `5000`，`journal_mode` 默认 `WAL`；两者是函数参数，不是环境变量。数值与模式的默认值不违反「路径与地址不得硬编码」——那条约束管的是部署路径、监听地址与端口。
+
+各接入方在自己的 `.env.example` 声明 `SCIWEAVE_AUDIT_SQLITE_PATH`，由进程启动代码读出后传入。约定各中央服务传入同一路径，否则账本会拆开；包不强制这一点。
 
 内存库不支持 WAL，PRAGMA 设置失败时静默跳过（记 `DEBUG` 日志），不能让测试因此失败。
 
@@ -141,7 +139,8 @@ tags: [audit, centre-control, implementation, enhancement, ready-for-agent]
 - 读调用 fail-open：用只读文件或关闭的连接构造写入失败，断言返回 `None` 且不抛异常
 - 两阶段配对：`begin_call` 后 `find_unfinished_calls` 能查到；`finish_call` 后不再出现；两条记录共用 `call_id`
 - 写调用 fail-closed：审计库不可写时 `begin_call` 抛 `AuditUnavailableError`
-- `finish_call` 失败不抛：构造第二阶段失败，断言只返回、库里留下未配对 `invoked`
+- `finish_call` 数据库失败不抛：构造第二阶段失败，断言只返回、库里留下未配对 `invoked`
+- `finish_call` 对不上未配对 `invoked` 时抛 `AuditValidationError` 且不插入；对 `attempted` 调用同样抛错
 - `call_scope` 正常路径记 `ok`、异常路径记 `error` 后原样重抛，且 `duration_ms` 非空
 - 业务事务保护：连接已 `BEGIN` 时追加抛异常
 - 事务自管：连接干净时追加后 `conn.in_transaction` 为假（已提交）
@@ -158,7 +157,7 @@ tags: [audit, centre-control, implementation, enhancement, ready-for-agent]
 - **不改端侧执行遥测。** `sci-weave/task-agent` 的 `audit_events` 保持现状，端侧不写中央账本。
 - **不改领域治理记录。** Mapping / Wiki / Buffer 各自的审计表与正式事实记录不接本包、不迁移、不合并。
 - **不做身份校验。** `caller_id` 由调用方套件提供，包与 MCP 入口都不解析、不校验；多人共用一个套件时账本会合并为同一标识，这是已接受的限制。
-- **不加幂等键。** 同一调用重复记录就是两条记录；去重不在本包。
+- **不加幂等键。** 两次独立调用就是两条记录；去重不在本包。`finish_call` 拒绝重复配对，不是幂等键。
 - **不建独立审计服务、不建 MCP 工具、看板不在此**。查询是进程内函数。
 - **不做历史数据迁移。** `audit_event` 表从未在任何环境建过，无存量数据需要转换。
 
@@ -167,5 +166,7 @@ tags: [audit, centre-control, implementation, enhancement, ready-for-agent]
 **对「本地日志」的回答。** 你问的「还需要本地日志吗」：包本身只往标准库 logger 写 `WARNING`/`DEBUG`，不落文件。理由是审计记录已经落在 SQLite 里，再写一份文本日志会形成第二份不可信副本；而 fail-open 场景必须留下一点痕迹，logger 是最轻的形式，落不落盘由接入方的 handler 配置决定。
 
 **`occurred_at` 精度统一到微秒。** 旧实现在此没有分歧，保持 `timespec="microseconds"`，避免与其他时间字段混用不同精度排序不稳。
+
+**2026-10-23：连接由调用方打开。** 原先 `open_connection(path=None)` 在缺路径时读 `SCIWEAVE_AUDIT_SQLITE_PATH`，`busy_timeout` 与 `journal_mode` 也各有环境变量。共享包没有自己的进程，改为路径必填、后两个参数带默认值，包内不读环境。变量名仍由各接入方写进自己的 `.env.example`。同日补上生命周期：启动时打开并建表一次，之后复用；保持 `check_same_thread=True`，包不加锁。打开或建表失败抛 `AuditUnavailableError`，调用方据此不起服务，包不自己退出进程。`caller_id` 是套件调用标识，不是 Gateway 的 Caller。读调用只有一条 `attempted`，删去「可用 `finish_call` 再补 `completed`」。`finish_call` 对不上未配对 `invoked` 时抛 `AuditValidationError`。
 
 **现状核对（2026-10-22）。** 目录迁移已完成且 Git 识别为 rename；迁移后旧测试 11 个项目全绿，说明迁移本身未破坏任何东西。包内源码仍是旧的存储层审计形态：`audit_event` 表、`Operation` 五枚举、`conn.in_transaction` 校验、`conn.execute(_SCHEMA_SQL)` 单语句 DDL。全仓库对本包零引用，无下游需要跟随。

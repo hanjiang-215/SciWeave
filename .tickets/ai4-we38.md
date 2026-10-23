@@ -98,3 +98,9 @@ tags: [wayfinder:grilling, agent, task-agent, endpoint]
 - 明确注册记录只是事实留痕，不是鉴权依据。
 - 删去 `sci-weave/centre-control/task-agents/` 空目录：它的位置暗示「部署在中央」，与端侧自持矛盾。task-agent 源码留在 `sci-weave/task-agent/`。
 - 新增约束：task-agent 与 centre-agent 都是消息驱动，MCP 只承担返修与人工作业，不承担任务下发。这条推翻了若干已关闭票中的 Owner 命令语义，见「Agent 以消息驱动，MCP 只负责返修」。
+
+**2026-10-22T13:07:00Z**
+
+2026-10-22 修订，依据 ADR-0002。推翻同日「task-agent 源码留在 sci-weave/task-agent/」。
+
+Centre Agent 的源码迁到 sci-weave/centre-control/centre-agents，现有 sci-weave/task-agent 只作为 git mv 的起点，两处落地后删除。Task Agent 不在中央运行，发给研究员的是 deploy-task-agent 套件。删去 centre-control/task-agents 空目录这条仍然成立。

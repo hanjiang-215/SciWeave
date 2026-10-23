@@ -39,3 +39,11 @@ tags: [audit, shared, ready-for-agent]
 
 None (can start immediately)
 
+
+**2026-10-22T15:31:08Z**
+
+2026-10-22 作废说明（本票保持关闭，正文不删）。
+
+本票交付的存储层写入面已从 sci-weave/centre-control/shared/audit-trail 删除，包括 audit_event、write_audit_event、AuditEvent、Operation、TransactionRequiredError。不得按本票把这套接口加回去。
+
+后续只按「留痕包改造为接口层调用账本」(ai4-gvan) 重写调用账本。规格仍是「中央留痕工具共享包实现规格」(ai4-tg3v)。
