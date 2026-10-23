@@ -40,9 +40,14 @@ tests/                           标准库 unittest
 | `SCIWEAVE_MAPPING_TERMINUSDB_TOKEN` | 可选 JWT 访问令牌；与下面两项二选一 |
 | `SCIWEAVE_MAPPING_TERMINUSDB_USERNAME` | 可选 HTTP Basic 用户名；本机固定容器用 `admin` |
 | `SCIWEAVE_MAPPING_TERMINUSDB_PASSWORD` | 可选 HTTP Basic 密码；本机固定容器默认为存储密钥 |
+| `SCIWEAVE_MAPPING_DASHBOARD_MODE` | 设置为 `1` 时启动只读看板来源端点，而不是一次性打印查询摘要 |
+| `SCIWEAVE_MAPPING_DASHBOARD_HOST` | 看板来源端点监听地址 |
+| `SCIWEAVE_MAPPING_DASHBOARD_PORT` | 看板来源端点监听端口，测试可用 `0` |
+| `SCIWEAVE_MAPPING_DASHBOARD_TOKEN` | 可选 Bearer 令牌；配置后来源端点要求只读认证 |
 
-## 验证
+## Web 看板只读来源
 
+设置 `SCIWEAVE_MAPPING_DASHBOARD_MODE=1` 后，进程提供 `GET /api/dashboard/source/mapping`。该端点只调用 `FormalQueryService.get_current`，只投影当前已激活且精确 Commit 已确认的正式 TaskNode/DependencyEdge；候选分支、未激活 Commit 和不一致结果不会返回图内容。`POST`、`PUT`、`PATCH`、`DELETE` 均返回 405。可配置 `SCIWEAVE_MAPPING_DASHBOARD_TOKEN` 保护读取端点；令牌只由服务端校验，不写入快照。
 ```bash
 uv sync --locked
 uv run --locked python -m unittest discover -s tests -v

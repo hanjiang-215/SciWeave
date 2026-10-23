@@ -35,7 +35,15 @@ tests/                            标准库 unittest
 | `SCIWEAVE_WIKI_TERMINUSDB_STORE` | TerminusDB URL 中对应的组织/Store 段 |
 | `SCIWEAVE_WIKI_TERMINUSDB_TOKEN` | 可选访问令牌；与 Basic 凭据二选一 |
 | `SCIWEAVE_WIKI_TERMINUSDB_USERNAME` | 可选 HTTP Basic 用户名（本机固定容器为 `admin`） |
-| `SCIWEAVE_WIKI_TERMINUSDB_PASSWORD` | 可选 HTTP Basic 密码（本机固定容器默认为存储密钥） |
+| `SCIWEAVE_WIKI_TERMINUSDB_PASSWORD` | 可选 HTTP Basic 密码；本机固定容器默认为存储密钥 |
+| `SCIWEAVE_WIKI_DASHBOARD_MODE` | 设置为 `1` 时启动只读看板来源端点，而不是一次性打印查询摘要 |
+| `SCIWEAVE_WIKI_DASHBOARD_HOST` | 看板来源端点监听地址 |
+| `SCIWEAVE_WIKI_DASHBOARD_PORT` | 看板来源端点监听端口，测试可用 `0` |
+| `SCIWEAVE_WIKI_DASHBOARD_TOKEN` | 可选 Bearer 令牌；配置后来源端点要求只读认证 |
+
+## Web 看板只读来源
+
+设置 `SCIWEAVE_WIKI_DASHBOARD_MODE=1` 后，进程提供 `GET /api/dashboard/source/wiki`。该端点只调用 `WikiFormalQueryService` 的正式查询，并按精确 ResourceVersion 投影资格状态；正式正文不出域，候选只返回 Proposal/提交身份、状态和必要的精确引用资格。候选快照不可读时保留候选身份并显示不可用事实，不伪装成正式内容。`POST`、`PUT`、`PATCH`、`DELETE` 均返回 405。可配置 `SCIWEAVE_WIKI_DASHBOARD_TOKEN` 保护读取端点。
 
 ## 验证
 

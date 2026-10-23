@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import json
+import os
 
 from research_mapping.config import MappingConfig
+from research_mapping.dashboard_source import run_mapping_dashboard_from_environment
 from research_mapping.formal_query import FormalQueryService
 from research_mapping.sqlite_store import SqliteStore
 from research_mapping.terminus_store import TerminusDBStore
@@ -25,6 +27,8 @@ def main() -> int:
         terminus_store=terminus_store,
         terminus_database=config.terminusdb_database,
     )
+    if os.environ.get("SCIWEAVE_MAPPING_DASHBOARD_MODE") == "1":
+        return run_mapping_dashboard_from_environment(service, config.mapping_domain_id)
     result = service.get_current(config.mapping_domain_id)
     print(
         json.dumps(
