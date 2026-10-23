@@ -44,10 +44,25 @@ tests/                           标准库 unittest
 | `SCIWEAVE_MAPPING_DASHBOARD_HOST` | 看板来源端点监听地址 |
 | `SCIWEAVE_MAPPING_DASHBOARD_PORT` | 看板来源端点监听端口，测试可用 `0` |
 | `SCIWEAVE_MAPPING_DASHBOARD_TOKEN` | 可选 Bearer 令牌；配置后来源端点要求只读认证 |
+| `SCIWEAVE_MAPPING_MCP_HOST` | 可选管理 MCP 监听地址；与 `SCIWEAVE_MAPPING_MCP_PORT` 同时配置后启用管理端点 |
+| `SCIWEAVE_MAPPING_MCP_PORT` | 管理 MCP 监听端口，测试可用 `0` |
+| `SCIWEAVE_MAPPING_MCP_TOKENS_JSON` | 管理 MCP 启用时必须提供：token → actor_id 映射 |
+| `SCIWEAVE_MAPPING_CALLER_CAPABILITIES_JSON` | actor → 能力档位列表：`read` / `candidate_submit` / `candidate_review` / `formalize` / `centre` |
+| `SCIWEAVE_MAPPING_AUDIT_SQLITE_PATH` | 可选接口层审计 SQLite；配置后服务启动时必须打开并建表，否则拒绝启动 |
 
 ## Web 看板只读来源
 
 设置 `SCIWEAVE_MAPPING_DASHBOARD_MODE=1` 后，进程提供 `GET /api/dashboard/source/mapping`。该端点只调用 `FormalQueryService.get_current`，只投影当前已激活且精确 Commit 已确认的正式 TaskNode/DependencyEdge；候选分支、未激活 Commit 和不一致结果不会返回图内容。`POST`、`PUT`、`PATCH`、`DELETE` 均返回 405。可配置 `SCIWEAVE_MAPPING_DASHBOARD_TOKEN` 保护读取端点；令牌只由服务端校验，不写入快照。
+
+## 管理 MCP（对外管理接口，`ai4-w73z` 切片一）
+
+同时配置 `SCIWEAVE_MAPPING_MCP_HOST` 与 `SCIWEAVE_MAPPING_MCP_PORT` 后，进程提供领域管理 MCP（Streamable HTTP，`POST /mcp`，`GET /health`）。工具一律经 `FormalQueryService` 与 `MappingCandidateService` 调用，不直连领域存储：
+
+- `get_formal_mapping(mapping_domain_id)`：正式内容只读查询，要求 `read` 或 `centre` 能力；
+- `list_candidates(submission_id)`：候选记录读取占位，要求 `read` 或 `centre` 能力；
+- `submit_candidate(change_set, idempotency_key)`：候选提交，要求 `candidate_submit` 或 `centre` 能力。
+
+调用方身份从 `Authorization: Bearer <token>` 解析，按 `SCIWEAVE_MAPPING_MCP_TOKENS_JSON` 映射为 actor_id；服务端按 `SCIWEAVE_MAPPING_CALLER_CAPABILITIES_JSON` 执行能力档位校验，未授权返回稳定 `forbidden` 错误。配置 `SCIWEAVE_MAPPING_AUDIT_SQLITE_PATH` 后，读调用记录 `attempted`（fail-open）、写调用记录 `invoked`/`completed`（写前 fail-closed），审计位于接口层，领域服务不重复接入。测试覆盖权限分层、审计双阶段、传输层身份注入与越权拒绝，见 `tests/test_management.py`。
 ```bash
 uv sync --locked
 uv run --locked python -m unittest discover -s tests -v
