@@ -14,9 +14,10 @@ AGENTS = {
 class AgentConfigTests(unittest.TestCase):
     def test_loads_stable_model_from_mapping_and_json(self) -> None:
         raw = {"agents": AGENTS, "workflows": {"main": {"type": "Router", "entry_agent": "router", "sub_agents": ["searcher"], "summarizer": "router", "final_writer": "writer"}}}
-        config = load_config(raw, known_mcp_resources={"search", "draft"}, known_agent_resources={"routing", "research", "formatting"})
-        restored = load_config(json.dumps(raw), known_mcp_resources={"search", "draft"}, known_agent_resources={"routing", "research", "formatting"})
+        config = load_config(raw, known_mcp_resources={"search", "draft"}, known_agent_resources={"routing", "research", "formatting"}, mcp_catalog={"search": {"tools": ["search"]}})
+        restored = load_config(json.dumps(raw), known_mcp_resources={"search", "draft"}, known_agent_resources={"routing", "research", "formatting"}, mcp_catalog={"search": {"tools": ["search"]}})
         self.assertEqual(config, restored)
+        self.assertEqual(config.mcp_catalog["search"]["tools"], ["search"])
         self.assertEqual(config.workflows["main"].workflow_type, "Router")
         self.assertEqual(config.agents["writer"].allowed_mcp_resources, ("draft",))
 
