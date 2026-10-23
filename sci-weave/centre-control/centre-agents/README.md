@@ -1,14 +1,117 @@
 # SciWeave Centre Agent
 
-本目录是中央服务器上的 Centre Agent 项目组，当前以现有 Work Agent 实现作为迁移起点。它包含三个独立 Python 子项目：
+本目录是中央服务器上的 Centre Agent（中央 Agent）项目组。Centre Agent 的首版职责是对 Research Mapping 与 LLM-Wiki 的候选进行预审，必要时创建混合候选，并把结果通知给 Project Owner（项目负责人，简称 PO）选择。
 
-- `gateway/mcp`：常驻 Gateway MCP 接入与当前 HTTP 回环调试 seam。
-- `gateway/ingest`：常驻上游交接消费角色；当前保留原有可安装骨架。
-- `worker`：由 Gateway 启动的短生命周期 Worker；当前保留原有可安装骨架。
+本 README 是首版功能范围声明，暂不代表这些能力已经实现。
 
-本次迁移只调整源码位置，不改变状态机、工具面或 Worker 行为。现行 Work Agent 架构要求后续将 `gateway/ingest` 改造成 `gateway/subscriber`，并由 Centre Agent 适配候选事件；这些改造不属于本票。
+## 首版能力范围
 
-## 工作区
+### 读取正式内容
+
+Centre Agent 通过两套相互独立的领域管理 MCP 读取正式内容：
+
+- Research Mapping 正式内容；
+- LLM-Wiki 正式内容。
+
+Centre Agent 不直接连接 SQLite、TerminusDB 或其他领域存储。两个领域的对象、存储和权限保持隔离。
+
+### 读取候选
+
+Centre Agent 可以读取全部可能进入正式化流程的候选，而不是只读取自己或某个研究员提交的候选：
+
+- Mapping 候选列表和候选详情；
+- Wiki 候选列表和候选详情；
+- 候选固定 head；
+- 候选对应的正式基准；
+- 来源候选、来源作者和当前治理状态。
+
+建议的领域工具分组为：
+
+- `list_mapping_candidates`、`read_mapping_candidate`；
+- `list_wiki_candidates`、`read_wiki_candidate`。
+
+候选正文由对应领域管理 MCP 提供，Centre Agent 不绕过领域服务读取存储。
+
+### 预审报告
+
+Centre Agent 对两个领域分别追加预审报告：
+
+- `append_mapping_prereview_log`；
+- `append_wiki_prereview_log`。
+
+两个写工具独立授权。预审报告采用领域治理记录的追加语义，不能修改历史报告。预审是正式化前的硬门禁，但预审结论不等同于 PO 的正式发布决定。
+
+### 创建混合候选
+
+当多个候选需要合并时，Centre Agent 可以创建新的混合候选：
+
+- `create_mapping_merged_candidate`；
+- `create_wiki_merged_candidate`。
+
+新候选必须记录全部来源候选和来源作者。Centre Agent 不修改已有候选；混合候选创建后，来源作者不因此获得对混合候选的操作权。
+
+### 读取注册表
+
+Centre Agent 可以读取注册表中的事实登记信息：
+
+- Centre Agent 和端侧 Agent 的登记记录；
+- Project Owner 的稳定标识；
+- 用于通知的 PO 联系邮箱或通知联系人记录。
+
+注册表只用于事实留痕和通知目标发现，不参与鉴权。注册表不得保存邮箱密码、SMTP 令牌、API Key、模型凭据或其他秘密。
+
+### 通知 PO
+
+Centre Agent 可以创建结构化的 PO 通知请求：
+
+- `enqueue_project_owner_notification`；
+- 通知中引用候选、预审报告、冲突和混合候选的稳定标识；
+- 通知告知 PO 下一步需要查看或选择的对象。
+
+实际邮件投递由独立通知组件完成。邮件地址、SMTP 地址、账号和令牌由通知组件通过环境变量配置，Centre Agent 不直接持有邮件凭据。
+
+邮件仅用于提醒，不承载以下事实：
+
+- PO 的正式批准；
+- 候选选择结果；
+- 正式版本发布；
+- 任务交接或执行指令。
+
+邮件投递失败只记录通知失败并支持重试，不撤销已经写入的预审报告或已经创建的候选。
+
+## 明确禁止的能力
+
+Centre Agent 首版不提供以下能力：
+
+- 写入或修改正式 Mapping；
+- 写入或修改正式 Wiki；
+- 修改已有候选；
+- 写草稿箱接纳状态；
+- 代替 PO 执行审核、选择或正式化；
+- 发起、调度、重试或下发 Task Agent 任务；
+- 读取端侧 Agent 的本地执行记录；
+- 直接访问领域数据库；
+- 通过注册表获得额外权限；
+- 使用邮件回复作为治理决定；
+- 建立私有审计写入通道。
+
+## 调用和留痕边界
+
+所有能力最终按独立 MCP 工具暴露，并在对外接口层接入中央调用账本。留痕记录调用方、通道、服务、工具、目标、结果和耗时，不复制候选正文、凭据或完整入参。
+
+Centre Agent 不自行定义第二套审计事件，也不直接写领域治理记录以外的私有审计表。
+
+## 当前项目结构
+
+本目录包含三个独立 Python 子项目：
+
+- `gateway/mcp`：常驻 MCP 接入与处置面；
+- `gateway/ingest`：后续迁移为候选事件订阅角色的骨架；
+- `worker`：短生命周期 Worker 骨架。
+
+中央 Agent 的能力规格见工单「中央 Agent 能力接口收口」和「中央 Agent 候选预审职能地图」。本 README 先定义能力范围，不实现新的 MCP、注册表、通知服务或邮件投递。
+
+## 当前工作区验证
 
 项目组根使用 uv workspace 并维护唯一 `uv.lock`：
 
@@ -17,11 +120,11 @@ cd sci-weave/centre-control/centre-agents
 uv sync
 ```
 
-运行 Gateway MVP 回归测试：
+现有 Gateway MVP 回归测试：
 
 ```bash
 uv run --package sciweave-task-agent-gateway-mcp \
   python -m unittest discover -s gateway/mcp/tests -v
 ```
 
-各角色只从其本地 `.env` 读取配置；仓库只提交 `.env.example`。Centre Agent 的后续行为规格见工单「最小 Work Agent 实现规格」和 `docs/data-flow/work-agent.md`。
+各角色只从其本地 `.env` 读取配置；仓库只提交 `.env.example`。

@@ -49,6 +49,16 @@ tags: [centre-agents, registery, permission, wayfinder:grilling]
 
 登记表本身不参与鉴权这一条不变。中央 Agent 的能力由它的工具面决定，登记只留痕。中央 Agent 跑在中央自己的服务器上，平台对它是有强制力的，所以它的收口可以做得比端侧硬——但那是工具面的事，不是登记表的事。
 
+### Project Owner 联系方式
+
+Project Owner 的登记记录可以包含用于通知的 `contact_email`，或等价的通知联系人记录。该字段只用于定位通知收件人：
+
+- 不保存邮箱密码、SMTP 令牌、API Key 或其他凭据；
+- 不参与鉴权、权限判断或正式化决定；
+- 邮箱变更属于登记事实变更，应保留可追溯记录；
+- 中央 Agent 只能据此创建 PO 通知请求，不能把邮件回复当作批准；
+- 实际邮件投递由独立通知组件完成。
+
 ## Acceptance Criteria
 
 - [ ] 注册表增加 `kind` 字段，取值 `endpoint` 与 `centre`，中央类目所属主体留空

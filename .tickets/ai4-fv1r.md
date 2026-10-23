@@ -33,6 +33,8 @@ tags: [wayfinder:map, centre-agents, governance]
 
 相关但不属于本地图：触发消息的队列语义由「消息队列协作模型分支」(ai4-te1v) 定义；留痕接口由「中央服务留痕工具」(ai4-upsm) 定义；草稿箱契约由「中央草稿箱的存储与审核契约」(ai4-xem8) 定义。本地图只在消费它们时引用，不改写其内容。
 
+**2026-10-23 首版能力规格入口：** 中央 Agent 的能力范围、工具分组和通知边界记录在「中央 Agent 能力接口收口」(ai4-rlv6)；面向实现者的说明落在 `sci-weave/centre-control/centre-agents/README.md`。本轮只落盘规格，不实现新的 MCP、注册表或邮件投递代码。
+
 ## Decisions so far
 
 <!-- 已关闭的子票在这里各占一行；未关闭的子票通过查询获得，不在此列出 -->
