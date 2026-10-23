@@ -120,3 +120,5 @@ tags: [wayfinder:grilling]
 - [交接协调服务的职责、存储边界与 centre-control 部署形态](ai4-p5f3)：明确交接协调服务的中央部署、等待事实、派发恢复和多目标事件边界。
 - [Research Mapping 正式快照查询接口与交接协调服务访问边界](ai4-2982)：明确交接协调服务如何通过稳定领域接口读取正式 Mapping，避免直连领域存储。
 - [研究员 Task Agent 动态订阅 task-workflow 交接消息](ai4-nfty)：明确新建 Workflow 后端侧 Agent 如何根据正式 `executor_refs` 发现、订阅和恢复任务交接。
+- [email-service 通知意图协议与投递状态规格](ai4-f985)：定义邮件 MCP 的输入、投递状态和失败边界，完成后才进入服务实现。
+- [handoff coordinator 依赖重算与派发恢复规格](ai4-zc85)：定义协调核心的输入、输出、等待状态和恢复契约，完成后才进入服务实现。

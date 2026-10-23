@@ -118,7 +118,8 @@ schema_version
 
 `target.kind` 表达目标类型，但不作为权限来源。正式 `executor_refs` 决定 TaskNode 执行关系；Centre Workflow 的订阅配置决定它订阅哪些治理事件；Registry 只提供身份和实例登记事实。
 
-## 启动恢复的三层模型
+Inbox 中未找到 Workflow 卡片、版本不兼容、加载失败或进程启动失败时，消息保持在 Inbox，不启动下一轮 Worker，不修改正式 Map；记录配置错误并生成 `human_notification_intent`，待 binding 或卡片修复后重新扫描。
+
 
 服务启动时不能只扫描 Redpanda，也不能把每条历史消息全部重放。恢复分为三层：
 
@@ -233,7 +234,24 @@ PO 不直接操作 Redpanda。所有候选创建、混合候选、正式化、�
 
 “当前没有后继”不是错误，也不自动创建新任务。PO 如果决定继续路线，通过领域 MCP 创建新的 TaskNode/DependencyEdge 候选；新后继正式化后，交接协调服务自动重新计算并发送任务交接。
 
-## 当前固定 topic
+### Task Agent topic 生命周期
+
+- Agent 注册完成且具备接收任务条件时创建 `sciweave.task-handoff.<agent_id>`；
+- Agent 注销不删除 topic、不删除 Registry 记录，只标注注销或不可用；
+- Agent 离线时保留 topic、consumer group 和未消费消息；
+- topic 创建、订阅、加载或启动失败不修改正式 Map，必须形成可观察配置错误并支持人工处理；
+- 不执行自动删除 topic 的原子操作。历史清理和保留期另按消息基础设施策略处理。
+
+### Task Agent consumer group
+
+同一 `mapping_domain_id` 与 `agent_id` 派生一个稳定消费者组：
+
+```text
+sciweave.task-workflow.<mapping_domain_id>.<agent_id>
+```
+
+同一 Agent 的多个 `agent_instance_id` 共享该消费者组并竞争消费；实例重新上线后继续消费未提交 offset。
+
 
 ```text
 sciweave.dependency-notice
