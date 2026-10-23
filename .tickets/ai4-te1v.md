@@ -22,6 +22,21 @@ tags: [wayfinder:grilling]
 
 > 修订（2026-10-21）：「具体基础设施选型另行决策」已完成，Redpanda 已定，见 `docs/TECH_STACK.md`。本票的验收改为在其之上定义主题、分区、消费者组、保留期与 offset 提交语义。
 
+## Current design boundary
+
+以下内容已作为本票继续讨论的工作基线，交接协调服务的最终归属由子票「交接协调服务的职责、存储边界与 centre-control 部署形态」裁决：
+
+- 业务上按目标 TaskNode 形成逻辑消息频道；不要求 Agent 从上游消息中自行过滤任务。
+- 物理上使用四个固定 topic：`sciweave.dependency-notice`、`sciweave.task-handoff`、`sciweave.governance-events`、`sciweave.notification-intent`，不为每个 TaskNode 或每个 Workflow 动态创建 Redpanda topic。
+- `dependency-notice` 的主消费者是交接协调服务，负责读取正式 Mapping、重算依赖、维护 `PendingHandoff` 和 `HandoffDispatch`，不能直接创建 Task Agent 的 `ExecutionRecord`。
+- `task-workflow` 接收 `task_handoff_ready` 并创建 Task Agent 执行；任务交接物理 topic 使用 `sciweave.task-handoff.<agent_id>` 模板，不按 TaskNode 动态创建；`centre-workflow` 接收可扩展的治理事件订阅；`email-service` 只接收 `human_notification_intent` 并投递人工通知。
+- 当前 Centre Agent 是 `centre-workflow` 的一个预审 Workflow，后续可增加其他中央 Workflow；每个 Workflow 使用独立订阅声明和消费者组。
+- `TaskNode.executor_refs` 决定 Task Agent 执行关系；Registry 只提供身份和实例登记事实，不授予权限。
+- 消息交接必须精确引用源节点版本、目标节点版本、DependencyEdge 版本和正式 Mapping 版本；目标节点逻辑 ID或目标版本引用作为路由/分区键。
+- 服务启动时恢复分为三层：同一消费者组继续消费未提交 offset，扫描未完成的 `PendingHandoff`/`HandoffDispatch`，并依据正式 Mapping 做消息过期后的补偿重算。
+- `centre-agents` 是 Centre Agent 预审服务，不承担全局依赖重算；邮件服务不判断是否可以执行。
+- PO 的候选裁决和根任务第一条消息均通过最高权限领域 MCP 完成；根任务使用幂等 `dispatch_root_task`，候选不支持 `defer`，返修必须指定负责人。
+
 ## Notes
 
 **2026-10-18T15:38:23Z**
@@ -101,3 +116,7 @@ tags: [wayfinder:grilling]
 - [Agent 注册、Map 执行关系与消息订阅边界](ai4-0s02)：`TaskNode.executor_refs` 直接引用 Workflow Agent 的稳定 `agent_id`，是正式任务分配和消息路由依据；Registry 只登记主体、Workflow Agent 和运行实例的基本事实，不保存 TaskNode 关系，Agent 离线或注销不自动修改 Map。
 
 ## Not yet specified
+
+- [交接协调服务的职责、存储边界与 centre-control 部署形态](ai4-p5f3)：明确交接协调服务的中央部署、等待事实、派发恢复和多目标事件边界。
+- [Research Mapping 正式快照查询接口与交接协调服务访问边界](ai4-2982)：明确交接协调服务如何通过稳定领域接口读取正式 Mapping，避免直连领域存储。
+- [研究员 Task Agent 动态订阅 task-workflow 交接消息](ai4-nfty)：明确新建 Workflow 后端侧 Agent 如何根据正式 `executor_refs` 发现、订阅和恢复任务交接。
