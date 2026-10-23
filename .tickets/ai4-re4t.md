@@ -1,6 +1,6 @@
 ---
 id: ai4-re4t
-status: open
+status: closed
 deps: [ai4-zk0g]
 links: []
 created: 2026-10-22T16:26:48Z
@@ -34,3 +34,9 @@ tags: [audit, centre-control, implementation, enhancement, ready-for-agent]
 
 - 写调用先记后做，中断能被检出（ai4-zk0g）
 
+
+## Notes
+
+**2026-10-23T02:25:16Z**
+
+实现与验证：已完成按 caller_id、channel_id、service、tool、target_object_id、result 和时间范围过滤，结果按 occurred_at 与 rowid 稳定倒序；公共 API 仅提供追加和查询，不提供更新/删除。验证命令：在 sci-weave/centre-control/shared/audit-trail 执行 PYTHONPATH=src uv run --with pytest pytest tests -q；14 passed。另执行 uv run python -m compileall -q src tests 与 git diff --check，均通过。

@@ -1,6 +1,6 @@
 ---
 id: ai4-zk0g
-status: open
+status: closed
 deps: [ai4-yzdd]
 links: []
 created: 2026-10-22T16:26:48Z
@@ -35,3 +35,9 @@ tags: [audit, centre-control, implementation, enhancement, ready-for-agent]
 
 - 读调用留下一条并能查回（ai4-yzdd）
 
+
+## Notes
+
+**2026-10-23T02:25:16Z**
+
+实现与验证：已完成 begin_call/finish_call 两阶段留痕、未完成调用查询、配对校验、审计库不可用时 fail-closed、业务事务保护，以及 call_scope 成功/异常路径和耗时记录。验证命令：在 sci-weave/centre-control/shared/audit-trail 执行 PYTHONPATH=src uv run --with pytest pytest tests -q；14 passed。另执行 uv run python -m compileall -q src tests 与 git diff --check，均通过。
