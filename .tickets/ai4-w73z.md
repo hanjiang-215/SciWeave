@@ -60,6 +60,7 @@ tags: [mcp, mapping, wiki, audit, centre-control, implementation, ready-for-agen
 - `list_candidates` 由占位实现升级为真实查询：`SqliteStore.get_candidate_for_submission(submission_id)` 返回提交记录 + Proposal + 候选 Commit 的治理事实（提交者、领域、正式基准、提交状态、proposal 状态、candidate head 与摘要），管理 MCP 注入 sqlite_store 后返回该记录；无记录时返回 `candidate: null`。
 - 验证：Mapping 13 项管理测试（新增 submit→list_candidates 读回测试）、全量 90 项（含真实 TerminusDB 集成）通过；`compileall`、`uv sync --locked`、`git diff --check` 通过。
 - 至此「正式只读、候选读取/提交、候选审阅、Owner 正式化/恢复、健康检查」工具目录全部为真实实现；唯一未闭合项维持中央 Agent 专属写工具（`IKQ2QB` 阻塞）。
+- Wiki 侧对称补齐（提交 8c8bf9a）：`WikiManagementService` 注入 sqlite_store，新增 `list_wiki_candidates(wiki_domain_id)` 读取持久化的候选提交（read/centre 档）；测试 11 项管理 + 全量 108 项通过。两个领域的「候选读取」工具均为真实查询，不再有占位实现。
 
 ## Design
 
