@@ -28,14 +28,17 @@ class FakeCandidateStore:
     def __init__(self):
         self.calls = []
         self.base_documents = []
+        self.saved_documents = []
 
     def create_candidate_snapshot(self, domain_id, base_commit_ref, canonical_snapshot, idempotency_key):
+        import json
         self.calls.append((domain_id, base_commit_ref, canonical_snapshot, idempotency_key))
+        self.saved_documents = json.loads(canonical_snapshot)
         return {"status": "confirmed", "store_id": "wiki-store", "branch_id": "candidate-branch", "commit_hash": "candidate-commit"}
 
     def read_exact_snapshot(self, store_id, database, branch_id, commit_hash):
         import llm_wiki.canonical as canonical
-        docs = self.base_documents if commit_hash == "base-commit" else []
+        docs = self.base_documents if commit_hash == "base-commit" else self.saved_documents
         return WikiSnapshotRead.confirmed(
             store_id=store_id, database=database, branch_id=branch_id, commit_hash=commit_hash,
             documents=docs, content_digest=canonical.sha256_json(docs),
@@ -110,7 +113,20 @@ class WikiManagementServiceTestCase(unittest.TestCase):
                 "centre": frozenset({"centre"}),
             },
             audit_connection=self.audit,
+            sqlite_store=self.sqlite,
         )
+
+    def test_list_wiki_candidates_reads_back_persisted_submissions(self):
+        submitted = self.service.call_tool(
+            "submit_wiki_candidate", {"document_change": _change(), "idempotency_key": "key-list"}, actor_id="submitter",
+        )
+        self.assertEqual(submitted.status, "ok")
+        listed = self.service.call_tool("list_wiki_candidates", {"wiki_domain_id": DOMAIN}, actor_id="reader")
+        self.assertEqual(listed.status, "ok")
+        candidates = listed.result["candidates"]  # type: ignore[index]
+        self.assertEqual(len(candidates), 1)
+        self.assertEqual(candidates[0]["submission_id"], "submission-1")
+        self.assertEqual(candidates[0]["status"], "candidate_created")
 
     def test_formal_read_requires_read_or_centre_capability(self):
         outcome = self.service.call_tool("get_formal_wiki", {"wiki_domain_id": DOMAIN}, actor_id="reader")

@@ -93,11 +93,13 @@ class WikiManagementService:
         service_name: str = "wiki-management",
         review_service=None,
         formalization_service=None,
+        sqlite_store=None,
     ) -> None:
         self._formal_query = formal_query
         self._candidate_service = candidate_service
         self._review_service = review_service
         self._formalization_service = formalization_service
+        self._sqlite = sqlite_store
         self._capabilities = caller_capabilities
         self._audit = audit_connection
         self._service = service_name
@@ -117,6 +119,7 @@ class WikiManagementService:
     def _handlers(self) -> dict[str, Any]:
         handlers: dict[str, Any] = {
             "get_formal_wiki": self._get_formal_wiki,
+            "list_wiki_candidates": self._list_wiki_candidates,
             "submit_wiki_candidate": self._submit_wiki_candidate,
         }
         if self._review_service is not None:
@@ -200,6 +203,27 @@ class WikiManagementService:
         result = self._formal_query.get_current(domain_id)
         return _formal_wiki_result(result)
 
+    def _list_wiki_candidates(self, arguments: dict[str, Any], actor_id: str) -> dict[str, Any]:
+        domain_id = _required(arguments, "wiki_domain_id")
+        if self._sqlite is None:
+            return {"wiki_domain_id": domain_id, "candidates": []}
+        submissions = self._sqlite.list_candidate_submissions(domain_id)
+        return {
+            "wiki_domain_id": domain_id,
+            "candidates": [
+                {
+                    "submission_id": item.submission_id,
+                    "wiki_domain_id": item.wiki_domain_id,
+                    "submitter_id": item.submitter_id,
+                    "base_formal_revision_id": item.base_formal_revision_id,
+                    "proposal_id": item.proposal_id,
+                    "submitted_at": item.submitted_at,
+                    "status": item.status,
+                }
+                for item in submissions
+            ],
+        }
+
     def _submit_wiki_candidate(self, arguments: dict[str, Any], actor_id: str) -> dict[str, Any]:
         document_change = arguments.get("document_change")
         idempotency_key = _required(arguments, "idempotency_key")
@@ -269,6 +293,7 @@ _WRITE_TOOLS = frozenset({
 
 _TOOL_CAPABILITIES = {
     "get_formal_wiki": _READ_CAPABILITIES,
+    "list_wiki_candidates": _READ_CAPABILITIES,
     "submit_wiki_candidate": _CANDIDATE_SUBMIT_CAPABILITIES,
     "preview_wiki_review": frozenset({"candidate_review", "centre"}),
     "create_wiki_merge_request": frozenset({"candidate_review", "centre"}),
@@ -281,6 +306,16 @@ TOOL_DEFINITIONS = [
     {
         "name": "get_formal_wiki",
         "description": "Read the current formal Wiki revision for a domain. Requires the read or centre capability.",
+        "inputSchema": {
+            "type": "object",
+            "required": ["wiki_domain_id"],
+            "properties": {"wiki_domain_id": {"type": "string"}},
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "list_wiki_candidates",
+        "description": "Read candidate submissions for a Wiki domain. Requires the read or centre capability.",
         "inputSchema": {
             "type": "object",
             "required": ["wiki_domain_id"],
@@ -413,6 +448,7 @@ def _wiki_formalization_outcome(result) -> dict[str, Any]:
 def _target_type(tool: str) -> str:
     return {
         "get_formal_wiki": "WikiDomain",
+        "list_wiki_candidates": "WikiDomain",
         "submit_wiki_candidate": "WikiSubmission",
         "preview_wiki_review": "WikiProposal",
         "create_wiki_merge_request": "WikiMergeRequest",
@@ -423,7 +459,7 @@ def _target_type(tool: str) -> str:
 
 
 def _target_id(arguments: dict[str, Any], tool: str) -> str | None:
-    if tool == "get_formal_wiki":
+    if tool in {"get_formal_wiki", "list_wiki_candidates"}:
         return _text(arguments.get("wiki_domain_id"))
     if tool == "submit_wiki_candidate":
         return _text(arguments.get("idempotency_key"))

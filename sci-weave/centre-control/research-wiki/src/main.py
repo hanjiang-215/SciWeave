@@ -108,6 +108,7 @@ def main(argv: list[str] | None = None) -> int:
             audit_connection=audit,
             review_service=review_service,
             formalization_service=formalization_service,
+            sqlite_store=sqlite_store,
         )
         return run_wiki_management_server_from_config(config, management)
     if len(arguments) > 1:
