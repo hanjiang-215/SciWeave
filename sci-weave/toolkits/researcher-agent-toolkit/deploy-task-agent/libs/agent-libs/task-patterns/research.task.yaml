@@ -1,0 +1,6 @@
+name: research.task
+version: 1.0.0
+kind: task_mode
+value:
+  mode: research
+  steps: [collect, verify, summarize]

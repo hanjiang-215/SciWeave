@@ -1,0 +1,5 @@
+name: research.validate
+version: 1.0.0
+kind: validator
+value:
+  required: [claim, evidence]

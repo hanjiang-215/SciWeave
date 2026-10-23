@@ -1,0 +1,6 @@
+name: research.format
+version: 1.0.0
+kind: formatter
+value:
+  format: markdown
+  sections: [answer, evidence]
