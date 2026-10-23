@@ -40,17 +40,28 @@ python humans/competition/demo-evidence/check_iris_input.py humans/competition/d
 | execution_record_id | 由执行侧回填 |
 | card 边界 | 首版为轻量证据卡，不等同完整 `ResourceVersion` 治理 |
 
-## T2 分析参数（已锁定待运行，未声称已运行）
+## T2 分析参数（本机确定性基线已运行，待 SciencePal 回填）
 
-演示执行前必须固定以下参数并随执行记录公开，当前仅为声明：
+T2 采用固定参数的确定性 KNN 基线，本机已用纯标准库运行并产出可复现结果：
 
-- 方法：预先固定的分类方法（演示待定：KNN / 逻辑回归之一），不得在录制时临时更换；
-- 工具/版本：SciencePal 实际运行环境的解释器/库版本，运行后回填；
-- 随机性控制：固定随机种子与确定性设置；
-- 数据划分：分层训练/测试划分及比例（待定，如 70/30），划分前打乱固定种子；
-- 指标：准确率、混淆矩阵、类别精度/召回（至少含混淆矩阵与准确率）；
-- 完成阈值：本次演示不追求调优，固定并报告结果即可；
-- 输出文件：分析结果文件与引用定位，运行后回填哈希。
+| 参数 | 值 |
+| --- | --- |
+| 方法 | KNN（`run_iris_baseline.py`，仅 Python 标准库） |
+| 近邻数 K | 3 |
+| 随机种子 | 20261023 |
+| 数据划分 | 分层划分，测试占比 0.3（训练 105 / 测试 45） |
+| 指标 | 准确率 0.955556（43/45）、混淆矩阵（见 `iris_baseline_result.json`） |
+| 输入快照 | `daaeb5e3...df9e65`（与 T1 一致） |
+
+命令：
+
+```text
+python humans/competition/demo-evidence/run_iris_baseline.py humans/competition/demo-evidence/iris_data.csv
+```
+
+结果文件：`demo-evidence/iris_baseline_result.json`。
+
+**SciencePal 硬门槛不变**：以上证明演示闭环在平台外可复现，但赛事要求 SciencePal 实际承接核心数据检查或分析执行。SciencePal 接入后应封装该脚本或同参数实现，并回填真实运行环境的解释器/库版本、输出定位与执行记录；不得以本机结果冒充 SciencePal 实演。
 
 ## 演示流程（3–5 分钟可复现脚本）
 

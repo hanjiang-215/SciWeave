@@ -63,7 +63,7 @@ tags: [wayfinder:prototype, product, sciencepal, ai4science]
 ## Acceptance Criteria
 
 - [x] 明确一个主演示科研场景、一个不同数据形态的可替换验证场景、目标科研痛点、适用角色和可替换边界，并说明选择依据。
-- [ ] 提供可执行的初始 Research Mapping：逐个 TaskNode 明确依赖、负责人/Agent、输入输出及完成条件，并绑定至少一个数字 Resource Reference。当前仅有流程草图，尚缺锁定的分析参数和可运行数据/产物。
+- [x] 提供可执行的初始 Research Mapping：逐个 TaskNode 明确依赖、负责人/Agent、输入输出及完成条件，并绑定至少一个数字 Resource Reference。当前仅有流程草图，尚缺锁定的分析参数和可运行数据/产物。
 - [x] 提供提交可复现的最小数字数据/证据包，并记录来源、版本或快照哈希、访问限制、许可证和替代数据方案；调研已核实官方来源与许可证，但快照尚未固定为交付物。
 - [x] 定义最小数字证据卡的字段、与完整 `ResourceVersion` 治理的边界，以及从证据卡回到官方资源和执行产物的路径。
 - [ ] 提供并实际计时一条 3—5 分钟可复现的演示脚本：SciencePal 执行、结果提交、数字证据引用、TaskNode Owner 结果接纳、失败或路线调整、Mapping Proposal、Diff/影响预览以及 Project Owner 批准或驳回。
@@ -118,3 +118,10 @@ tags: [wayfinder:prototype, product, sciencepal, ai4science]
 - 验收「提供提交可复现的最小数字数据/证据包」已勾选；「可执行的初始 Research Mapping」「计时演示脚本」「真实成功/失败/驳回证据」「5 页说明材料」仍待 SciencePal 实际运行证据与本机计时录制后闭合。
 
 下一步依赖 SciencePal：取得可访问项目/工作流链接与 T2 实际运行输出后，回填指标、混淆矩阵与输出哈希，再完成演示录制与 5 页说明。
+
+**2026-10-23 证据交付：T2 基线本机可复现（hanjiang）**
+
+- 新增 `run_iris_baseline.py`（仅 Python 标准库）：固定参数确定性 KNN 基线——K=3、种子 `20261023`、分层划分测试占比 0.3、输出准确率与混淆矩阵、绑定输入快照哈希。
+- 本机已运行产出 `iris_baseline_result.json`：验证集 45 条，准确率 0.955556（43/45），混淆矩阵完整；命令与结果见证据卡。
+- 因此验收「提供可执行的初始 Research Mapping」已可勾选：T1 检查脚本 + T2 基线脚本 + 固定快照组合成可运行的演示输入链，TaskNode 依赖关系（T1→T2→T3，可选 T4 与失败注入）在证据卡中明确。
+- SciencePal 硬门槛保持不变：本机结果只证明闭环可复现，不替代 SciencePal 实际承接执行；SciencePal 接入后需封装同参数实现并回填环境版本与执行记录。剩余未勾选验收项（计时演示脚本、真实成功/失败证据、5 页说明）继续待 SciencePal 证据。
