@@ -2,7 +2,7 @@
 id: ai4-ujvn
 status: open
 deps: [ai4-we38]
-links: [ai4-we38, ai4-yyy9, ai4-u3rs]
+links: [ai4-we38, ai4-yyy9, ai4-u3rs, ai4-9322, ai4-6ljq, ai4-orpg, ai4-w73z, ai4-0s02, ai4-z3z4]
 created: 2026-10-21T21:06:00Z
 type: feature
 priority: 1
@@ -39,8 +39,11 @@ tags: [agent, task-agent, mcp, registery]
 
 | 对象 | 由谁登记 | 字段 |
 | --- | --- | --- |
-| 人 | Project Owner | `principal_id`、角色（`researcher` 或 `project_owner`）、负责的 `task_node_id` 集合 |
-| 端侧 Agent | 部署者，部署完成后 | `agent_id`、所属 `principal_id`、部署位置描述、部署时间 |
+| 人 | Project Owner | `principal_id`、角色（`researcher` 或 `project_owner`）、通知联系人基本信息 |
+| Workflow Agent | 创建者/部署者，创建后 | `agent_id`、`kind`、所属 `principal_id`、`created_by`、Workflow 类型、部署位置描述、登记时间和登记状态 |
+| Agent 运行实例 | 部署者，启动或部署后 | `agent_id`、`agent_instance_id`、运行状态、最近心跳或登记时间 |
+
+Registry 不保存 `task_node_id` 集合、`registered_task_nodes` 或“负责哪些节点”的关系；任务负责人和执行者关系由正式 Map 的 `task_owner_id`、`executor_refs` 保存，反向查询从 Map 派生。
 
 不存密钥、令牌、密码、模型凭据或部署主机的网络地址。
 

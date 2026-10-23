@@ -6,8 +6,11 @@
 
 | 对象 | 由谁登记 | 字段 |
 | --- | --- | --- |
-| 人 | Project Owner | 稳定标识、角色（`researcher` 或 `project_owner`）、负责的 TaskNode |
-| 端侧 Agent | 部署者自己，部署完成后写一条 | Agent 标识、所属主体、部署位置描述、部署时间 |
+| 人 | Project Owner | `principal_id`、角色（`researcher` 或 `project_owner`）、通知联系人基本信息 |
+| Workflow Agent | 创建者/部署者，创建后 | `agent_id`、`kind`、所属 `principal_id`、`created_by`、Workflow 类型、部署位置描述、登记时间和登记状态 |
+| Agent 运行实例 | 部署者，启动或部署后 | `agent_id`、`agent_instance_id`、运行状态、最近心跳或登记时间 |
+
+Registry 不保存 `task_node_id` 集合或“负责哪些节点”的关系。正式任务分配由 Research Mapping 的 `TaskNode.task_owner_id` 和 `TaskNode.executor_refs` 保存；需要反向查询时从正式 Map 派生。
 
 不存密钥、令牌、密码或模型凭据。
 
