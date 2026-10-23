@@ -1,6 +1,6 @@
 ---
 id: ai4-lrfz
-status: in_progress
+status: closed
 deps: [ai4-7zv3, ai4-1k0z]
 links: []
 created: 2026-10-22T16:35:12Z
@@ -20,7 +20,11 @@ tags: [dashboard-api, python, read-only, adapter]
 
 ## Acceptance Criteria
 
-完成独立 Python 子项目和锁文件；GET /api/dashboard/snapshot 能聚合配置来源、保留来源观测时间和错误事实、在部分失败时返回 partial；未配置来源时安全返回 unavailable 来源而非 500；超时、非 JSON、非 2xx 和未知字段不泄露堆栈/令牌；OPTIONS/GET CORS 与健康探针可配置；POST/PUT/PATCH/DELETE 不产生写入；单测覆盖聚合成功、部分失败、超时、格式错误、无来源和安全错误；uv sync --locked、unittest、compileall 全部通过；记录依赖来源、用途、许可证和验证命令。
+- [x] 完成独立 Python 子项目和锁文件；`GET /api/dashboard/snapshot` 能聚合配置来源、保留来源观测时间和错误事实、在部分失败时返回 partial
+- [x] 未配置来源时安全返回 unavailable 来源而非 500；超时、非 JSON、非 2xx 和未知字段不泄露堆栈/令牌
+- [x] OPTIONS/GET CORS 与健康探针可配置；POST/PUT/PATCH/DELETE 不产生写入
+- [x] 单测覆盖聚合成功、部分失败、超时、格式错误、无来源和安全错误
+- [x] `uv sync --locked`、unittest、compileall 全部通过；记录依赖来源、用途、许可证和验证命令
 
 
 ## Notes
@@ -36,3 +40,14 @@ tags: [dashboard-api, python, read-only, adapter]
 **2026-10-22T18:31:23Z**
 
 ﻿2026-10-23?Frank Qi ??? Gateway/????????????????????????????? Gitee issue `IKPT5I` ???<https://gitee.com/qi-yueran/ai4science/issues/IKPT5I>????? Mapping/Wiki ?????????? API ?? Gateway/???????????????????? unavailable/partial????????????
+
+**2026-10-23 验收收尾并关闭（hanjiang）**
+
+- 逐条核对五项验收标准，均有实现与测试证据：
+  1. `sci-weave/centre-control/dashboard-api` 独立子项目（`pyproject.toml`、`uv.lock`、`src/main.py`、`src/dashboard_api/`、`tests/`、`.env.example`）与 `GET /api/dashboard/snapshot` 聚合、`partial` 降级；
+  2. 未配置来源返回 `unavailable` 而非 500，超时/非 JSON/非 2xx/未知字段安全处理；
+  3. OPTIONS/GET CORS 与健康探针可配置，`POST`/`PUT`/`PATCH`/`DELETE` 一律 405；
+  4. 单测覆盖聚合成功、部分失败、超时、格式错误、无来源和安全错误；
+  5. `uv lock --check`、`uv sync --locked`、17 项 unittest、`compileall` 本轮全部通过；README「依赖与许可」记录标准库运行时与 `setuptools==80.9.0`（PyPI、MIT）。
+- 边界复核：`src/` 无 SQLite/TerminusDB/Redpanda 直接访问；Mapping 与 Wiki 来源已可配置；Gateway 与消息监听来源契约由 Gitee issue `IKPT5I` 单独跟踪（关联 `ai4-gt3m`），未配置时按 `unavailable/partial` 安全降级，不阻塞本票聚合能力验收。
+- 本票验收标准逐条满足，状态置为 `closed`。
