@@ -1,0 +1,15 @@
+{
+  "name": "draft-box",
+  "version": "1.0.0",
+  "description": "Write and update the researcher's draft buffer.",
+  "environment": ["DRAFT_BUFFER_MCP_URL", "DRAFT_BUFFER_MCP_TOKEN"],
+  "tools": [{
+    "name": "draft_box_write",
+    "description": "Create one draft from a completed task result.",
+    "input": {"title": "string", "content": "string", "metadata": "object (optional)"},
+    "output": {"draft_id": "string", "status": "string"},
+    "examples": [{"title": "Review", "content": "Evidence-backed result"}],
+    "allowed": ["final result persistence"],
+    "failures": ["empty content", "permission denied", "upstream unavailable"]
+  }]
+}

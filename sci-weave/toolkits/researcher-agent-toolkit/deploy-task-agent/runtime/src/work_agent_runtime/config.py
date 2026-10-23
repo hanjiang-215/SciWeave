@@ -46,6 +46,7 @@ class WorkflowDefinition:
 class TaskAgentConfig:
     agents: Mapping[str, AgentDefinition]
     workflows: Mapping[str, WorkflowDefinition]
+    mcp_catalog: Mapping[str, Any] = None
 
 
 def _required(data: Mapping[str, Any], key: str, path: str) -> Any:
@@ -72,7 +73,7 @@ def _mapping(value: Any, path: str) -> Mapping[str, Any]:
     return value
 
 
-def load_config(source: Mapping[str, Any] | str | Path, *, known_mcp_resources: set[str] | frozenset[str] = frozenset(), known_agent_resources: set[str] | frozenset[str] = frozenset()) -> TaskAgentConfig:
+def load_config(source: Mapping[str, Any] | str | Path, *, known_mcp_resources: set[str] | frozenset[str] = frozenset(), known_agent_resources: set[str] | frozenset[str] = frozenset(), mcp_catalog: Mapping[str, Any] | None = None) -> TaskAgentConfig:
     """Load and validate a mapping or JSON document without contacting services."""
     if isinstance(source, Path):
         try:
@@ -112,7 +113,7 @@ def load_config(source: Mapping[str, Any] | str | Path, *, known_mcp_resources: 
             raise ConfigError("missing_sub_agents", f"config.workflows.{name}.sub_agents", "at least one required")
         workflows[name] = WorkflowDefinition(name, workflow_type, str(_required(data, "entry_agent", f"config.workflows.{name}")), sub_agents, str(_required(data, "summarizer", f"config.workflows.{name}")), str(_required(data, "final_writer", f"config.workflows.{name}")))
     _validate_references(agents, workflows)
-    return TaskAgentConfig(dict(agents), dict(workflows))
+    return TaskAgentConfig(dict(agents), dict(workflows), mcp_catalog or {})
 
 
 def _validate_references(agents: Mapping[str, AgentDefinition], workflows: Mapping[str, WorkflowDefinition]) -> None:

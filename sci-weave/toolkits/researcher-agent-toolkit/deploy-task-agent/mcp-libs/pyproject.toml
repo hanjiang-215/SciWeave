@@ -1,0 +1,16 @@
+[project]
+name = "sciweave-mcp-libs"
+version = "0.1.0"
+description = "Standard MCP resource catalogs for researcher Task Agents"
+requires-python = ">=3.12,<3.16"
+dependencies = []
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+mcp_libs = ["../../resources/*/resource.json"]

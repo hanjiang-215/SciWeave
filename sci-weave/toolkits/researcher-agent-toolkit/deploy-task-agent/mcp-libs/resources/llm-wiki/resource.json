@@ -1,0 +1,15 @@
+{
+  "name": "llm-wiki",
+  "version": "1.0.0",
+  "description": "Read-only curated knowledge lookup for research context.",
+  "environment": ["LLM_WIKI_MCP_URL", "LLM_WIKI_MCP_TOKEN"],
+  "tools": [{
+    "name": "llm_wiki_lookup",
+    "description": "Retrieve a cited wiki entry by query.",
+    "input": {"query": "string", "section": "string (optional)"},
+    "output": {"entries": "array of entries with citations"},
+    "examples": [{"query": "CRISPR off-target effects"}],
+    "allowed": ["background context", "terminology clarification"],
+    "failures": ["ambiguous query", "entry not found", "upstream unavailable"]
+  }]
+}

@@ -1,0 +1,15 @@
+{
+  "name": "research-mapping",
+  "version": "1.0.0",
+  "description": "Read-only research entities, relations, and mappings.",
+  "environment": ["RESEARCH_MAPPING_MCP_URL", "RESEARCH_MAPPING_MCP_TOKEN"],
+  "tools": [{
+    "name": "research_map_search",
+    "description": "Search mapped entities and relations.",
+    "input": {"query": "string", "limit": "integer (optional)"},
+    "output": {"matches": "array of entity or relation records"},
+    "examples": [{"query": "protein folding", "limit": 10}],
+    "allowed": ["evidence discovery", "mapping concepts before synthesis"],
+    "failures": ["missing query", "upstream unavailable", "invalid credentials"]
+  }]
+}
