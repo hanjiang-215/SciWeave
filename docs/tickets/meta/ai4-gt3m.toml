@@ -1,0 +1,3 @@
+# ai4-gt3m 的索引归属与简介（人工维护）
+module = ["gateway", "product"]
+summary = "记录 gateway/mcp 测试复跑失败与看板 Gateway 来源缺口，供 Centre Agent 侧确认"
