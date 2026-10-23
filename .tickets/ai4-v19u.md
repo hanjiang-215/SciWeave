@@ -1,6 +1,6 @@
 ---
 id: ai4-v19u
-status: open
+status: closed
 deps: []
 links: [ai4-yyy9, ai4-xup8, ai4-ufqu, ai4-353s]
 created: 2026-10-18T15:18:52Z
@@ -36,3 +36,8 @@ tags: [wayfinder:grilling]
 4. **与消息协作及治理的接口**：任务下发只走消息队列；订阅是出站连接；留痕与审计不受套件影响。
 
 范围外维持 `ai4-jfvy` 的结论：Agent Kit manifest、Skills/Hooks 模板体系、ZIP 交付与多套件市场不属本阶段。本票验收标准「形成供后续规划使用的套件边界与职责规格」已具备交付物；是否关闭等待地图负责人确认子分支收敛状态。
+
+**2026-10-23 关闭（子票 owner + 地图 owner 同为 hanjiang 确认）**
+
+- 交付物 `docs/superpowers/specs/2026-10-23-agent-suite-boundary-design.md` 已在仓库落盘（feature/hanjiang），覆盖验收标准要求的全部内容：平台提供 vs 用户自带能力分工（边界三）、与端侧 Agent/消息协作及治理流程的接口边界（边界四）、两类 MCP 分工（边界一）与运行时套件装载边界（边界二）。
+- 地图 `ai4-xup8` 已于 2026-10-23 在 Notes 记录该分支「规格已交付」的收敛状态；子票 owner 与地图 owner 均为 hanjiang，现确认收敛完成，本票验收满足，状态置为 `closed`。

@@ -79,5 +79,5 @@ Out of scope 中「消息队列产品选型」这一项已被现实超越：2026
 
 **2026-10-23 分支状态（地图 owner hanjiang 记录）**
 
-- `ai4-v19u`（Agent 套件接入与协作边界分支）已由 hanjiang 认领并收敛：套件三件套（MCP、Skills、Hooks）的职责与接入边界规格落为 `docs/superpowers/specs/2026-10-23-agent-suite-boundary-design.md`，继承 `ai4-dhpv` 两类 MCP 分工、`ai4-353s` 物理隔离与 `docs/端侧Agent运行时调研.md` 的运行时装载边界；Agent Kit manifest / Skills-Hooks 模板 / ZIP 交付维持 `ai4-jfvy` 的范围外结论。该分支规格已交付，关闭待子票 owner 与后续实现规划使用确认。
+- `ai4-v19u`（Agent 套件接入与协作边界分支）已由 hanjiang 认领并收敛：套件三件套（MCP、Skills、Hooks）的职责与接入边界规格落为 `docs/superpowers/specs/2026-10-23-agent-suite-boundary-design.md`，继承 `ai4-dhpv` 两类 MCP 分工、`ai4-353s` 物理隔离与 `docs/端侧Agent运行时调研.md` 的运行时装载边界；Agent Kit manifest / Skills-Hooks 模板 / ZIP 交付维持 `ai4-jfvy` 的范围外结论。该分支规格已交付，子票 owner（hanjiang）与地图 owner（hanjiang）确认收敛完成，`ai4-v19u` 已置为 `closed`。
 - 消息协作分支（`ai4-te1v`）与端侧 Agent 分支（`ai4-kpvp`）仍由 Frank Qi 收敛，不在本地图侧再展开。
