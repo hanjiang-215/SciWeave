@@ -59,7 +59,7 @@ tests/                           标准库 unittest
 同时配置 `SCIWEAVE_MAPPING_MCP_HOST` 与 `SCIWEAVE_MAPPING_MCP_PORT` 后，进程提供领域管理 MCP（Streamable HTTP，`POST /mcp`，`GET /health`）。工具一律经 `FormalQueryService` 与 `MappingCandidateService` 调用，不直连领域存储：
 
 - `get_formal_mapping(mapping_domain_id)`：正式内容只读查询，要求 `read` 或 `centre` 能力；
-- `list_candidates(submission_id)`：候选记录读取占位，要求 `read` 或 `centre` 能力；
+- `list_candidates(submission_id)`：读取指定提交的候选治理记录（提交者、领域、正式基准、Proposal 状态、candidate head 与摘要），要求 `read` 或 `centre` 能力；无记录时返回 `candidate: null`；
 - `submit_candidate(change_set, idempotency_key)`：候选提交，要求 `candidate_submit` 或 `centre` 能力。
 
 调用方身份从 `Authorization: Bearer <token>` 解析，按 `SCIWEAVE_MAPPING_MCP_TOKENS_JSON` 映射为 actor_id；服务端按 `SCIWEAVE_MAPPING_CALLER_CAPABILITIES_JSON` 执行能力档位校验，未授权返回稳定 `forbidden` 错误。配置 `SCIWEAVE_MAPPING_AUDIT_SQLITE_PATH` 后，读调用记录 `attempted`（fail-open）、写调用记录 `invoked`/`completed`（写前 fail-closed），审计位于接口层，领域服务不重复接入。测试覆盖权限分层、审计双阶段、传输层身份注入与越权拒绝，见 `tests/test_management.py`。
