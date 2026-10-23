@@ -108,6 +108,10 @@ _Avoid_: 用 Work Agent 替代 Task Agent 或 Centre Agent 这两个实例名。
 
 **Task Agent（任务 Agent）**：研究员在自己的电脑上编写和运行的 Work Agent 实例，用于执行边界明确、重复、耗时或结构化的科研任务；它不是平台自研的通用 harness，也不由平台部署或托管。它主动连接中央消息队列接收上游交接，按中央服务对端侧开放的能力面调用服务，执行结果作为草稿写入中央草稿箱。
 
+**Agent Definition（Agent 定义）**：一份 Work Agent 在一轮 loop 里要做什么的说明，包括任务指令、允许的模型和允许调用的领域能力。Centre Agent 的定义是固定的预审说明。Task Agent 的定义由研究员在平台给出的样例上修改。它不是 Gateway，也不是 Personal Agent 用来安装套件的 skill。
+
+_Avoid_: 把 Agent 定义叫成服务模板或运行时。服务模板只负责把进程拉起来，运行时是状态机、租约和拉起子进程的实现。
+
 **Centre Agent（中央 Agent）**：部署在中央控制面上的 Work Agent 实例，对 Research Mapping 与 LLM-Wiki 的候选分支做候选预审并生成必要的混合候选。它与 Task Agent 共用架构，但订阅候选事件与正式版本发布事件，处置面当前不提供功能。它不参与草稿的一审、不代替研究负责人进行科研内容判断和最终批准、不写正式版本、不发起执行、不部署或托管 Task Agent。任何正式 Mapping 或正式科研结果发布都必须由 Project Owner 明确批准。
 
 > 修订（2026-10-22）：原条目名为 Central Agent，现统一为 Centre Agent 并明确它是 Work Agent 的中央实例。删去「按 Project Owner 已批准的绑定部署 Task Agent」（2026-10-21）。
@@ -126,9 +130,12 @@ _Avoid_: 用 Work Agent 替代 Task Agent 或 Centre Agent 这两个实例名。
 
 **AuditEvent（审计事件）**：领域内对受控提交、调度、执行、预审、审核、批准、驳回和正式化等操作的不可变过程记录。AuditEvent 至少说明操作者、操作类型、目标、基准版本、结果、时间、原因以及关联的 Proposal 或任务标识，用于按任务、提案、正式版本或时间重建责任链。它属于领域治理记录，由领域服务在写事实的同一事务内产生，各领域各自持有；它不是接口访问记录。
 
-**Call Ledger（调用账本）**：中央对外接口层对每次工具调用的不可变记录，说明调用者、连接通道、被调服务、工具名、目标对象标识、结果与耗时，用于回答「谁通过什么通道访问了什么」。它与 AuditEvent 是两种记录：AuditEvent 回答「谁改了什么正式事实」，调用账本回答「谁调用了什么接口」。调用账本不记业务语义，不含入参正文，只留参数摘要；读写调用都记，写调用按先记录后执行的两阶段记录。
+**Call Ledger（调用账本）**：中央对外接口层对每次工具调用的不可变记录，说明套件调用标识、连接通道、被调服务、工具名、目标对象标识、结果与耗时，用于回答「谁通过什么通道访问了什么」。它与 AuditEvent 是两种记录：AuditEvent 回答「谁改了什么正式事实」，调用账本回答「谁调用了什么接口」。调用账本不记业务语义，不含入参正文，只留参数摘要；读写调用都记，写调用按先记录后执行的两阶段记录。
 
-**Caller（调用者）**：向 Gateway 发起 MCP 请求且已通过 Gateway 当前身份校验的请求来源。最小闭环阶段，Caller 由启动配置中的本地开发令牌和调用者标识确定，并作为 OwnerCommand 和 AuditEvent 的操作者记录；它不自动证明调用者是 Task Node Owner，也不授予领域治理权限。
+**Suite Call Identifier（套件调用标识）**：调用账本上由调用方套件自行填入的标识。它不经中央校验；多人共用一个套件时会并成同一个标识。它不是 Caller。
+_Avoid_: Caller, actor_id
+
+**Caller（调用者）**：向 Gateway 发起 MCP 请求且已通过 Gateway 当前身份校验的请求来源。最小闭环阶段，Caller 由启动配置中的本地开发令牌和调用者标识确定，并作为 OwnerCommand 和 AuditEvent 的操作者记录；它不自动证明调用者是 Task Node Owner，也不授予领域治理权限。它不是调用账本上的套件调用标识。
 
 **Personal Agent（Personal Agent）**：研究人员使用自己的 harness 配置的 Agent，通过 MCP、Skills、系统提示词和 Hooks 接入科研协作平台。
 
