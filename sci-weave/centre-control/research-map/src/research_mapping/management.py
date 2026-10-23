@@ -77,9 +77,13 @@ class MappingManagementService:
         caller_capabilities: dict[str, frozenset[str]],
         audit_connection: sqlite3.Connection | None = None,
         service_name: str = "mapping-management",
+        review_service=None,
+        formalization_service=None,
     ) -> None:
         self._formal_query = formal_query
         self._candidate_service = candidate_service
+        self._review_service = review_service
+        self._formalization_service = formalization_service
         self._capabilities = caller_capabilities
         self._audit = audit_connection
         self._service = service_name
@@ -97,11 +101,18 @@ class MappingManagementService:
         return self._audited_read(handler, tool, arguments, actor_id, channel_id, caller_type)
 
     def _handlers(self) -> dict[str, Any]:
-        return {
+        handlers: dict[str, Any] = {
             "get_formal_mapping": self._get_formal_mapping,
             "list_candidates": self._list_candidates,
             "submit_candidate": self._submit_candidate,
         }
+        if self._review_service is not None:
+            handlers["preview_candidate"] = self._preview_candidate
+            handlers["record_review"] = self._record_review
+        if self._formalization_service is not None:
+            handlers["formalize_candidate"] = self._formalize_candidate
+            handlers["reconcile_formalization"] = self._reconcile_formalization
+        return handlers
 
     def _require_authorized(self, tool: str, actor_id: str) -> None:
         required = _TOOL_CAPABILITIES[tool]
@@ -187,13 +198,66 @@ class MappingManagementService:
         result = self._candidate_service.submit(change_set, idempotency_key)
         return _candidate_result(result)
 
+    def _preview_candidate(self, arguments: dict[str, Any], actor_id: str) -> dict[str, Any]:
+        preview = self._review_service.preview(
+            _required(arguments, "proposal_id"),
+            _required(arguments, "base_formal_revision_id"),
+            _required(arguments, "candidate_head"),
+        )
+        return {
+            "status": preview.status,
+            "reason_code": preview.reason_code,
+            "preview_id": preview.preview_id,
+            "evidence_id": preview.evidence_id,
+            "changes": list(preview.changes),
+            "affected_objects": list(preview.affected_objects),
+            "route_impact": preview.route_impact,
+        }
 
-_WRITE_TOOLS = frozenset({"submit_candidate"})
+    def _record_review(self, arguments: dict[str, Any], actor_id: str) -> dict[str, Any]:
+        decision = self._review_service.record_review(
+            _required(arguments, "buffer_id"),
+            actor_id,
+            _required(arguments, "decision"),
+            _required(arguments, "reason"),
+        )
+        return {
+            "event_id": decision.event_id,
+            "buffer_id": decision.buffer_id,
+            "actor_id": decision.actor_id,
+            "decision": decision.decision,
+            "reason": decision.reason,
+            "occurred_at": decision.occurred_at,
+        }
+
+    def _formalize_candidate(self, arguments: dict[str, Any], actor_id: str) -> dict[str, Any]:
+        outcome = self._formalization_service.formalize(
+            _required(arguments, "merge_request_id"),
+            _required(arguments, "operation_id"),
+        )
+        return _formalization_outcome(outcome)
+
+    def _reconcile_formalization(self, arguments: dict[str, Any], actor_id: str) -> dict[str, Any]:
+        outcome = self._formalization_service.reconcile(_required(arguments, "operation_id"))
+        return _formalization_outcome(outcome)
+
+
+_WRITE_TOOLS = frozenset({
+    "submit_candidate",
+    "preview_candidate",
+    "record_review",
+    "formalize_candidate",
+    "reconcile_formalization",
+})
 
 _TOOL_CAPABILITIES = {
     "get_formal_mapping": _READ_CAPABILITIES,
     "list_candidates": _READ_CAPABILITIES,
     "submit_candidate": _CANDIDATE_SUBMIT_CAPABILITIES,
+    "preview_candidate": frozenset({"candidate_review", "centre"}),
+    "record_review": frozenset({"candidate_review", "centre"}),
+    "formalize_candidate": frozenset({"formalize", "centre"}),
+    "reconcile_formalization": frozenset({"formalize", "centre"}),
 }
 
 TOOL_DEFINITIONS = [
@@ -227,6 +291,57 @@ TOOL_DEFINITIONS = [
                 "change_set": {"type": "object"},
                 "idempotency_key": {"type": "string"},
             },
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "preview_candidate",
+        "description": "Build immutable diff review evidence for a fixed candidate head. Requires candidate_review or centre capability.",
+        "inputSchema": {
+            "type": "object",
+            "required": ["proposal_id", "base_formal_revision_id", "candidate_head"],
+            "properties": {
+                "proposal_id": {"type": "string"},
+                "base_formal_revision_id": {"type": "string"},
+                "candidate_head": {"type": "string"},
+            },
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "record_review",
+        "description": "Record a review decision for a merge-request buffer. Requires candidate_review or centre capability.",
+        "inputSchema": {
+            "type": "object",
+            "required": ["buffer_id", "decision", "reason"],
+            "properties": {
+                "buffer_id": {"type": "string"},
+                "decision": {"type": "string", "enum": ["approved", "returned", "rejected"]},
+                "reason": {"type": "string"},
+            },
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "formalize_candidate",
+        "description": "Promote an Owner-approved candidate through atomic SQLite activation. Requires formalize or centre capability.",
+        "inputSchema": {
+            "type": "object",
+            "required": ["merge_request_id", "operation_id"],
+            "properties": {
+                "merge_request_id": {"type": "string"},
+                "operation_id": {"type": "string"},
+            },
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "reconcile_formalization",
+        "description": "Resume the same formalization operation identity. Requires formalize or centre capability.",
+        "inputSchema": {
+            "type": "object",
+            "required": ["operation_id"],
+            "properties": {"operation_id": {"type": "string"}},
             "additionalProperties": False,
         },
     },
@@ -266,6 +381,17 @@ def _candidate_result(result: CandidateSubmissionResult) -> dict[str, Any]:
     return {key: value for key, value in payload.items() if value is not None}
 
 
+def _formalization_outcome(outcome) -> dict[str, Any]:
+    return {
+        "status": outcome.status,
+        "formalization_operation_id": outcome.formalization_operation_id,
+        "result_id": outcome.result_id,
+        "formal_revision_id": outcome.formal_revision_id,
+        "reason_code": outcome.reason_code,
+        "attempt_number": outcome.attempt_number,
+    }
+
+
 def _classify(error: Exception) -> str:
     if isinstance(error, (ValueError, TypeError)):
         return "invalid_arguments"
@@ -279,6 +405,10 @@ def _target_type(tool: str) -> str:
         "get_formal_mapping": "MappingDomain",
         "list_candidates": "MappingSubmission",
         "submit_candidate": "MappingSubmission",
+        "preview_candidate": "MappingCandidate",
+        "record_review": "MappingMergeRequest",
+        "formalize_candidate": "MappingMergeRequest",
+        "reconcile_formalization": "MappingFormalizationOperation",
     }.get(tool)
 
 
@@ -289,6 +419,10 @@ def _target_id(arguments: dict[str, Any], tool: str) -> str | None:
         return _text(arguments.get("submission_id"))
     if tool == "submit_candidate":
         return _text(arguments.get("idempotency_key"))
+    if tool in {"preview_candidate", "record_review", "formalize_candidate"}:
+        return _text(arguments.get("proposal_id")) or _text(arguments.get("buffer_id")) or _text(arguments.get("merge_request_id"))
+    if tool == "reconcile_formalization":
+        return _text(arguments.get("operation_id"))
     return None
 
 

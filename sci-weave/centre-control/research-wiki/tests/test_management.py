@@ -231,7 +231,11 @@ class WikiManagementMcpTransportTestCase(unittest.TestCase):
     def test_tools_list_is_served_after_authentication(self):
         status, body = self._post({"jsonrpc": "2.0", "id": 1, "method": "tools/list"}, token="tok-reader")
         self.assertEqual(status, 200)
-        self.assertEqual(len(body["result"]["tools"]), len(TOOL_DEFINITIONS))
+        names = {tool["name"] for tool in body["result"]["tools"]}
+        # The transport only serves tools backed by an injected domain service.
+        self.assertIn("get_formal_wiki", names)
+        self.assertIn("submit_wiki_candidate", names)
+        self.assertTrue(names.issubset({tool["name"] for tool in TOOL_DEFINITIONS}))
 
     def test_denied_capability_returns_stable_error(self):
         status, body = self._post(

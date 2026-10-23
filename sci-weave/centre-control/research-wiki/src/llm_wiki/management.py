@@ -91,9 +91,13 @@ class WikiManagementService:
         caller_capabilities: dict[str, frozenset[str]],
         audit_connection: sqlite3.Connection | None = None,
         service_name: str = "wiki-management",
+        review_service=None,
+        formalization_service=None,
     ) -> None:
         self._formal_query = formal_query
         self._candidate_service = candidate_service
+        self._review_service = review_service
+        self._formalization_service = formalization_service
         self._capabilities = caller_capabilities
         self._audit = audit_connection
         self._service = service_name
@@ -111,10 +115,18 @@ class WikiManagementService:
         return self._audited_read(handler, tool, arguments, actor_id, channel_id, caller_type)
 
     def _handlers(self) -> dict[str, Any]:
-        return {
+        handlers: dict[str, Any] = {
             "get_formal_wiki": self._get_formal_wiki,
             "submit_wiki_candidate": self._submit_wiki_candidate,
         }
+        if self._review_service is not None:
+            handlers["preview_wiki_review"] = self._preview_wiki_review
+            handlers["create_wiki_merge_request"] = self._create_wiki_merge_request
+            handlers["decide_wiki_review"] = self._decide_wiki_review
+        if self._formalization_service is not None:
+            handlers["formalize_wiki"] = self._formalize_wiki
+            handlers["reconcile_wiki_formalization"] = self._reconcile_wiki_formalization
+        return handlers
 
     def _require_authorized(self, tool: str, actor_id: str) -> None:
         required = _TOOL_CAPABILITIES[tool]
@@ -196,12 +208,73 @@ class WikiManagementService:
         result = self._candidate_service.submit(document_change, idempotency_key)
         return _candidate_result(result)
 
+    def _preview_wiki_review(self, arguments: dict[str, Any], actor_id: str) -> dict[str, Any]:
+        result = self._review_service.preview(_required(arguments, "proposal_id"))
+        return {
+            "status": result.status,
+            "reason_code": result.reason_code,
+            "preview_id": result.preview_id,
+            "proposal_id": result.proposal_id,
+            "base_formal_revision_id": result.base_formal_revision_id,
+            "candidate_head": result.candidate_head,
+            "evidence": list(result.evidence),
+        }
 
-_WRITE_TOOLS = frozenset({"submit_wiki_candidate"})
+    def _create_wiki_merge_request(self, arguments: dict[str, Any], actor_id: str) -> dict[str, Any]:
+        result = self._review_service.create_merge_request(
+            _required(arguments, "proposal_id"),
+            _required(arguments, "merge_request_id"),
+            actor_id,
+        )
+        return {
+            "status": result.status,
+            "reason_code": result.reason_code,
+            "preview_id": result.preview_id,
+            "candidate_head": result.candidate_head,
+        }
+
+    def _decide_wiki_review(self, arguments: dict[str, Any], actor_id: str) -> dict[str, Any]:
+        result = self._review_service.decide(
+            _required(arguments, "merge_request_id"),
+            actor_id=actor_id,
+            decision=_required(arguments, "decision"),
+            reason=_required(arguments, "reason"),
+            selected_solution_id=_required(arguments, "selected_solution_id"),
+        )
+        return {
+            "status": result.status,
+            "reason_code": result.reason_code,
+            "audit_event_id": result.audit_event_id,
+        }
+
+    def _formalize_wiki(self, arguments: dict[str, Any], actor_id: str) -> dict[str, Any]:
+        result = self._formalization_service.formalize(
+            _required(arguments, "merge_request_id"),
+            _required(arguments, "operation_id"),
+        )
+        return _wiki_formalization_outcome(result)
+
+    def _reconcile_wiki_formalization(self, arguments: dict[str, Any], actor_id: str) -> dict[str, Any]:
+        result = self._formalization_service.reconcile(_required(arguments, "operation_id"))
+        return _wiki_formalization_outcome(result)
+
+
+_WRITE_TOOLS = frozenset({
+    "submit_wiki_candidate",
+    "create_wiki_merge_request",
+    "decide_wiki_review",
+    "formalize_wiki",
+    "reconcile_wiki_formalization",
+})
 
 _TOOL_CAPABILITIES = {
     "get_formal_wiki": _READ_CAPABILITIES,
     "submit_wiki_candidate": _CANDIDATE_SUBMIT_CAPABILITIES,
+    "preview_wiki_review": frozenset({"candidate_review", "centre"}),
+    "create_wiki_merge_request": frozenset({"candidate_review", "centre"}),
+    "decide_wiki_review": frozenset({"formalize", "centre"}),
+    "formalize_wiki": frozenset({"formalize", "centre"}),
+    "reconcile_wiki_formalization": frozenset({"formalize", "centre"}),
 }
 
 TOOL_DEFINITIONS = [
@@ -225,6 +298,67 @@ TOOL_DEFINITIONS = [
                 "document_change": {"type": "object"},
                 "idempotency_key": {"type": "string"},
             },
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "preview_wiki_review",
+        "description": "Build the review preview for a Wiki proposal. Requires candidate_review or centre capability.",
+        "inputSchema": {
+            "type": "object",
+            "required": ["proposal_id"],
+            "properties": {"proposal_id": {"type": "string"}},
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "create_wiki_merge_request",
+        "description": "Lock a ready Wiki preview into a merge-request buffer for owner review. Requires candidate_review or centre capability.",
+        "inputSchema": {
+            "type": "object",
+            "required": ["proposal_id", "merge_request_id"],
+            "properties": {
+                "proposal_id": {"type": "string"},
+                "merge_request_id": {"type": "string"},
+            },
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "decide_wiki_review",
+        "description": "Record the Project Owner decision for a Wiki merge request. Requires formalize or centre capability.",
+        "inputSchema": {
+            "type": "object",
+            "required": ["merge_request_id", "decision", "reason", "selected_solution_id"],
+            "properties": {
+                "merge_request_id": {"type": "string"},
+                "decision": {"type": "string", "enum": ["approved", "rejected"]},
+                "reason": {"type": "string"},
+                "selected_solution_id": {"type": "string"},
+            },
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "formalize_wiki",
+        "description": "Promote an Owner-approved Wiki candidate through atomic SQLite activation. Requires formalize or centre capability.",
+        "inputSchema": {
+            "type": "object",
+            "required": ["merge_request_id", "operation_id"],
+            "properties": {
+                "merge_request_id": {"type": "string"},
+                "operation_id": {"type": "string"},
+            },
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "reconcile_wiki_formalization",
+        "description": "Resume the same Wiki formalization operation identity. Requires formalize or centre capability.",
+        "inputSchema": {
+            "type": "object",
+            "required": ["operation_id"],
+            "properties": {"operation_id": {"type": "string"}},
             "additionalProperties": False,
         },
     },
@@ -266,10 +400,25 @@ def _candidate_result(result) -> dict[str, Any]:
     return {key: value for key, value in payload.items() if value is not None}
 
 
+def _wiki_formalization_outcome(result) -> dict[str, Any]:
+    return {
+        "status": result.status,
+        "reason_code": result.reason_code,
+        "formal_wiki_revision_id": result.formal_wiki_revision_id,
+        "operation_id": result.operation_id,
+        "commit_hash": result.commit_hash,
+    }
+
+
 def _target_type(tool: str) -> str:
     return {
         "get_formal_wiki": "WikiDomain",
         "submit_wiki_candidate": "WikiSubmission",
+        "preview_wiki_review": "WikiProposal",
+        "create_wiki_merge_request": "WikiMergeRequest",
+        "decide_wiki_review": "WikiMergeRequest",
+        "formalize_wiki": "WikiMergeRequest",
+        "reconcile_wiki_formalization": "WikiFormalizationOperation",
     }.get(tool)
 
 
@@ -278,6 +427,12 @@ def _target_id(arguments: dict[str, Any], tool: str) -> str | None:
         return _text(arguments.get("wiki_domain_id"))
     if tool == "submit_wiki_candidate":
         return _text(arguments.get("idempotency_key"))
+    if tool == "preview_wiki_review":
+        return _text(arguments.get("proposal_id"))
+    if tool in {"create_wiki_merge_request", "decide_wiki_review", "formalize_wiki"}:
+        return _text(arguments.get("merge_request_id"))
+    if tool == "reconcile_wiki_formalization":
+        return _text(arguments.get("operation_id"))
     return None
 
 

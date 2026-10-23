@@ -165,6 +165,123 @@ class ManagementServiceTestCase(unittest.TestCase):
             })
 
 
+class _ReviewFormalTerminus:
+    def __init__(self):
+        self.snapshots = {
+            "base-commit": ({"@id": "TaskNode/n1", "@type": "TaskNode", "title": "Old", "lifecycle_state": "formal"},),
+            "candidate-commit": ({"@id": "TaskNode/n1", "@type": "TaskNode", "title": "New", "lifecycle_state": "candidate"},),
+        }
+        self.branch_head = "candidate-commit"
+
+    def current_branch_head(self, store_id, database, branch_id):
+        return self.branch_head if branch_id == "candidate-branch" else "base-commit"
+
+    def read_exact_snapshot(self, store_id, database, branch_id, commit_hash):
+        from research_mapping.domain import SnapshotRead
+        docs = self.snapshots.get(commit_hash)
+        if docs is None:
+            return SnapshotRead.unavailable("unavailable")
+        return SnapshotRead.confirmed(store_id=store_id, database=database, branch_id=branch_id,
+                                      commit_hash=commit_hash, documents=docs)
+
+    def create_formal_snapshot(self, store_id, database, branch_id, commit_hash, operation_id):
+        return self.read_exact_snapshot(store_id, database, branch_id, commit_hash)
+
+
+class ReviewFormalizationToolTestCase(unittest.TestCase):
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.sqlite = SqliteStore(os.path.join(self.tmp.name, "mapping.db"))
+        self.sqlite.initialize()
+        self.sqlite.add_formal_revision(FormalMappingRevision(
+            formal_revision_id=BASE, mapping_domain_id=DOMAIN, terminus_store_id="store",
+            formal_branch_id="formal", formal_commit_hash="base-commit", base_formal_revision_id=None,
+            source_proposal_id=None, approval_audit_event_id=None, published_by="owner",
+            published_at="2026-10-22T00:00:00Z",
+        ))
+        self.sqlite.set_current_formal_revision(DOMAIN, BASE, updated_at="2026-10-22T00:00:00Z")
+        with self.sqlite.connection() as db:
+            db.execute("INSERT INTO mapping_submission VALUES (?,?,?,?,?,?,?,?,?)",
+                ("submission", DOMAIN, "author", BASE, "key", "digest", "proposal", "now", "candidate_created"))
+            db.execute("INSERT INTO mapping_proposal VALUES (?,?,?,?,?,?,?,?)",
+                ("proposal", DOMAIN, BASE, "store", "candidate-branch", "candidate", "author", "now"))
+            db.execute("INSERT INTO mapping_candidate_commit VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                ("candidate-id", DOMAIN, "proposal", "store", "candidate-branch", "candidate-commit", BASE,
+                 "digest", "snapshot", "author", "now"))
+            db.commit()
+        self.terminus = _ReviewFormalTerminus()
+        from research_mapping.formalization import MappingFormalizationService
+        from research_mapping.review import MappingReviewService
+        review = MappingReviewService(self.sqlite, self.terminus, terminus_database="db")
+        formalization = MappingFormalizationService(
+            self.sqlite, self.terminus, terminus_database="db",
+            is_project_owner=lambda actor, domain: actor == "owner",
+        )
+        audit_path = os.path.join(self.tmp.name, "audit.db")
+        from audit_trail import init_audit_table, open_connection
+        self.audit = open_connection(audit_path)
+        self.addCleanup(self.audit.close)
+        init_audit_table(self.audit)
+        from research_mapping.candidate_submission import MappingCandidateService
+        self.service = MappingManagementService(
+            formal_query=self._noop_formal(),
+            candidate_service=MappingCandidateService(self.sqlite, self.terminus, terminus_database="db"),
+            caller_capabilities={
+                "reader": frozenset({"read"}),
+                "reviewer": frozenset({"candidate_review"}),
+                "owner": frozenset({"candidate_review", "formalize"}),
+            },
+            audit_connection=self.audit,
+            review_service=review,
+            formalization_service=formalization,
+        )
+
+    def _noop_formal(self):
+        class Noop:
+            def get_current(self, domain_id):
+                return FormalQueryResult(status="no_formal_revision", mapping_domain_id=domain_id, reason_code="no_current_pointer")
+        return Noop()
+
+    def test_review_and_formalization_tools_require_their_capability_tiers(self):
+        preview = self.service.call_tool(
+            "preview_candidate", {"proposal_id": "proposal", "base_formal_revision_id": BASE, "candidate_head": "candidate-commit"},
+            actor_id="reviewer",
+        )
+        self.assertEqual(preview.status, "ok")
+        self.assertEqual(preview.result["status"], "available")  # type: ignore[index]
+        denied = self.service.call_tool(
+            "preview_candidate", {"proposal_id": "proposal", "base_formal_revision_id": BASE, "candidate_head": "candidate-commit"},
+            actor_id="reader",
+        )
+        self.assertEqual(denied.error_code, "forbidden")
+        formal_denied = self.service.call_tool(
+            "formalize_candidate", {"merge_request_id": "buffer", "operation_id": "op"}, actor_id="reviewer",
+        )
+        self.assertEqual(formal_denied.error_code, "forbidden")
+
+    def test_record_review_and_formalize_candidate_end_to_end(self):
+        preview = self.service.call_tool(
+            "preview_candidate", {"proposal_id": "proposal", "base_formal_revision_id": BASE, "candidate_head": "candidate-commit"},
+            actor_id="reviewer",
+        )
+        self.assertEqual(preview.status, "ok")
+        preview_id = preview.result["preview_id"]  # type: ignore[index]
+        self.assertTrue(preview_id)
+        from research_mapping.review import MappingReviewService
+        buffer = MappingReviewService(self.sqlite, self.terminus, terminus_database="db").create_buffer(preview_id)
+        decision = self.service.call_tool(
+            "record_review", {"buffer_id": buffer.buffer_id, "decision": "approved", "reason": "looks good"}, actor_id="owner",
+        )
+        self.assertEqual(decision.status, "ok")
+        self.assertEqual(decision.result["decision"], "approved")  # type: ignore[index]
+        outcome = self.service.call_tool(
+            "formalize_candidate", {"merge_request_id": buffer.buffer_id, "operation_id": "op-1"}, actor_id="owner",
+        )
+        self.assertEqual(outcome.status, "ok")
+        self.assertEqual(outcome.result["status"], "succeeded")  # type: ignore[index]
+
+
 class ManagementMcpTransportTestCase(unittest.TestCase):
     def setUp(self) -> None:
         self.tmp = tempfile.TemporaryDirectory()
@@ -217,7 +334,11 @@ class ManagementMcpTransportTestCase(unittest.TestCase):
     def test_tools_list_is_served_after_authentication(self):
         status, body = self._post({"jsonrpc": "2.0", "id": 1, "method": "tools/list"}, token="tok-reader")
         self.assertEqual(status, 200)
-        self.assertEqual(len(body["result"]["tools"]), len(TOOL_DEFINITIONS))
+        names = {tool["name"] for tool in body["result"]["tools"]}
+        # The transport only serves tools backed by an injected domain service.
+        self.assertIn("get_formal_mapping", names)
+        self.assertIn("submit_candidate", names)
+        self.assertTrue(names.issubset({tool["name"] for tool in TOOL_DEFINITIONS}))
 
     def test_denied_capability_returns_stable_error(self):
         status, body = self._post(

@@ -122,7 +122,8 @@ def _handle_single(service: MappingManagementService, request: Any, actor: str) 
         return {"jsonrpc": "2.0", "id": request_id, "result": {}}
     if method == "tools/list":
         from .management import TOOL_DEFINITIONS
-        return {"jsonrpc": "2.0", "id": request_id, "result": {"tools": TOOL_DEFINITIONS}}
+        available = {tool["name"] for tool in TOOL_DEFINITIONS if tool["name"] in service._handlers()}
+        return {"jsonrpc": "2.0", "id": request_id, "result": {"tools": [tool for tool in TOOL_DEFINITIONS if tool["name"] in available]}}
     if method == "tools/call":
         params = request.get("params") or {}
         tool = params.get("name", "")

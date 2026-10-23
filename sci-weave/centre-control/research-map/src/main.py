@@ -7,8 +7,10 @@ from research_mapping.candidate_submission import MappingCandidateService
 from research_mapping.config import MappingConfig
 from research_mapping.dashboard_source import run_mapping_dashboard_from_environment
 from research_mapping.formal_query import FormalQueryService
+from research_mapping.formalization import MappingFormalizationService
 from research_mapping.management import MappingManagementService, open_audit_database
 from research_mapping.management_mcp import run_management_server_from_config
+from research_mapping.review import MappingReviewService
 from research_mapping.sqlite_store import SqliteStore
 from research_mapping.terminus_store import TerminusDBStore
 
@@ -44,11 +46,20 @@ def main() -> int:
             terminus_store=terminus_store,
             terminus_database=config.terminusdb_database,
         )
+        review_service = MappingReviewService(
+            sqlite_store, terminus_store, terminus_database=config.terminusdb_database,
+        )
+        formalization_service = MappingFormalizationService(
+            sqlite_store, terminus_store, terminus_database=config.terminusdb_database,
+            is_project_owner=lambda actor, domain: "formalize" in capabilities.get(actor, ()),
+        )
         management = MappingManagementService(
             formal_query=service,
             candidate_service=candidate_service,
             caller_capabilities=capabilities,
             audit_connection=audit,
+            review_service=review_service,
+            formalization_service=formalization_service,
         )
         return run_management_server_from_config(config, management)
     result = service.get_current(config.mapping_domain_id)
