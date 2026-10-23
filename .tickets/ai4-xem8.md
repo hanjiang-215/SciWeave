@@ -6,7 +6,7 @@ links: [ai4-he04, ai4-s12u]
 created: 2026-10-21T12:49:00Z
 type: feature
 priority: 1
-assignee: Frank Qi
+assignee: zhanyunfei
 tags: [centre-control, buffer, terminusdb]
 ---
 # 中央草稿箱的存储与审核契约
@@ -68,6 +68,10 @@ drafting → submitted → under_review → accepted → promoted
 - [ ] `review_draft` 幂等，重复调用返回首次结论且不产生第二次决定
 - [ ] 草稿箱不创建候选、不写领域存储、不发起执行；`promoted` 只记录候选标识与 Commit
 - [ ] MCP 工具在临时数据库上的自动化测试通过，且不依赖固定端口或真实凭据
+
+**2026-10-23T08:23:00+08:00**
+
+负责人由 Frank Qi 转交给 zhanyunfei，原因：由 zhanyunfei 继续负责中央草稿箱（buffer）契约的实现与推进。
 
 ## Notes
 
