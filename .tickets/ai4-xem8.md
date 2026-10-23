@@ -80,16 +80,6 @@ drafting → submitted → under_review → accepted → promoted
 
 身份归一：本票原负责人即当前操作者，负责人字段已统一为 `hanjiang`；保留上方历史转交记录以维护变更轨迹。
 
-
-## Acceptance Criteria
-
-- [ ] 一个数据库、两个命名空间与 `Draft`、`NamespaceConfig` 字段按本票实现，`@key` 使用 `Random`
-- [ ] 草稿提交固定精确 Commit；提交后修改正文不改变本轮审核对象
-- [ ] 审核人从命名空间配置解析并留档，越权审核被拒绝
-- [ ] `review_draft` 幂等，重复调用返回首次结论且不产生第二次决定
-- [ ] 草稿箱不创建候选、不写领域存储、不发起执行；`promoted` 只记录候选标识与 Commit
-- [ ] MCP 工具在临时数据库上的自动化测试通过，且不依赖固定端口或真实凭据
-
 **2026-10-23 实施更新**
 
 负责人重新核对当前 `Solution`/`Design` 后，将唯一数据库与两个命名空间视为现行要求；历史 Notes 中“两个数据库/三个命名空间”仅保留讨论历史。采用“人调领域 MCP 创建候选后调用 `mark_promoted`、身份取自认证 MCP caller、首版无跨命名空间收件箱”的最小方案，不建立 Buffer 到领域服务的回调或跨服务强一致依赖。设计输入为 `docs/data-flow/draft-buffer.md`，详细裁决已记于本票 Notes。
