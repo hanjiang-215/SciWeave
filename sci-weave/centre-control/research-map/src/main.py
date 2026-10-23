@@ -60,6 +60,7 @@ def main() -> int:
             audit_connection=audit,
             review_service=review_service,
             formalization_service=formalization_service,
+            sqlite_store=sqlite_store,
         )
         return run_management_server_from_config(config, management)
     result = service.get_current(config.mapping_domain_id)

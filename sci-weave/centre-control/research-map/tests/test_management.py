@@ -94,7 +94,22 @@ class ManagementServiceTestCase(unittest.TestCase):
                 "centre": frozenset({"centre"}),
             },
             audit_connection=self.audit,
+            sqlite_store=self.sqlite,
         )
+
+    def test_list_candidates_reads_back_the_persisted_candidate_record(self):
+        submitted = self.service.call_tool(
+            "submit_candidate", {"change_set": _change_set(), "idempotency_key": "key-list"}, actor_id="submitter",
+        )
+        self.assertEqual(submitted.status, "ok")
+        listed = self.service.call_tool(
+            "list_candidates", {"submission_id": "submission-1"}, actor_id="reader",
+        )
+        self.assertEqual(listed.status, "ok")
+        candidate = listed.result["candidate"]  # type: ignore[index]
+        self.assertEqual(candidate["submission_id"], "submission-1")
+        self.assertEqual(candidate["commit_hash"], "commit-1")
+        self.assertEqual(candidate["proposal_id"], "proposal-1")
 
     def test_formal_read_requires_read_or_centre_capability(self):
         outcome = self.service.call_tool(

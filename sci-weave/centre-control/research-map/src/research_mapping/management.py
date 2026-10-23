@@ -79,11 +79,13 @@ class MappingManagementService:
         service_name: str = "mapping-management",
         review_service=None,
         formalization_service=None,
+        sqlite_store=None,
     ) -> None:
         self._formal_query = formal_query
         self._candidate_service = candidate_service
         self._review_service = review_service
         self._formalization_service = formalization_service
+        self._sqlite = sqlite_store
         self._capabilities = caller_capabilities
         self._audit = audit_connection
         self._service = service_name
@@ -187,8 +189,13 @@ class MappingManagementService:
         return _formal_query_result(result)
 
     def _list_candidates(self, arguments: dict[str, Any], actor_id: str) -> dict[str, Any]:
-        submission = _required(arguments, "submission_id")
-        return {"submission_id": submission, "candidate": None}
+        submission_id = _required(arguments, "submission_id")
+        if self._sqlite is None:
+            return {"submission_id": submission_id, "candidate": None}
+        record = self._sqlite.get_candidate_for_submission(submission_id)
+        if record is None:
+            return {"submission_id": submission_id, "candidate": None}
+        return {"submission_id": submission_id, "candidate": record}
 
     def _submit_candidate(self, arguments: dict[str, Any], actor_id: str) -> dict[str, Any]:
         change_set = arguments.get("change_set")
