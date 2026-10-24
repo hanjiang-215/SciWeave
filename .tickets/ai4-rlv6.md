@@ -104,3 +104,7 @@ tags: [centre-control, centre-agents, interface]
 - **依赖收窄**：deps 从 7 条减为 `ai4-a2ba` 与 `ai4-t2wc` 两条，其余五条（`ai4-he04`、`ai4-5z9e`、`ai4-oebi`、`ai4-8dgd`、`ai4-oz3s`）改为 `links`。原因：本票只定义接口形态、不实现，被一串实现票阻塞会导致它永远关不掉；这五张票的结论已引用进本票正文，其结论变化时回改本票即可，不需要等它们关闭。
 - **写工具命名**：正文的四个分领域名字（`append_mapping_prereview_log`、`append_wiki_prereview_log`、`create_mapping_merged_candidate`、`create_wiki_merged_candidate`）改为单数名 + 必需领域参数（`append_prereview_log`、`create_merged_candidate`），能力名为 `prereview_log` 与 `merged_candidate`，与读用的 `centre` 分开。依据「注册表登记中央 Agent 与其开放面」(ai4-t2wc) 2026-10-24 收口。`centre-agents/README.md` 的对应措辞待同步。
 - **实现位置**：摘除 `centre` 的 11 个写授权、新增两个写工具，由「收紧管理 MCP 的中央 Agent 开放面并补两个预审写工具」(ai4-5auy) 承载。
+
+**2026-10-24T15:34:36Z**
+
+2026-10-24T15:35:00Z 状态同步：上一则写的「centre-agents/README.md 的对应措辞待同步」已完成。README 现按本票与 ai4-t2wc 的收口改为 6 个读工具加 append_prereview_log、create_merged_candidate 两个单数名写工具，能力名 centre、prereview_log、merged_candidate 三组分开。该项不再是遗留事项。
