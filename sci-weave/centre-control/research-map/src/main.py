@@ -46,6 +46,13 @@ def main() -> int:
             terminus_store=terminus_store,
             terminus_database=config.terminusdb_database,
         )
+        from research_mapping.candidate_reader import MappingCandidateReader
+
+        candidate_reader = MappingCandidateReader(
+            sqlite_store=sqlite_store,
+            terminus_store=terminus_store,
+            terminus_database=config.terminusdb_database,
+        )
         review_service = MappingReviewService(
             sqlite_store, terminus_store, terminus_database=config.terminusdb_database,
         )
@@ -61,6 +68,7 @@ def main() -> int:
             review_service=review_service,
             formalization_service=formalization_service,
             sqlite_store=sqlite_store,
+            candidate_reader=candidate_reader,
         )
         return run_management_server_from_config(config, management)
     result = service.get_current(config.mapping_domain_id)

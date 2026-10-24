@@ -215,6 +215,54 @@ class SqliteStore:
         }
 
 
+    def list_reviewable_candidates(self, mapping_domain_id: str) -> list[dict[str, object]]:
+        """List candidate governance records that are still reviewable.
+
+        A reviewable candidate is not merged, rejected or abandoned and has a
+        persisted candidate commit. Each record carries the exact fixed head,
+        base revision and store location so a prereview scan can read the
+        immutable snapshot by identity (he04 / apply the centre agent prereview
+        input gate).
+        """
+        with self.connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT s.submission_id, s.mapping_domain_id, s.submitter_id,
+                       s.base_formal_revision_id, s.status AS submission_status,
+                       s.submitted_at, s.content_digest,
+                       p.proposal_id, p.status AS proposal_status,
+                       c.candidate_commit_id, c.terminus_store_id, c.branch_id,
+                       c.commit_hash, c.candidate_snapshot_digest, c.created_at
+                FROM mapping_proposal p
+                JOIN mapping_candidate_commit c ON c.proposal_id = p.proposal_id
+                JOIN mapping_submission s ON s.proposal_id = p.proposal_id
+                WHERE p.mapping_domain_id = ?
+                  AND p.status NOT IN ('merged', 'rejected', 'abandoned')
+                ORDER BY s.submitted_at ASC, s.rowid ASC
+                """,
+                (mapping_domain_id,),
+            ).fetchall()
+        return [
+            {
+                "submission_id": str(row["submission_id"]),
+                "mapping_domain_id": str(row["mapping_domain_id"]),
+                "submitter_id": str(row["submitter_id"]),
+                "base_formal_revision_id": row["base_formal_revision_id"],
+                "submission_status": str(row["submission_status"]),
+                "submitted_at": str(row["submitted_at"]),
+                "proposal_id": row["proposal_id"],
+                "proposal_status": row["proposal_status"],
+                "candidate_commit_id": row["candidate_commit_id"],
+                "terminus_store_id": row["terminus_store_id"],
+                "branch_id": row["branch_id"],
+                "commit_hash": row["commit_hash"],
+                "candidate_snapshot_digest": row["candidate_snapshot_digest"],
+                "created_at": row["created_at"],
+            }
+            for row in rows
+        ]
+
+
 def _row_to_revision(row: sqlite3.Row) -> FormalMappingRevision:
     return FormalMappingRevision(
         formal_revision_id=str(row["formal_revision_id"]),

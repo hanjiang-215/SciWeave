@@ -80,12 +80,14 @@ class MappingManagementService:
         review_service=None,
         formalization_service=None,
         sqlite_store=None,
+        candidate_reader=None,
     ) -> None:
         self._formal_query = formal_query
         self._candidate_service = candidate_service
         self._review_service = review_service
         self._formalization_service = formalization_service
         self._sqlite = sqlite_store
+        self._candidate_reader = candidate_reader
         self._capabilities = caller_capabilities
         self._audit = audit_connection
         self._service = service_name
@@ -108,6 +110,8 @@ class MappingManagementService:
             "list_candidates": self._list_candidates,
             "submit_candidate": self._submit_candidate,
         }
+        if self._candidate_reader is not None:
+            handlers["list_reviewable_candidates"] = self._list_reviewable_candidates
         if self._review_service is not None:
             handlers["preview_candidate"] = self._preview_candidate
             handlers["record_review"] = self._record_review
@@ -197,6 +201,29 @@ class MappingManagementService:
             return {"submission_id": submission_id, "candidate": None}
         return {"submission_id": submission_id, "candidate": record}
 
+    def _list_reviewable_candidates(self, arguments: dict[str, Any], actor_id: str) -> dict[str, Any]:
+        domain_id = _required(arguments, "mapping_domain_id")
+        if self._candidate_reader is None:
+            raise RuntimeError("candidate_reader is not configured")
+        return {
+            "mapping_domain_id": domain_id,
+            "candidates": [
+                {
+                    "submission_id": item.submission_id,
+                    "proposal_id": item.proposal_id,
+                    "submitter_id": item.submitter_id,
+                    "base_formal_revision_id": item.base_formal_revision_id,
+                    "candidate_commit_id": item.candidate_commit_id,
+                    "candidate_head": item.candidate_head,
+                    "proposal_status": item.proposal_status,
+                    "snapshot_status": item.snapshot_status,
+                    "reason_code": item.reason_code,
+                    "documents": list(item.documents),
+                }
+                for item in self._candidate_reader.list_reviewable(domain_id)
+            ],
+        }
+
     def _submit_candidate(self, arguments: dict[str, Any], actor_id: str) -> dict[str, Any]:
         change_set = arguments.get("change_set")
         idempotency_key = _required(arguments, "idempotency_key")
@@ -260,6 +287,7 @@ _WRITE_TOOLS = frozenset({
 _TOOL_CAPABILITIES = {
     "get_formal_mapping": _READ_CAPABILITIES,
     "list_candidates": _READ_CAPABILITIES,
+    "list_reviewable_candidates": _READ_CAPABILITIES,
     "submit_candidate": _CANDIDATE_SUBMIT_CAPABILITIES,
     "preview_candidate": frozenset({"candidate_review", "centre"}),
     "record_review": frozenset({"candidate_review", "centre"}),
@@ -285,6 +313,16 @@ TOOL_DEFINITIONS = [
             "type": "object",
             "required": ["submission_id"],
             "properties": {"submission_id": {"type": "string"}},
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "list_reviewable_candidates",
+        "description": "Read the same-time reviewable candidate set (not merged, rejected or abandoned) with exact candidate head, base formal revision and immutable content snapshot. Requires the read or centre capability.",
+        "inputSchema": {
+            "type": "object",
+            "required": ["mapping_domain_id"],
+            "properties": {"mapping_domain_id": {"type": "string"}},
             "additionalProperties": False,
         },
     },
@@ -411,6 +449,7 @@ def _target_type(tool: str) -> str:
     return {
         "get_formal_mapping": "MappingDomain",
         "list_candidates": "MappingSubmission",
+        "list_reviewable_candidates": "MappingDomain",
         "submit_candidate": "MappingSubmission",
         "preview_candidate": "MappingCandidate",
         "record_review": "MappingMergeRequest",
@@ -424,6 +463,8 @@ def _target_id(arguments: dict[str, Any], tool: str) -> str | None:
         return _text(arguments.get("mapping_domain_id"))
     if tool == "list_candidates":
         return _text(arguments.get("submission_id"))
+    if tool == "list_reviewable_candidates":
+        return _text(arguments.get("mapping_domain_id"))
     if tool == "submit_candidate":
         return _text(arguments.get("idempotency_key"))
     if tool in {"preview_candidate", "record_review", "formalize_candidate"}:

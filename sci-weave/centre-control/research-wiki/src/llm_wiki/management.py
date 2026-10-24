@@ -94,12 +94,14 @@ class WikiManagementService:
         review_service=None,
         formalization_service=None,
         sqlite_store=None,
+        candidate_reader=None,
     ) -> None:
         self._formal_query = formal_query
         self._candidate_service = candidate_service
         self._review_service = review_service
         self._formalization_service = formalization_service
         self._sqlite = sqlite_store
+        self._candidate_reader = candidate_reader
         self._capabilities = caller_capabilities
         self._audit = audit_connection
         self._service = service_name
@@ -122,6 +124,8 @@ class WikiManagementService:
             "list_wiki_candidates": self._list_wiki_candidates,
             "submit_wiki_candidate": self._submit_wiki_candidate,
         }
+        if self._candidate_reader is not None:
+            handlers["list_reviewable_wiki_candidates"] = self._list_reviewable_wiki_candidates
         if self._review_service is not None:
             handlers["preview_wiki_review"] = self._preview_wiki_review
             handlers["create_wiki_merge_request"] = self._create_wiki_merge_request
@@ -232,6 +236,29 @@ class WikiManagementService:
         result = self._candidate_service.submit(document_change, idempotency_key)
         return _candidate_result(result)
 
+    def _list_reviewable_wiki_candidates(self, arguments: dict[str, Any], actor_id: str) -> dict[str, Any]:
+        domain_id = _required(arguments, "wiki_domain_id")
+        if self._candidate_reader is None:
+            raise RuntimeError("candidate_reader is not configured")
+        return {
+            "wiki_domain_id": domain_id,
+            "candidates": [
+                {
+                    "submission_id": item.submission_id,
+                    "proposal_id": item.proposal_id,
+                    "submitter_id": item.submitter_id,
+                    "base_formal_revision_id": item.base_formal_revision_id,
+                    "candidate_commit_id": item.candidate_commit_id,
+                    "candidate_head": item.candidate_head,
+                    "proposal_status": item.proposal_status,
+                    "snapshot_status": item.snapshot_status,
+                    "reason_code": item.reason_code,
+                    "documents": list(item.documents),
+                }
+                for item in self._candidate_reader.list_reviewable(domain_id)
+            ],
+        }
+
     def _preview_wiki_review(self, arguments: dict[str, Any], actor_id: str) -> dict[str, Any]:
         result = self._review_service.preview(_required(arguments, "proposal_id"))
         return {
@@ -294,6 +321,7 @@ _WRITE_TOOLS = frozenset({
 _TOOL_CAPABILITIES = {
     "get_formal_wiki": _READ_CAPABILITIES,
     "list_wiki_candidates": _READ_CAPABILITIES,
+    "list_reviewable_wiki_candidates": _READ_CAPABILITIES,
     "submit_wiki_candidate": _CANDIDATE_SUBMIT_CAPABILITIES,
     "preview_wiki_review": frozenset({"candidate_review", "centre"}),
     "create_wiki_merge_request": frozenset({"candidate_review", "centre"}),
@@ -316,6 +344,16 @@ TOOL_DEFINITIONS = [
     {
         "name": "list_wiki_candidates",
         "description": "Read candidate submissions for a Wiki domain. Requires the read or centre capability.",
+        "inputSchema": {
+            "type": "object",
+            "required": ["wiki_domain_id"],
+            "properties": {"wiki_domain_id": {"type": "string"}},
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "list_reviewable_wiki_candidates",
+        "description": "Read the same-time reviewable Wiki candidate set (not merged, rejected or abandoned) with exact candidate head, base formal revision and immutable content snapshot. Requires the read or centre capability.",
         "inputSchema": {
             "type": "object",
             "required": ["wiki_domain_id"],
@@ -449,6 +487,7 @@ def _target_type(tool: str) -> str:
     return {
         "get_formal_wiki": "WikiDomain",
         "list_wiki_candidates": "WikiDomain",
+        "list_reviewable_wiki_candidates": "WikiDomain",
         "submit_wiki_candidate": "WikiSubmission",
         "preview_wiki_review": "WikiProposal",
         "create_wiki_merge_request": "WikiMergeRequest",
@@ -459,7 +498,7 @@ def _target_type(tool: str) -> str:
 
 
 def _target_id(arguments: dict[str, Any], tool: str) -> str | None:
-    if tool in {"get_formal_wiki", "list_wiki_candidates"}:
+    if tool in {"get_formal_wiki", "list_wiki_candidates", "list_reviewable_wiki_candidates"}:
         return _text(arguments.get("wiki_domain_id"))
     if tool == "submit_wiki_candidate":
         return _text(arguments.get("idempotency_key"))

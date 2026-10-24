@@ -83,6 +83,13 @@ def main(argv: list[str] | None = None) -> int:
             resource_review_service=service,
             terminus_database=config.terminusdb_database,
         )
+        from llm_wiki.candidate_reader import WikiCandidateReader
+
+        candidate_reader = WikiCandidateReader(
+            sqlite_store=sqlite_store,
+            terminus_store=terminus_store,
+            terminus_database=config.terminusdb_database,
+        )
         class _OwnerVerifier:
             def verify_owner(self, actor_id, wiki_domain_id):
                 return "formalize" in capabilities.get(actor_id, ())
@@ -109,6 +116,7 @@ def main(argv: list[str] | None = None) -> int:
             review_service=review_service,
             formalization_service=formalization_service,
             sqlite_store=sqlite_store,
+            candidate_reader=candidate_reader,
         )
         return run_wiki_management_server_from_config(config, management)
     if len(arguments) > 1:
