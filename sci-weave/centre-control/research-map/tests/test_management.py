@@ -86,6 +86,13 @@ class ManagementServiceTestCase(unittest.TestCase):
         self.audit = open_connection(audit_path)
         self.addCleanup(self.audit.close)
         init_audit_table(self.audit)
+        rules_dir = os.path.join(self.tmp.name, "rules")
+        os.makedirs(rules_dir)
+        rule_path = os.path.join(rules_dir, "1.0.0.json")
+        with open(rule_path, "w", encoding="utf-8") as handle:
+            json.dump({"version": "1.0.0", "checks": ["权限范围", "基准版本", "冲突", "影响范围"]}, handle, ensure_ascii=False)
+        from research_mapping.prereview import MappingPrereviewLog
+        prereview_log = MappingPrereviewLog(self.sqlite, rules_dir=rules_dir)
         self.service = MappingManagementService(
             formal_query=formal,
             candidate_service=candidate,
@@ -96,6 +103,7 @@ class ManagementServiceTestCase(unittest.TestCase):
             },
             audit_connection=self.audit,
             sqlite_store=self.sqlite,
+            prereview_log=prereview_log,
         )
 
     def test_list_candidates_reads_back_the_persisted_candidate_record(self):
@@ -154,6 +162,49 @@ class ManagementServiceTestCase(unittest.TestCase):
         self.assertEqual(len(rows), 2)
         phases = {row["phase"] for row in rows}
         self.assertEqual(phases, {"invoked", "completed"})
+
+    def test_append_prereview_log_requires_centre_capability_and_is_audited_as_write(self):
+        arguments = {
+            "candidate_id": "candidate-1", "candidate_head": "head-a",
+            "base_formal_revision_id": BASE, "rule_set_version": "1.0.0",
+            "verdict": "passed",
+            "checks": [{"name": "权限范围", "verdict": "passed"}],
+            "conflict_matrix": [],
+        }
+        denied = self.service.call_tool("append_prereview_log", arguments, actor_id="reader")
+        self.assertEqual(denied.error_code, "forbidden")
+        outcome = self.service.call_tool("append_prereview_log", arguments, actor_id="centre")
+        self.assertEqual(outcome.status, "ok")
+        self.assertIsNotNone(outcome.result["report_id"])  # type: ignore[index]
+        rows = query_audit_calls(self.audit, service="mapping-management", tool="append_prereview_log")
+        self.assertEqual(len(rows), 2)
+        self.assertEqual({row["phase"] for row in rows}, {"invoked", "completed"})
+
+    def test_append_prereview_log_decision_path(self):
+        self.service.call_tool(
+            "append_prereview_log",
+            {"candidate_id": "candidate-2", "candidate_head": "head-a",
+             "base_formal_revision_id": BASE, "rule_set_version": "1.0.0",
+             "verdict": "passed", "checks": [{"name": "权限范围", "verdict": "passed"}], "conflict_matrix": []},
+            actor_id="centre",
+        )
+        self.service.call_tool(
+            "append_prereview_log",
+            {"candidate_id": "candidate-2", "candidate_head": "head-b",
+             "base_formal_revision_id": BASE, "rule_set_version": "1.0.0",
+             "verdict": "passed", "checks": [{"name": "权限范围", "verdict": "passed"}], "conflict_matrix": []},
+            actor_id="centre",
+        )
+        current = self.service._prereview_log.current_report("candidate-2", "head-b")
+        self.assertIsNotNone(current)
+        decision = self.service.call_tool(
+            "append_prereview_log",
+            {"candidate_id": "candidate-2", "candidate_head": "head-a",
+             "reason": "head_moved", "superseding_report_id": current["report_id"]},
+            actor_id="centre",
+        )
+        self.assertEqual(decision.status, "ok")
+        self.assertIsNotNone(decision.result["decision_id"])  # type: ignore[index]
 
     def test_config_parses_tokens_and_capability_tiers(self):
         config = MappingConfig.from_environment({

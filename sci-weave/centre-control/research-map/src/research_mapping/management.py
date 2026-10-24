@@ -81,6 +81,7 @@ class MappingManagementService:
         formalization_service=None,
         sqlite_store=None,
         candidate_reader=None,
+        prereview_log=None,
     ) -> None:
         self._formal_query = formal_query
         self._candidate_service = candidate_service
@@ -88,6 +89,7 @@ class MappingManagementService:
         self._formalization_service = formalization_service
         self._sqlite = sqlite_store
         self._candidate_reader = candidate_reader
+        self._prereview_log = prereview_log
         self._capabilities = caller_capabilities
         self._audit = audit_connection
         self._service = service_name
@@ -118,7 +120,62 @@ class MappingManagementService:
         if self._formalization_service is not None:
             handlers["formalize_candidate"] = self._formalize_candidate
             handlers["reconcile_formalization"] = self._reconcile_formalization
+        if self._prereview_log is not None:
+            handlers["append_prereview_log"] = self._append_prereview_log
         return handlers
+
+    def _append_prereview_log(self, arguments: dict[str, Any], actor_id: str) -> dict[str, Any]:
+        """Append one prereview report, or one invalidation decision.
+
+        ``reason`` present means a decision row is appended (head_moved or
+        base_moved); otherwise a report row is appended under the
+        candidate-head-rules unique key. Both paths stay append-only.
+        """
+        if self._prereview_log is None:
+            raise RuntimeError("prereview_log is not configured")
+        candidate_id = _required(arguments, "candidate_id")
+        candidate_head = _required(arguments, "candidate_head")
+        reason = arguments.get("reason")
+        if isinstance(reason, str) and reason:
+            outcome = self._prereview_log.append_decision(
+                candidate_id=candidate_id,
+                candidate_head=candidate_head,
+                reason=reason,
+                superseding_report_id=arguments.get("superseding_report_id"),
+            )
+            return {
+                "status": outcome.status,
+                "decision_id": outcome.decision_id,
+                "report_id": outcome.report_id,
+                "candidate_id": outcome.candidate_id,
+                "duplicate": outcome.duplicate,
+                "reason_code": outcome.reason_code,
+            }
+        base = arguments.get("base_formal_revision_id")
+        rule_set_version = _required(arguments, "rule_set_version")
+        verdict = _required(arguments, "verdict")
+        checks = arguments.get("checks")
+        if not isinstance(checks, list):
+            raise ValueError("checks must be an array")
+        conflict_matrix = arguments.get("conflict_matrix")
+        if conflict_matrix is not None and not isinstance(conflict_matrix, list):
+            raise ValueError("conflict_matrix must be an array")
+        outcome = self._prereview_log.append_report(
+            candidate_id=candidate_id,
+            candidate_head=candidate_head,
+            base_formal_revision_id=base if isinstance(base, str) and base else None,
+            rule_set_version=rule_set_version,
+            checks=checks,
+            verdict=verdict,
+            conflict_matrix=conflict_matrix,
+        )
+        return {
+            "status": outcome.status,
+            "report_id": outcome.report_id,
+            "candidate_id": outcome.candidate_id,
+            "duplicate": outcome.duplicate,
+            "reason_code": outcome.reason_code,
+        }
 
     def _require_authorized(self, tool: str, actor_id: str) -> None:
         required = _TOOL_CAPABILITIES[tool]
@@ -282,6 +339,7 @@ _WRITE_TOOLS = frozenset({
     "record_review",
     "formalize_candidate",
     "reconcile_formalization",
+    "append_prereview_log",
 })
 
 _TOOL_CAPABILITIES = {
@@ -293,6 +351,7 @@ _TOOL_CAPABILITIES = {
     "record_review": frozenset({"candidate_review", "centre"}),
     "formalize_candidate": frozenset({"formalize", "centre"}),
     "reconcile_formalization": frozenset({"formalize", "centre"}),
+    "append_prereview_log": frozenset({"centre"}),
 }
 
 TOOL_DEFINITIONS = [
@@ -390,6 +449,46 @@ TOOL_DEFINITIONS = [
             "additionalProperties": False,
         },
     },
+    {
+        "name": "append_prereview_log",
+        "description": "Append one prereview report, or one invalidation decision, to the Mapping governance log. Append-only: reports and decisions are never edited. Passing ``reason`` (head_moved/base_moved) appends an invalidation decision; otherwise a report row is appended under the (candidate_id, candidate_head, rule_set_version) unique key. Requires the centre capability.",
+        "inputSchema": {
+            "type": "object",
+            "required": ["candidate_id", "candidate_head"],
+            "properties": {
+                "candidate_id": {"type": "string"},
+                "candidate_head": {"type": "string"},
+                "base_formal_revision_id": {"type": ["string", "null"]},
+                "rule_set_version": {"type": "string"},
+                "verdict": {"type": "string", "enum": ["passed", "failed"]},
+                "checks": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "name": {"type": "string"},
+                            "verdict": {"type": "string"},
+                            "reason_code": {"type": ["string", "null"]},
+                            "evidence_summary": {"type": ["string", "null"]},
+                        },
+                    },
+                },
+                "conflict_matrix": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "candidate_id": {"type": "string"},
+                            "overlap": {"type": "string"},
+                        },
+                    },
+                },
+                "reason": {"type": "string", "enum": ["head_moved", "base_moved"]},
+                "superseding_report_id": {"type": ["string", "null"]},
+            },
+            "additionalProperties": False,
+        },
+    },
 ]
 
 
@@ -455,6 +554,7 @@ def _target_type(tool: str) -> str:
         "record_review": "MappingMergeRequest",
         "formalize_candidate": "MappingMergeRequest",
         "reconcile_formalization": "MappingFormalizationOperation",
+        "append_prereview_log": "MappingPrereviewReport",
     }.get(tool)
 
 
@@ -471,6 +571,8 @@ def _target_id(arguments: dict[str, Any], tool: str) -> str | None:
         return _text(arguments.get("proposal_id")) or _text(arguments.get("buffer_id")) or _text(arguments.get("merge_request_id"))
     if tool == "reconcile_formalization":
         return _text(arguments.get("operation_id"))
+    if tool == "append_prereview_log":
+        return _text(arguments.get("candidate_id"))
     return None
 
 

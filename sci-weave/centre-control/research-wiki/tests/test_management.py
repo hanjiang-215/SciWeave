@@ -105,6 +105,14 @@ class WikiManagementServiceTestCase(unittest.TestCase):
         self.audit = open_connection(audit_path)
         self.addCleanup(self.audit.close)
         init_audit_table(self.audit)
+        rules_dir = str(Path(self.tmp.name) / "rules")
+        Path(rules_dir).mkdir()
+        (Path(rules_dir) / "1.0.0.json").write_text(
+            json.dumps({"version": "1.0.0", "checks": ["权限范围", "基准版本", "冲突", "影响范围"]}, ensure_ascii=False),
+            encoding="utf-8",
+        )
+        from llm_wiki.prereview import WikiPrereviewLog
+        prereview_log = WikiPrereviewLog(self.sqlite, rules_dir=rules_dir)
         self.service = WikiManagementService(
             formal_query=formal,
             candidate_service=candidate,
@@ -115,6 +123,7 @@ class WikiManagementServiceTestCase(unittest.TestCase):
             },
             audit_connection=self.audit,
             sqlite_store=self.sqlite,
+            prereview_log=prereview_log,
         )
 
     def test_list_wiki_candidates_reads_back_persisted_submissions(self):
@@ -165,6 +174,43 @@ class WikiManagementServiceTestCase(unittest.TestCase):
         self.assertEqual(len(rows), 2)
         phases = {row["phase"] for row in rows}
         self.assertEqual(phases, {"invoked", "completed"})
+
+    def test_append_wiki_prereview_log_requires_centre_and_is_audited_as_write(self):
+        arguments = {
+            "candidate_id": "candidate-1", "candidate_head": "head-a",
+            "base_formal_revision_id": BASE, "rule_set_version": "1.0.0",
+            "verdict": "passed",
+            "checks": [{"name": "权限范围", "verdict": "passed"}],
+            "conflict_matrix": [],
+        }
+        denied = self.service.call_tool("append_wiki_prereview_log", arguments, actor_id="reader")
+        self.assertEqual(denied.error_code, "forbidden")
+        outcome = self.service.call_tool("append_wiki_prereview_log", arguments, actor_id="centre")
+        self.assertEqual(outcome.status, "ok")
+        self.assertIsNotNone(outcome.result["report_id"])  # type: ignore[index]
+        rows = query_audit_calls(self.audit, service="wiki-management", tool="append_wiki_prereview_log")
+        self.assertEqual(len(rows), 2)
+        self.assertEqual({row["phase"] for row in rows}, {"invoked", "completed"})
+
+    def test_append_wiki_prereview_log_decision_path(self):
+        for head in ("head-a", "head-b"):
+            self.service.call_tool(
+                "append_wiki_prereview_log",
+                {"candidate_id": "candidate-2", "candidate_head": head,
+                 "base_formal_revision_id": BASE, "rule_set_version": "1.0.0",
+                 "verdict": "passed", "checks": [{"name": "权限范围", "verdict": "passed"}], "conflict_matrix": []},
+                actor_id="centre",
+            )
+        current = self.service._prereview_log.current_report("candidate-2", "head-b")
+        self.assertIsNotNone(current)
+        decision = self.service.call_tool(
+            "append_wiki_prereview_log",
+            {"candidate_id": "candidate-2", "candidate_head": "head-a",
+             "reason": "head_moved", "superseding_report_id": current["report_id"]},
+            actor_id="centre",
+        )
+        self.assertEqual(decision.status, "ok")
+        self.assertIsNotNone(decision.result["decision_id"])  # type: ignore[index]
 
     def test_config_parses_tokens_and_capability_tiers(self):
         config = WikiConfig.from_environment({

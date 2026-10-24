@@ -33,6 +33,7 @@ class MappingConfig:
     mcp_tokens: dict[str, str] | None = None
     caller_capabilities: dict[str, frozenset[str]] | None = None
     audit_sqlite_path: str | None = None
+    prereview_rules_dir: str | None = None
 
     @classmethod
     def from_environment(
@@ -60,6 +61,7 @@ class MappingConfig:
         mcp_tokens = _parse_token_map(env.get("SCIWEAVE_MAPPING_MCP_TOKENS_JSON"))
         caller_capabilities = _parse_capabilities(env.get("SCIWEAVE_MAPPING_CALLER_CAPABILITIES_JSON"))
         audit_sqlite_path = env.get("SCIWEAVE_MAPPING_AUDIT_SQLITE_PATH") or None
+        prereview_rules_dir = env.get("SCIWEAVE_MAPPING_PREREVIEW_RULES_DIR") or None
         return cls(
             sqlite_path=env["SCIWEAVE_MAPPING_SQLITE_PATH"],
             mapping_domain_id=env["SCIWEAVE_MAPPING_DOMAIN_ID"],
@@ -74,6 +76,7 @@ class MappingConfig:
             mcp_tokens=mcp_tokens or None,
             caller_capabilities=caller_capabilities or None,
             audit_sqlite_path=audit_sqlite_path,
+            prereview_rules_dir=prereview_rules_dir,
         )
 
 
