@@ -15,7 +15,10 @@ _REQUIRED_VARIABLES = (
     "SCIWEAVE_WIKI_TERMINUSDB_STORE",
 )
 
-_CAPABILITY_ORDER = ("read", "candidate_submit", "candidate_review", "formalize", "centre")
+_CAPABILITY_ORDER = (
+    "read", "candidate_submit", "candidate_review", "formalize",
+    "centre", "prereview_log", "merged_candidate",
+)
 
 
 @dataclass(frozen=True)

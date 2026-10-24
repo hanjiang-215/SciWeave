@@ -21,7 +21,11 @@ from .formal_domain import WikiFormalQueryResult
 from .formal_query import WikiFormalQueryService
 
 _READ_CAPABILITIES = frozenset({"read", "centre"})
-_CANDIDATE_SUBMIT_CAPABILITIES = frozenset({"candidate_submit", "centre"})
+_CANDIDATE_SUBMIT_CAPABILITIES = frozenset({"candidate_submit"})
+_CANDIDATE_REVIEW_CAPABILITIES = frozenset({"candidate_review"})
+_FORMALIZE_CAPABILITIES = frozenset({"formalize"})
+_PREREVIEW_LOG_CAPABILITIES = frozenset({"prereview_log"})
+_MERGED_CANDIDATE_CAPABILITIES = frozenset({"merged_candidate"})
 
 
 class ManagementDenied(RuntimeError):
@@ -96,6 +100,7 @@ class WikiManagementService:
         sqlite_store=None,
         candidate_reader=None,
         prereview_log=None,
+        merged_candidate_service=None,
     ) -> None:
         self._formal_query = formal_query
         self._candidate_service = candidate_service
@@ -104,6 +109,7 @@ class WikiManagementService:
         self._sqlite = sqlite_store
         self._candidate_reader = candidate_reader
         self._prereview_log = prereview_log
+        self._merged_candidate_service = merged_candidate_service
         self._capabilities = caller_capabilities
         self._audit = audit_connection
         self._service = service_name
@@ -136,8 +142,34 @@ class WikiManagementService:
             handlers["formalize_wiki"] = self._formalize_wiki
             handlers["reconcile_wiki_formalization"] = self._reconcile_wiki_formalization
         if self._prereview_log is not None:
-            handlers["append_wiki_prereview_log"] = self._append_prereview_log
+            handlers["append_prereview_log"] = self._append_prereview_log
+        if self._merged_candidate_service is not None:
+            handlers["create_merged_candidate"] = self._create_merged_candidate
         return handlers
+
+    def _create_merged_candidate(self, arguments: dict[str, Any], actor_id: str) -> dict[str, Any]:
+        """Create one merged Wiki candidate branch from source candidates.
+
+        Only a new branch is created; existing candidates are never edited.
+        The author field records every source author and source authors get
+        no operation rights; merged candidates may not be merged again.
+        """
+        if self._merged_candidate_service is None:
+            raise RuntimeError("merged_candidate_service is not configured")
+        document_change = arguments.get("document_change")
+        if not isinstance(document_change, dict):
+            raise ValueError("document_change is required")
+        source_proposal_ids = arguments.get("source_proposal_ids")
+        if not isinstance(source_proposal_ids, list) or not source_proposal_ids:
+            raise ValueError("source_proposal_ids is required and must be a non-empty array")
+        result = self._merged_candidate_service.create_merged(
+            wiki_domain_id=_required(arguments, "wiki_domain_id"),
+            source_proposal_ids=[str(item) for item in source_proposal_ids],
+            base_formal_revision_id=_required(arguments, "base_formal_revision_id"),
+            document_change=document_change,
+            idempotency_key=_required(arguments, "idempotency_key"),
+        )
+        return _candidate_result(result)
 
     def _append_prereview_log(self, arguments: dict[str, Any], actor_id: str) -> dict[str, Any]:
         """Append one Wiki prereview report, or one invalidation decision.
@@ -372,7 +404,8 @@ _WRITE_TOOLS = frozenset({
     "decide_wiki_review",
     "formalize_wiki",
     "reconcile_wiki_formalization",
-    "append_wiki_prereview_log",
+    "append_prereview_log",
+    "create_merged_candidate",
 })
 
 _TOOL_CAPABILITIES = {
@@ -380,12 +413,13 @@ _TOOL_CAPABILITIES = {
     "list_wiki_candidates": _READ_CAPABILITIES,
     "list_reviewable_wiki_candidates": _READ_CAPABILITIES,
     "submit_wiki_candidate": _CANDIDATE_SUBMIT_CAPABILITIES,
-    "preview_wiki_review": frozenset({"candidate_review", "centre"}),
-    "create_wiki_merge_request": frozenset({"candidate_review", "centre"}),
-    "decide_wiki_review": frozenset({"formalize", "centre"}),
-    "formalize_wiki": frozenset({"formalize", "centre"}),
-    "reconcile_wiki_formalization": frozenset({"formalize", "centre"}),
-    "append_wiki_prereview_log": frozenset({"centre"}),
+    "preview_wiki_review": _CANDIDATE_REVIEW_CAPABILITIES,
+    "create_wiki_merge_request": _CANDIDATE_REVIEW_CAPABILITIES,
+    "decide_wiki_review": _FORMALIZE_CAPABILITIES,
+    "formalize_wiki": _FORMALIZE_CAPABILITIES,
+    "reconcile_wiki_formalization": _FORMALIZE_CAPABILITIES,
+    "append_prereview_log": _PREREVIEW_LOG_CAPABILITIES,
+    "create_merged_candidate": _MERGED_CANDIDATE_CAPABILITIES,
 }
 
 TOOL_DEFINITIONS = [
@@ -494,8 +528,8 @@ TOOL_DEFINITIONS = [
         },
     },
     {
-        "name": "append_wiki_prereview_log",
-        "description": "Append one Wiki prereview report, or one invalidation decision, to the Wiki governance log. Append-only: reports and decisions are never edited. Passing ``reason`` (head_moved/base_moved) appends an invalidation decision; otherwise a report row is appended under the (candidate_id, candidate_head, rule_set_version) unique key. Requires the centre capability.",
+        "name": "append_prereview_log",
+        "description": "Append one Wiki prereview report, or one invalidation decision, to the Wiki governance log. Append-only: reports and decisions are never edited. Passing ``reason`` (head_moved/base_moved) appends an invalidation decision; otherwise a report row is appended under the (candidate_id, candidate_head, rule_set_version) unique key. Requires the prereview_log capability.",
         "inputSchema": {
             "type": "object",
             "required": ["candidate_id", "candidate_head"],
@@ -529,6 +563,33 @@ TOOL_DEFINITIONS = [
                 },
                 "reason": {"type": "string", "enum": ["head_moved", "base_moved"]},
                 "superseding_report_id": {"type": ["string", "null"]},
+            },
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "create_merged_candidate",
+        "description": "Create one merged Wiki candidate branch from source candidates on the same formal base. Only creates a new branch; existing candidates are never edited. The author field records every source author; source authors get no operation rights; a merged candidate may not be merged again. Requires the merged_candidate capability.",
+        "inputSchema": {
+            "type": "object",
+            "required": ["wiki_domain_id", "source_proposal_ids", "base_formal_revision_id", "document_change", "idempotency_key"],
+            "properties": {
+                "wiki_domain_id": {"type": "string"},
+                "source_proposal_ids": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                },
+                "base_formal_revision_id": {"type": "string"},
+                "document_change": {
+                    "type": "object",
+                    "properties": {
+                        "submission_id": {"type": "string"},
+                        "proposal_id": {"type": "string"},
+                        "document": {"type": "object"},
+                        "references": {"type": "array"},
+                    },
+                },
+                "idempotency_key": {"type": "string"},
             },
             "additionalProperties": False,
         },
@@ -592,7 +653,8 @@ def _target_type(tool: str) -> str:
         "decide_wiki_review": "WikiMergeRequest",
         "formalize_wiki": "WikiMergeRequest",
         "reconcile_wiki_formalization": "WikiFormalizationOperation",
-        "append_wiki_prereview_log": "WikiPrereviewReport",
+        "append_prereview_log": "WikiPrereviewReport",
+        "create_merged_candidate": "WikiCandidate",
     }.get(tool)
 
 
@@ -607,8 +669,10 @@ def _target_id(arguments: dict[str, Any], tool: str) -> str | None:
         return _text(arguments.get("merge_request_id"))
     if tool == "reconcile_wiki_formalization":
         return _text(arguments.get("operation_id"))
-    if tool == "append_wiki_prereview_log":
+    if tool == "append_prereview_log":
         return _text(arguments.get("candidate_id"))
+    if tool == "create_merged_candidate":
+        return _text(arguments.get("idempotency_key"))
     return None
 
 
