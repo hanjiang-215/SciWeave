@@ -238,6 +238,18 @@ class ManagementServiceTestCase(unittest.TestCase):
                 f"{call['tool']} must be forbidden for a centre-only caller",
             )
 
+    def test_prereview_and_merged_capabilities_are_independent(self):
+        """prereview_log and merged_candidate are separate tiers; each alone is denied for the other."""
+        prereview_args = {"candidate_id": "c-1", "candidate_head": "h", "rule_set_version": "1.0.0",
+                          "verdict": "passed", "checks": [{"name": "权限范围", "verdict": "passed"}]}
+        merged_args = {"mapping_domain_id": DOMAIN, "source_proposal_ids": ["proposal-1"],
+                       "base_formal_revision_id": BASE, "change_set": _change_set(),
+                       "idempotency_key": "key-independent"}
+        denied_prereview = self.service.call_tool("append_prereview_log", prereview_args, actor_id="merger")
+        self.assertEqual(denied_prereview.error_code, "forbidden")
+        denied_merged = self.service.call_tool("create_merged_candidate", merged_args, actor_id="prereviewer")
+        self.assertEqual(denied_merged.error_code, "forbidden")
+
     def test_config_parses_tokens_and_capability_tiers(self):
         config = MappingConfig.from_environment({
             "SCIWEAVE_MAPPING_SQLITE_PATH": "data/mapping.sqlite",
@@ -253,6 +265,22 @@ class ManagementServiceTestCase(unittest.TestCase):
         })
         self.assertEqual(config.mcp_tokens, {"tok": "reader"})
         self.assertEqual(config.caller_capabilities, {"reader": frozenset({"read"})})
+        # Seven capability tiers are accepted after ai4-5auy.
+        seven_tier = MappingConfig.from_environment({
+            "SCIWEAVE_MAPPING_SQLITE_PATH": "data/mapping.sqlite",
+            "SCIWEAVE_MAPPING_DOMAIN_ID": "domain-1",
+            "SCIWEAVE_MAPPING_TERMINUSDB_URL": "http://127.0.0.1:0",
+            "SCIWEAVE_MAPPING_TERMINUSDB_DATABASE": "db",
+            "SCIWEAVE_MAPPING_TERMINUSDB_STORE": "store",
+            "SCIWEAVE_MAPPING_MCP_HOST": "127.0.0.1",
+            "SCIWEAVE_MAPPING_MCP_PORT": "0",
+            "SCIWEAVE_MAPPING_MCP_TOKENS_JSON": '{"tok":"centre"}',
+            "SCIWEAVE_MAPPING_CALLER_CAPABILITIES_JSON": '{"centre":["centre","prereview_log","merged_candidate"]}',
+        })
+        self.assertEqual(
+            seven_tier.caller_capabilities,
+            {"centre": frozenset({"centre", "prereview_log", "merged_candidate"})},
+        )
         with self.assertRaises(Exception):
             MappingConfig.from_environment({
                 "SCIWEAVE_MAPPING_SQLITE_PATH": "data/mapping.sqlite",
@@ -261,6 +289,9 @@ class ManagementServiceTestCase(unittest.TestCase):
                 "SCIWEAVE_MAPPING_TERMINUSDB_DATABASE": "db",
                 "SCIWEAVE_MAPPING_TERMINUSDB_STORE": "store",
                 "SCIWEAVE_MAPPING_MCP_HOST": "127.0.0.1",
+                "SCIWEAVE_MAPPING_MCP_PORT": "0",
+                "SCIWEAVE_MAPPING_MCP_TOKENS_JSON": '{"tok":"centre"}',
+                "SCIWEAVE_MAPPING_CALLER_CAPABILITIES_JSON": '{"centre":["centre","unknown_tier"]}',
             })
 
 

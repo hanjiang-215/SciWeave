@@ -182,6 +182,40 @@ class WikiManagementServiceTestCase(unittest.TestCase):
         phases = {row["phase"] for row in rows}
         self.assertEqual(phases, {"invoked", "completed"})
 
+    def test_centre_has_no_write_capability_on_any_wiki_tool(self):
+        """After ai4-5auy, centre grants only reads on the Wiki management MCP."""
+        centre_calls = [
+            {"tool": "submit_wiki_candidate", "args": {"document_change": _change(), "idempotency_key": "key-centre-1"}},
+            {"tool": "create_wiki_merge_request", "args": {"proposal_id": "proposal-1", "merge_request_id": "mr-1"}},
+            {"tool": "decide_wiki_review", "args": {"merge_request_id": "mr-1", "decision": "approved", "reason": "r", "selected_solution_id": "sol-1"}},
+            {"tool": "formalize_wiki", "args": {"merge_request_id": "mr-1", "operation_id": "op-1"}},
+            {"tool": "reconcile_wiki_formalization", "args": {"operation_id": "op-1"}},
+            {"tool": "append_prereview_log", "args": {"candidate_id": "c-1", "candidate_head": "h", "rule_set_version": "1.0.0", "verdict": "passed", "checks": [{"name": "权限范围", "verdict": "passed"}]}},
+            {"tool": "create_merged_candidate", "args": {"wiki_domain_id": DOMAIN, "source_proposal_ids": ["proposal-1"], "base_formal_revision_id": BASE, "document_change": _change(), "idempotency_key": "key-centre-merged"}},
+        ]
+        for call in centre_calls:
+            outcome = self.service.call_tool(call["tool"], call["args"], actor_id="centre")
+            if outcome.error_code == "unknown_tool":
+                continue  # tool not injected in this test case; covered elsewhere
+            self.assertEqual(
+                outcome.error_code, "forbidden",
+                f"{call['tool']} must be forbidden for a centre-only caller",
+            )
+
+    def test_prereview_and_merged_capabilities_are_independent(self):
+        """prereview_log and merged_candidate are separate tiers; each alone is denied for the other."""
+        prereview_args = {"candidate_id": "c-1", "candidate_head": "h", "rule_set_version": "1.0.0",
+                          "verdict": "passed", "checks": [{"name": "权限范围", "verdict": "passed"}]}
+        merged_args = {"wiki_domain_id": DOMAIN, "source_proposal_ids": ["proposal-1"],
+                       "base_formal_revision_id": BASE, "document_change": _change(),
+                       "idempotency_key": "key-independent"}
+        # merger without prereview_log is denied for append_prereview_log
+        denied_prereview = self.service.call_tool("append_prereview_log", prereview_args, actor_id="merger")
+        self.assertEqual(denied_prereview.error_code, "forbidden")
+        # prereviewer without merged_candidate is denied for create_merged_candidate
+        denied_merged = self.service.call_tool("create_merged_candidate", merged_args, actor_id="prereviewer")
+        self.assertEqual(denied_merged.error_code, "forbidden")
+
     def test_append_prereview_log_requires_prereview_capability_and_is_audited_as_write(self):
         arguments = {
             "candidate_id": "candidate-1", "candidate_head": "head-a",
@@ -236,6 +270,21 @@ class WikiManagementServiceTestCase(unittest.TestCase):
         })
         self.assertEqual(config.mcp_tokens, {"tok": "reader"})
         self.assertEqual(config.caller_capabilities, {"reader": frozenset({"read"})})
+        seven_tier = WikiConfig.from_environment({
+            "SCIWEAVE_WIKI_SQLITE_PATH": "data/wiki.sqlite",
+            "SCIWEAVE_WIKI_DOMAIN_ID": "domain-1",
+            "SCIWEAVE_WIKI_TERMINUSDB_URL": "http://127.0.0.1:0",
+            "SCIWEAVE_WIKI_TERMINUSDB_DATABASE": "db",
+            "SCIWEAVE_WIKI_TERMINUSDB_STORE": "store",
+            "SCIWEAVE_WIKI_MCP_HOST": "127.0.0.1",
+            "SCIWEAVE_WIKI_MCP_PORT": "0",
+            "SCIWEAVE_WIKI_MCP_TOKENS_JSON": '{"tok":"centre"}',
+            "SCIWEAVE_WIKI_CALLER_CAPABILITIES_JSON": '{"centre":["centre","prereview_log","merged_candidate"]}',
+        })
+        self.assertEqual(
+            seven_tier.caller_capabilities,
+            {"centre": frozenset({"centre", "prereview_log", "merged_candidate"})},
+        )
         with self.assertRaises(Exception):
             WikiConfig.from_environment({
                 "SCIWEAVE_WIKI_SQLITE_PATH": "data/wiki.sqlite",
@@ -244,6 +293,9 @@ class WikiManagementServiceTestCase(unittest.TestCase):
                 "SCIWEAVE_WIKI_TERMINUSDB_DATABASE": "db",
                 "SCIWEAVE_WIKI_TERMINUSDB_STORE": "store",
                 "SCIWEAVE_WIKI_MCP_HOST": "127.0.0.1",
+                "SCIWEAVE_WIKI_MCP_PORT": "0",
+                "SCIWEAVE_WIKI_MCP_TOKENS_JSON": '{"tok":"centre"}',
+                "SCIWEAVE_WIKI_CALLER_CAPABILITIES_JSON": '{"centre":["centre","unknown_tier"]}',
             })
 
 
