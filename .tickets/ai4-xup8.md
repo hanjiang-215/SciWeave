@@ -26,6 +26,13 @@ tags: [wayfinder:map]
 
 ## Decisions so far
 
+- [Research Mapping 持久化模型分支](ai4-yl2o.md)：TerminusDB 只存 TaskNode/DependencyEdge 不可变图内容；SQLite 只存治理记录，不复制图正文；`logical_id` 稳定身份、`version_id` 不可变版本；图版本治理与运行状态分离。字段规格见 `docs/superpowers/specs/2026-10-19-research-mapping-content-persistence-model-design.md` 与候选治理记录模型。
+- [Wiki 持久化模型分支](ai4-56iu.md)：TerminusDB 只存 Wiki 内容与资源引用；SQLite 只存 Wiki 治理记录；`document_id`/`resource_id` 稳定身份、`revision_id`/`resource_version_id` 不可变版本；与 Research Mapping 不强外键。字段规格见 `docs/superpowers/specs/2026-10-19-llm-wiki-content-model-design.md` 与 Wiki 候选治理记录模型。
+- [TerminusDB 与 SQLite 正式化一致性及失败恢复规则](ai4-azx2.md)：正式化采用「先确认 TerminusDB 精确 Commit，再以 SQLite 激活单元生效」；`formalization_operation_id` + `attempt_number` 幂等重试；未激活 Commit 保留不可查询历史，不物理回滚；查询权威为 SQLite 指针 + 精确 Commit。
+- [Web 看板与平台状态可见性分支](ai4-6v70.md)：看板只观察不写入；所有写入经领域 MCP、Gateway MCP 或消息队列；MCP 调用失败由使用者判断原因，平台不自动归类。规格见 `docs/superpowers/specs/2026-10-22-web-dashboard-visibility-design.md`。
+- [Agent 套件接入与协作边界分支](ai4-v19u.md)：两类 MCP 分工（Agent Gateway MCP 人用返修处置、领域 MCP Agent 用）；套件按 TaskNode 模板生成最小权限 profile；平台提供可复用能力、研究者本机 harness/凭据留用户侧。规格见 `docs/superpowers/specs/2026-10-23-agent-suite-boundary-design.md`。
+- [Research Mapping 与 LLM-Wiki 访问边界必须独立](ai4-9322.md)：两领域独立 MCP、存储、校验、候选/正式化流程、审计边界与调用方权限；跨域仅稳定 ID/version ID 弱引用；registry 登记事实不参与鉴权。已关闭并落两领域 README。
+
 ## Not yet specified
 
 ## Out of scope
@@ -84,3 +91,15 @@ Out of scope 中「消息队列产品选型」这一项已被现实超越：2026
 - 消息协作分支（`ai4-te1v`）与端侧 Agent 分支（`ai4-kpvp`）仍由 Frank Qi 收敛，不在本地图侧再展开。
 - 2026-10-23 地图正文修订（hanjiang，地图 owner）：Out of scope 的「消息队列产品选型」已从范围外移除，改为「已完成（Redpanda，见 docs/TECH_STACK.md）；主题、分区、消费者组与投递语义由 ai4-te1v 定义」。依据 2026-10-21 Notes 已确认的 Redpanda 选型，消除正文与现状不一致。
 - `ai4-w73z`（Mapping/Wiki 对外管理接口）由 hanjiang 实现三个切片：两套独立领域管理 MCP（Mapping 6 工具、Wiki 7 工具）覆盖正式只读、候选提交、候选审阅、Owner 正式化/恢复与健康检查；五档能力鉴权（read/candidate_submit/candidate_review/formalize/centre）、接口层审计（读 attempted fail-open、写 invoked/completed fail-closed）。唯一未闭合项为中央 Agent 专属写工具，依赖 `ai4-ujvn`/`ai4-t2wc` 开放面收口（Frank Qi），已提 issue `IKQ2QB` 知会。该分支实现侧已交付，验收核对见 w73z Notes。
+
+**2026-10-24 Decisions so far 转载（地图 owner hanjiang）**
+
+身份核对：本票 assignee 为 hanjiang，当前分支 `feature/hanjiang`、`git config user.name=hanjiang`，一致。
+
+2026-10-24 按地图规则把已关闭子分支结论转载进 `Decisions so far`：
+
+- 持久化规格：`ai4-yl2o`（Research Mapping 持久化模型）、`ai4-56iu`（Wiki 持久化模型）与 `ai4-azx2`（跨存储正式化一致性与失败恢复）均已关闭；
+- 协作规格：`ai4-6v70`（Web 看板可见性）、`ai4-v19u`（Agent 套件接入边界）已关闭；
+- 访问边界：`ai4-9322`（Mapping 与 Wiki 访问边界独立）2026-10-24 关闭，并已在两领域 README 记录责任/执行/发布权限。
+
+地图仍 open：消息协作分支（`ai4-te1v`）与端侧 Agent 分支（`ai4-kpvp`）由 Frank Qi 收敛；`ai4-aaff` 演示场景仍 in_progress（SciencePal 证据）。待这两处收敛后由地图 owner 复核是否可关闭本地图。

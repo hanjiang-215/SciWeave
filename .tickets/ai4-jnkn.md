@@ -1,6 +1,6 @@
 ---
 id: ai4-jnkn
-status: open
+status: closed
 deps: []
 links: [ai4-6ljq, ai4-orpg, ai4-emsk, ai4-gvan]
 created: 2026-10-21T08:58:49Z
@@ -39,6 +39,20 @@ Research Mapping、LLM-Wiki、TerminusDB、Redpanda 的后续实现位置已写�
 - 迁移后 `sci-weave/shared/` 目录清空，规则上也不再保留这个顶层共享目录的名称。
 
 ## Notes
+
+**2026-10-24 关闭验收（hanjiang）**
+
+身份核对：本票 assignee 为 hanjiang，当前分支 `feature/hanjiang`、`git config user.name=hanjiang`，一致。
+
+2026-10-24 核对仓库落位并关闭：
+
+- `sci-weave/centre-control/research-map` ✓（含 `src/research_mapping/candidate_reader.py`、`management.py` 等）
+- `sci-weave/centre-control/research-wiki` ✓（含 `src/llm_wiki/candidate_reader.py`、`management.py` 等）
+- `sci-weave/centre-control/shared/audit-trail` ✓
+- `sci-weave/service/terminusdb` ✓、`sci-weave/service/redpanda` ✓
+- 旧目录 `sci-weave/research-mapping`、`sci-weave/llm-wiki`、`sci-weave/shared` 均已清理不存在 ✓
+
+实现地图关联：`ai4-w73z`（对外管理接口）与 `ai4-xup8`（领域数据模型地图）均已按本票位置落地。验收完成，本票关闭。
 
 **2026-10-24T10:08:22Z**
 

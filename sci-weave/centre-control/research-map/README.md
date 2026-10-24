@@ -66,6 +66,13 @@ tests/                           标准库 unittest
 - `submit_candidate(change_set, idempotency_key)`：候选提交，要求 `candidate_submit` 或 `centre` 能力。
 
 调用方身份从 `Authorization: Bearer <token>` 解析，按 `SCIWEAVE_MAPPING_MCP_TOKENS_JSON` 映射为 actor_id；服务端按 `SCIWEAVE_MAPPING_CALLER_CAPABILITIES_JSON` 执行能力档位校验，未授权返回稳定 `forbidden` 错误。配置 `SCIWEAVE_MAPPING_AUDIT_SQLITE_PATH` 后，读调用记录 `attempted`（fail-open）、写调用记录 `invoked`/`completed`（写前 fail-closed），审计位于接口层，领域服务不重复接入。测试覆盖权限分层、审计双阶段、传输层身份注入与越权拒绝，见 `tests/test_management.py`。
+
+## 访问边界与责任权限（`ai4-9322`）
+
+- **领域独立**：Research Mapping 使用自己的 MCP、SQLite 治理存储、TerminusDB 快照、校验器、候选/正式化流程、审计边界与调用方权限，不与 LLM-Wiki 共享实现。
+- **责任归属**：TaskNode / DependencyEdge 的正式版本、候选分支与责任属于 Research Mapping；WikiDocument / WikiRevision / ResourceVersion 属于 LLM-Wiki。跨域只保留显式稳定引用（如 `task_node_version_ref`），不支持单次跨域 Proposal、跨域写入或跨域原子正式化。
+- **能力档位**：`read` / `candidate_submit` / `candidate_review` / `formalize` / `centre` 各自在服务端校验，未授权调用返回稳定 `forbidden`，不依赖隐藏工具或提示词约束。
+- **鉴权来源**：鉴权只依据 `SCIWEAVE_MAPPING_CALLER_CAPABILITIES_JSON`（服务端配置）；registry 的登记事实不参与本领域鉴权决定。
 ```bash
 uv sync --locked
 uv run --locked python -m unittest discover -s tests -v
