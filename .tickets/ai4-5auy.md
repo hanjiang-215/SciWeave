@@ -1,6 +1,6 @@
 ---
 id: ai4-5auy
-status: open
+status: closed
 deps: [ai4-t2wc]
 links: [ai4-rlv6, ai4-w73z, ai4-he04, ai4-5z9e, ai4-oebi, ai4-8dgd]
 created: 2026-10-24T15:20:01Z
@@ -135,19 +135,19 @@ _CAPABILITY_ORDER = (
 
 ## Acceptance Criteria
 
-- [ ] `centre` 凭据调 `submit_candidate`、`preview_candidate`、`record_review`、`formalize_candidate`、`reconcile_formalization` 全部返回 `forbidden`
-- [ ] `centre` 凭据调 `submit_wiki_candidate`、`preview_wiki_review`、`create_wiki_merge_request`、`decide_wiki_review`、`formalize_wiki`、`reconcile_wiki_formalization` 全部返回 `forbidden`
-- [ ] `centre` 凭据仍可调两侧各 3 个读工具（`get_formal_*`、`list_*_candidates`、`list_reviewable_*_candidates`）
-- [ ] `append_prereview_log` 在两个领域各可用，唯一键幂等，重复追加返回 `duplicate=true` 且不产生第二行
-- [ ] `append_prereview_log` 在 `rule_set_version` 无法解析时返回 `rule_set_missing` 且不写入
-- [ ] `append_prereview_log` 追加失效判定时不修改已有报告行
-- [ ] `prereview_log` 与 `merged_candidate` 是两个独立能力名，只给其中一个时另一个仍返回 `forbidden`
-- [ ] `create_merged_candidate` 只能新建，来源含混合候选时拒绝并返回稳定错误码
-- [ ] `create_merged_candidate` 记全部来源作者，来源作者调该混合候选的任何工具均被拒绝
-- [ ] 两个新工具走接口层留痕，写调用 fail-closed；账本不含报告正文与候选内容
-- [ ] `_CAPABILITY_ORDER` 扩展为七档，未知能力名仍在启动时被拒绝
-- [ ] 现有两领域全量测试通过（收紧是纯减法，不应打破任何已有用例）
-- [ ] 回写验证命令、结果与提交号到本票 Notes
+- [x] `centre` 凭据调 `submit_candidate`、`preview_candidate`、`record_review`、`formalize_candidate`、`reconcile_formalization` 全部返回 `forbidden`
+- [x] `centre` 凭据调 `submit_wiki_candidate`、`preview_wiki_review`、`create_wiki_merge_request`、`decide_wiki_review`、`formalize_wiki`、`reconcile_wiki_formalization` 全部返回 `forbidden`
+- [x] `centre` 凭据仍可调两侧各 3 个读工具（`get_formal_*`、`list_*_candidates`、`list_reviewable_*_candidates`）
+- [x] `append_prereview_log` 在两个领域各可用，唯一键幂等，重复追加返回 `duplicate=true` 且不产生第二行
+- [x] `append_prereview_log` 在 `rule_set_version` 无法解析时返回 `rule_set_missing` 且不写入
+- [x] `append_prereview_log` 追加失效判定时不修改已有报告行
+- [x] `prereview_log` 与 `merged_candidate` 是两个独立能力名，只给其中一个时另一个仍返回 `forbidden`
+- [x] `create_merged_candidate` 只能新建，来源含混合候选时拒绝并返回稳定错误码
+- [x] `create_merged_candidate` 记全部来源作者，来源作者调该混合候选的任何工具均被拒绝
+- [x] 两个新工具走接口层留痕，写调用 fail-closed；账本不含报告正文与候选内容
+- [x] `_CAPABILITY_ORDER` 扩展为七档，未知能力名仍在启动时被拒绝
+- [x] 现有两领域全量测试通过（收紧是纯减法，不应打破任何已有用例）
+- [x] 回写验证命令、结果与提交号到本票 Notes
 
 ## Notes
 
@@ -161,3 +161,23 @@ _CAPABILITY_ORDER = (
 - `ai4-w73z` 已勾选的「中央 Agent 五类能力边界均有服务端鉴权与测试」在收紧后不再准确，需 hanjiang 在该票内修正描述。
 
 范围界定：只动 `sci-weave/centre-control/research-map` 与 `sci-weave/centre-control/research-wiki` 两个子项目。不动 Registry（`kind` 已实现）、不动 Centre Agent 进程骨架、不动邮件通知。
+
+**2026-10-25 实现与验证（hanjiang）**
+
+身份核对：本票 assignee 为 hanjiang，当前分支 `feature/hanjiang`、`git config user.name=hanjiang`，一致。
+
+提交 `1dada55`（核心实现）与 `d71710c`（测试补充）。改动：
+
+- `_CAPABILITY_ORDER` 从五档扩为七档：`read / candidate_submit / candidate_review / formalize / centre / prereview_log / merged_candidate`。`config.py` 校验逻辑不变，未知能力名启动时拒绝。
+- 收紧 `centre`：两领域共 11 个写工具（Mapping 的 `submit_candidate`/`preview_candidate`/`record_review`/`formalize_candidate`/`reconcile_formalization`，Wiki 的 `submit_wiki_candidate`/`preview_wiki_review`/`create_wiki_merge_request`/`decide_wiki_review`/`formalize_wiki`/`reconcile_wiki_formalization`）从能力表中摘除 `centre`，各归 `candidate_submit`/`candidate_review`/`formalize` 档；`centre` 只保留 6 个读工具。
+- `append_prereview_log`（两领域）能力名从 `centre` 改为 `prereview_log`；Wiki 侧工具名从 `append_wiki_prereview_log` 统一为 `append_prereview_log`（按本票单数名 + 领域参数约定）。
+- 新增 `create_merged_candidate`（两领域）与 `merged_candidate.py` 服务：只新建分支不改写已有候选；`submitter_id` 用稳定的 `merged:<digest>` 多值作者标记（源自全部来源作者）；`merged_from` 记录来源候选与作者；来源含 `merged:` 前缀时拒绝 `nested_merged_candidate`（不可二次混合）；能力名 `merged_candidate`。
+- 两个新工具均入 `_WRITE_TOOLS`，走 `begin_call` fail-closed / `finish_call`；审计目标元数据、TOOL_DEFINITIONS、main.py 接线同步。
+
+验证（本机实测）：
+
+- research-map：`tests.test_management` 24 项 + 全量 110 项通过（5 跳过）；含 `centre` 全部写工具 forbidden、`prereview_log`/`merged_candidate` 独立性、七档 config 解析与未知档拒绝、merged 创建与 nested 拒绝。
+- research-wiki：`tests.test_management` 22 项 + 全量 116 项通过（4 跳过）；对称覆盖同上。
+- `compileall`、`git diff --check` 通过；无新增依赖。
+
+边界：`ai4-rlv6`（Frank Qi）的工具清单需把 `append_mapping_prereview_log` 等四个分领域名改为单数名 + 领域参数，由该票负责人按本票完成后的实际工具面同步；`ai4-w73z` 的「中央 Agent 五类能力边界」描述按本票要求在 w73z 内修正。
