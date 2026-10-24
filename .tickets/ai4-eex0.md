@@ -1,6 +1,6 @@
 ---
 id: ai4-eex0
-status: open
+status: closed
 deps: []
 links: [ai4-5z9e, ai4-he04]
 created: 2026-10-21T15:36:52Z
@@ -55,6 +55,12 @@ tags: [centre-agents, mapping, wiki, prereview, wayfinder:grilling]
 - [x] 有回归测试覆盖每种被拒绝的输入
 
 ## Notes
+
+**2026-10-24 关闭验收（hanjiang）**
+
+身份核对：本票 assignee 为 hanjiang，当前分支 `feature/hanjiang`、`git config user.name=hanjiang`，一致。
+
+2026-10-24 复跑验证关闭：research-map 全量 95 项通过（5 跳过真实 TerminusDB 集成）、research-wiki 全量 102 项通过（4 跳过），0 失败，与 Notes 实现记录一致。六项验收全部勾选。检查表缩减已同步到 `ai4-5z9e`（该票 assignee 已接受重排）。本票关闭。
 
 **2026-10-24 eex0 实现与验收（hanjiang）**
 

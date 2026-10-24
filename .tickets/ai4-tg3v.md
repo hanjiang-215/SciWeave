@@ -1,6 +1,6 @@
 ---
 id: ai4-tg3v
-status: open
+status: closed
 deps: []
 links: [ai4-dybh, ai4-gvan]
 created: 2026-10-22T01:20:55Z
@@ -56,7 +56,9 @@ tags: [spec, centre-control, audit, ready-for-agent]
 
 存储不按服务分库：跨服务视图是选「一个库」的核心理由。领域治理记录（Mapping / Wiki / Buffer 各自的事实与状态）仍留在各自存储，不搬进审计库。
 
-**连接由调用方复用。** 进程启动时打开一次，并调用一次 `init_audit_table`，之后整段生命周期复用这条连接，退出时由调用方关闭。打开或建表失败时包抛 `AuditUnavailableError`，不自己退出进程；调用方在开始对外服务之前必须完成这两步，任一步失败则不起服务。运行中的单次失败不改：写调用失败则业务不执行，读调用失败只告警。包不代管开关，也不加锁。同一时间只有一个线程使用这条连接；并发请求由调用方在包外串行化。
+**连接由调用方复用。** 进程启动时打开一次，并调用一次 `init_audit_table`，之后整段生命周期复用这条连接，退出时由调用方关闭。打开或建表失败时包抛 `AuditUnavailableError`，不自己退出进程；调用方在开始对外服务之前必须完成这两步，任一步失败则不起服务。运行中的单次失败不改：写调用失败则业务不执行，读调用失败只告警。包不代管开关，也不加锁。
+
+> 修订（2026-10-24）：多线程边界已定案，见「共享留痕包支持多线程 MCP 服务访问」(ai4-fmco)。`open_connection` 使用 `check_same_thread=False`，让同一个账本连接可为多线程 MCP HTTP 服务服务；`init_audit_table`、`record_attempted`、`begin_call`、`finish_call`、`query_audit_calls`、`find_unfinished_calls` 全部经模块级 `_CONNECTION_LOCK`（`threading.RLock`，可重入）串行化，避免同一连接并发交错。原「保持 `check_same_thread=True`、由调用方在包外串行化」作废。
 
 ### 事件形状（调用账本）
 
@@ -91,7 +93,7 @@ tags: [spec, centre-control, audit, ready-for-agent]
 - `record_attempted(conn, record)`：读工具单条记录。成功返回 `call_id`，失败返回 `None` 且不抛。
 - `begin_call(conn, record) -> call_id` / `finish_call(conn, call_id, *, result, error_code, duration_ms)`：写工具两阶段。`finish_call` 只配对还没有 `completed` 的 `invoked`。对不上（没有这条 `invoked`、已经配过、或只有 `attempted`）抛 `AuditValidationError`，不另插一行。数据库写失败只告警、不抛，留下未配对的 `invoked`。
 - `call_scope(...)`：上下文管理器，封装两阶段，供装饰器使用。
-- `open_connection(path, *, busy_timeout_ms=5000, journal_mode="WAL")`：按调用方传入的路径打开连接并设 PRAGMA。`path` 必填。本函数不读环境变量、不读 `.env`、不建表。保持 SQLite 默认的 `check_same_thread=True`，包内不加锁。
+- `open_connection(path, *, busy_timeout_ms=5000, journal_mode="WAL")`：按调用方传入的路径打开连接并设 PRAGMA。`path` 必填。本函数不读环境变量、不读 `.env`、不建表。使用 `check_same_thread=False` 并配合模块级 `_CONNECTION_LOCK` 串行化所有访问器（见 ai4-fmco 修订）。
 - `query_audit_calls(conn, *, caller_id=None, channel_id=None, service=None, tool=None, target_object_id=None, result=None, occurred_after=None, occurred_before=None)`：只读，时间倒序（`occurred_at DESC, rowid DESC`）。
 - `find_unfinished_calls(conn, *, occurred_after=None)`：返回只有 `invoked` 没有 `completed` 的调用。
 
@@ -130,14 +132,14 @@ tags: [spec, centre-control, audit, ready-for-agent]
 
 ## Acceptance Criteria
 
-- [ ] 位置、包名、模块名与依赖形态按本票确定，`centre-control/README.md` 与 `docs/TECH_STACK.md` 同步
-- [ ] 事件形状为调用账本，不含任何业务语义字段
-- [ ] 读工具 fail-open 单条记录；写工具 fail-closed 两阶段记录，且能用测试证明审计不可用时写操作被阻断
-- [ ] `find_unfinished_calls` 能检出未配对调用
-- [ ] 共享包不读取环境变量、不提交 `.env.example`；`open_connection` 的路径必填。各接入方在自己的 `.env.example` 声明 `SCIWEAVE_AUDIT_SQLITE_PATH` 并在启动时传入。打开或建表失败时调用方不起服务
-- [ ] 审计库不含入参正文，只含摘要与对象标识
-- [ ] 无 update / delete API；多语句 DDL 可用
-- [ ] 回归测试全绿，README 示例可直接运行
+- [x] 位置、包名、模块名与依赖形态按本票确定，`centre-control/README.md` 与 `docs/TECH_STACK.md` 同步
+- [x] 事件形状为调用账本，不含任何业务语义字段
+- [x] 读工具 fail-open 单条记录；写工具 fail-closed 两阶段记录，且能用测试证明审计不可用时写操作被阻断
+- [x] `find_unfinished_calls` 能检出未配对调用
+- [x] 共享包不读取环境变量、不提交 `.env.example`；`open_connection` 的路径必填。各接入方在自己的 `.env.example` 声明 `SCIWEAVE_AUDIT_SQLITE_PATH` 并在启动时传入。打开或建表失败时调用方不起服务
+- [x] 审计库不含入参正文，只含摘要与对象标识
+- [x] 无 update / delete API；多语句 DDL 可用
+- [x] 回归测试全绿，README 示例可直接运行
 
 ## Notes
 
@@ -176,3 +178,15 @@ tags: [spec, centre-control, audit, ready-for-agent]
 **2026-10-24T10:08:39Z**
 
 转交说明（2026-10-24）：assignee 由 Frank Qi 改为 hanjiang，依据 Gitee issue https://gitee.com/qi-yueran/ai4science/issues/IKQ63M 的第 1 条请求与本节裁决。原负责人 Frank Qi，转交原因：实现子票 ai4-gvan 已关闭，sci-weave/centre-control/shared/audit-trail 已按本票规格存在，剩余为验收核对与证据回写。
+
+**2026-10-24 关闭验收（hanjiang）**
+
+身份核对：本票 assignee 为 hanjiang，当前分支 `feature/hanjiang`、`git config user.name=hanjiang`，一致。
+
+2026-10-24 验收并关闭：
+
+- 落位核对：`sci-weave/centre-control/shared/audit-trail` 存在 pyproject.toml、README.md、src/audit_trail、tests；`centre-control/README.md` 已列出 `shared/audit-trail` 条目；`docs/TECH_STACK.md` 已写明 `shared/` 归属边界规则（第 55-58 行）。
+- 包内不提交 `.env.example`，`open_connection` 路径必填；各接入方在自己的 `.env.example` 声明 `SCIWEAVE_AUDIT_SQLITE_PATH`（见 ai4-w73z 两领域管理 MCP 与 ai4-w4su registry）。
+- 多线程边界规格同步：按「共享留痕包支持多线程 MCP 服务访问」(ai4-fmco) 修订为 `check_same_thread=False` + `_CONNECTION_LOCK` 串行化；正文两处原「`check_same_thread=True`、由调用方在包外串行化」表述已改。上列 2026-10-23 历史 Notes 第 3 条为该时点记录，保留原文，以正文修订为准。
+- 测试复跑：`uv run --locked --with pytest python -m pytest tests -q` → 14 passed。
+- 八项验收全部勾选。本票关闭。
