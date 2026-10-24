@@ -13,6 +13,7 @@ tmp/
 # 缓存
 cache/
 *.cache
+.pytest_cache/
 
 # 虚拟环境和 Python 构建产物
 .venv

@@ -16,7 +16,7 @@
 
 - Research Mapping：`sci-weave/centre-control/research-map/`
 - LLM-Wiki：`sci-weave/centre-control/research-wiki/`
-- TerminusDB 验证服务：`sci-weave/centre-control/terminusdb/`
+- TerminusDB 验证服务：`sci-weave/service/terminusdb/`
 
 两个 Python 子项目保持独立的 `pyproject.toml`、`uv.lock`、SQLite 数据库、TerminusDB Store、审计链与环境配置。只使用各项目已锁定依赖（预期为 Python 标准库）和仓库固定的 TerminusDB 12.0.8；任何需要的新依赖必须先有依赖工单及来源、用途、版本约束、许可证/限制和验证命令，再变更项目清单与锁文件。
 

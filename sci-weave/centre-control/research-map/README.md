@@ -16,13 +16,16 @@ src/research_mapping/config.py   进程环境配置
 src/research_mapping/domain.py   查询结果、版本记录与快照读取结果
 src/research_mapping/canonical.py 规范 JSON 与 SHA-256
 src/research_mapping/schema.sql  最小治理记录 DDL
-src/research_mapping/sqlite_store.py 外键启用的 SQLite 治理存储
-src/research_mapping/terminus_store.py 精确 Commit 读取 seam 与 HTTP 适配器
-src/research_mapping/formal_query.py  FormalQueryService
+src/research_mapping/sqlite_store.py SQLite 治理存储：schema 引导、外键约束、正式指针与激活事务
+src/research_mapping/terminus_store.py TerminusDB 12.0.8 适配器：精确 Commit 读取、候选分支与正式快照
+src/research_mapping/candidate_submission.py 候选提交、机械校验与幂等落库
+src/research_mapping/candidate_domain.py 候选提交结果结构
+src/research_mapping/formal_query.py  FormalQueryService 正式版本查询
 src/research_mapping/review.py       固定候选差异预览与审核 Buffer
 src/research_mapping/formalization.py Owner 批准、正式化与恢复
-src/research_mapping/sqlite_store.py SQLite 治理记录与激活事务
-src/research_mapping/terminus_store.py 精确 Commit 读取和候选/正式快照适配器
+src/research_mapping/management.py   MappingManagementService：能力档位鉴权 + 接口层留痕工具面
+src/research_mapping/management_mcp.py 管理 MCP Streamable HTTP 传输
+src/research_mapping/dashboard_source.py Web 看板只读来源（DASHBOARD_MODE）
 tests/                           标准库 unittest
 ```
 
