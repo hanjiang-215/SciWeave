@@ -1,0 +1,1 @@
+"""SciWeave email-service package."""
