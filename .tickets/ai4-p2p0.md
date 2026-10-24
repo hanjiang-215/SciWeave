@@ -1,6 +1,6 @@
 ---
 id: ai4-p2p0
-status: in_progress
+status: closed
 deps: [ai4-m1d1]
 links: []
 created: 2026-10-24T05:26:07Z
@@ -22,10 +22,10 @@ tags: [implementation, centre-control, email-service, notification, ready-for-ag
 
 ## Acceptance criteria
 
-- [ ] 相同 `dedupe_key` 且主题、正文、收件人、通知类型等价时，返回既有 `notification_id` 和既有投递状态，Fake sender 不第二次发送。
-- [ ] 相同 `dedupe_key` 但主题、正文、收件人或通知类型任一不一致时，返回 `idempotency_conflict`，既有通知的内容和状态不变。
-- [ ] 上述行为通过认证后的 MCP 调用验证，不依赖私有表访问顺序。
-- [ ] 完成测试，并把验证证据回写本票。
+- [x] 相同 `dedupe_key` 且主题、正文、收件人、通知类型等价时，返回既有 `notification_id` 和既有投递状态，Fake sender 不第二次发送。收件人等价只比较 `principal_id`。
+- [x] 相同 `dedupe_key` 但主题、正文、收件人或通知类型任一不一致时，返回 `idempotency_conflict`，既有通知的内容和状态不变。
+- [x] 上述行为通过认证后的 MCP 调用验证，不依赖私有表访问顺序。
+- [x] 完成测试，并把验证证据回写本票。
 
 ## Blocked by
 
@@ -37,3 +37,9 @@ tags: [implementation, centre-control, email-service, notification, ready-for-ag
 **2026-10-24T07:54:13Z**
 
 开始实现。基线为集成分支 feature/frank-qi-email 的 5d01626。实现分支 impl/ai4-p2p0。
+
+**2026-10-24T12:20:00Z**
+
+收口：同一 `dedupe_key` 的收件人等价只比较 `principal_id`。带凭据字样的正文按原文受理，重放返回既有通知。依赖来源、用途和许可证见 [合法通知的受理、投递与状态查询](ai4-m1d1.md)，本票未新增依赖。
+
+在 `sci-weave/centre-control/email-service` 执行：`uv run --env-file .env pytest -q`，43 passed in 25.91s；`uv run --env-file .env python -m compileall -q src tests`，通过。分支 `feature/frank-qi`，PR https://gitee.com/qi-yueran/ai4science/pulls/35 。
