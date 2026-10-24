@@ -147,3 +147,7 @@ tags: [wayfinder:prototype, product, sciencepal, ai4science]
 - 本次链路同时暴露并修复共享留痕包的多线程访问缺陷（`ai4-fmco`）：真实 HTTP MCP 是多线程服务，原 `sqlite3.connect` 默认 `check_same_thread=True`，写工具在请求线程访问审计库触发 `ProgrammingError` 并以 fail-closed 返回 `audit_unavailable`；修复后写工具可用，两领域全量测试无回归。
 
 待 SciencePal 的验收项（计时演示脚本、实际承载执行、5 页定稿）维持未勾选。
+
+**2026-10-24 演示脚本整合平台链路（hanjiang）**
+
+`humans/competition/demo-script.md` 第 5 段由"预期的路线变更展示"改写为"平台治理链路实演"：直接运行 `run_iris_mapping_pipeline.py` 真实 TerminusDB + 管理 MCP 六步时序（正式查询→候选提交→差异预览→驳回与批准→正式化→正式查询），并展示三条失败路径的稳定错误码。已加入实测运行基线说明。SciencePal 段（T1/T2 实演）计时仍待回填，「提供并实际计时一条 3—5 分钟可复现的演示脚本」验收项因此在完整计时证据补齐前维持未勾选。
