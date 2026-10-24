@@ -55,7 +55,7 @@ def create_email_server(
     conn = sqlite3.connect(config.sqlite_path, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     lock = RLock()
-    service = EmailDeliveryService(conn, resolver, sender, config.mailbox, lock)
+    service = EmailDeliveryService(conn, resolver, sender, config.mailbox, config.retry, lock)
     audit_box: dict[str, sqlite3.Connection] = {}
     server = FastMCP(
         name="SciWeave Email Service",
@@ -192,10 +192,12 @@ def create_email_server(
                 audit.close()
                 raise
             audit_box["conn"] = audit
+            service.start()
             try:
                 async with previous(asgi_app):
                     yield
             finally:
+                service.stop()
                 audit_box.pop("conn", None)
                 audit.close()
 

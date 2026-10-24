@@ -21,6 +21,27 @@ NON_RETRYABLE_RECIPIENT_ERRORS = frozenset(
 )
 
 
+class TransientSenderFailure(EmailServiceError):
+    """The sender could not deliver now. The notification may be retried."""
+
+    def __init__(self) -> None:
+        super().__init__("transient_sender_failure")
+
+
+class PermanentSenderFailure(EmailServiceError):
+    """The sender rejected the recipient or mailbox. Do not retry automatically."""
+
+    def __init__(self) -> None:
+        super().__init__("permanent_sender_failure")
+
+
+class NonRetryableContentError(EmailServiceError):
+    """The message content cannot be delivered. Do not retry automatically."""
+
+    def __init__(self) -> None:
+        super().__init__("non_retryable_content")
+
+
 @dataclass(frozen=True)
 class OutboundMail:
     """Mail handed to the sender port. SMTP settings come from service configuration."""
