@@ -10,6 +10,17 @@ class EmailServiceError(Exception):
         self.code = code
 
 
+# Stable recipient failures. They are not retryable and must not be treated as a successful resolution.
+NON_RETRYABLE_RECIPIENT_ERRORS = frozenset(
+    {
+        "contact_missing",
+        "contact_disabled",
+        "principal_not_found",
+        "address_mismatch",
+    }
+)
+
+
 @dataclass(frozen=True)
 class OutboundMail:
     """Mail handed to the sender port. SMTP settings come from service configuration."""
@@ -26,7 +37,14 @@ class OutboundMail:
 
 
 class RecipientResolver(Protocol):
-    def resolve(self, principal_id: str) -> str: ...
+    def resolve(self, principal_id: str) -> str:
+        """Return the registered contact address for principal_id.
+
+        Raise EmailServiceError with contact_missing, contact_disabled, or
+        principal_not_found when that contact cannot be used. Those codes are
+        non-retryable. address_mismatch is reserved for a caller-supplied address
+        that does not match the resolved one. This port does not open a Registry client.
+        """
 
 
 class MailSender(Protocol):
