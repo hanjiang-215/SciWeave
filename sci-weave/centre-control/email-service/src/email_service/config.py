@@ -21,6 +21,15 @@ class MailboxSettings:
 
 
 @dataclass(frozen=True)
+class RetrySettings:
+    initial_seconds: float
+    multiplier: float
+    max_seconds: float
+    poll_seconds: float
+    sending_timeout_seconds: float
+
+
+@dataclass(frozen=True)
 class EmailServiceConfig:
     host: str
     port: int
@@ -31,6 +40,7 @@ class EmailServiceConfig:
     api_version: str
     token_identities: dict[str, TokenIdentity]
     mailbox: MailboxSettings
+    retry: RetrySettings
 
     @classmethod
     def from_environment(cls) -> "EmailServiceConfig":
@@ -48,6 +58,11 @@ class EmailServiceConfig:
             "SCIWEAVE_EMAIL_SMTP_PORT",
             "SCIWEAVE_EMAIL_SMTP_USERNAME",
             "SCIWEAVE_EMAIL_SMTP_PASSWORD",
+            "SCIWEAVE_EMAIL_RETRY_INITIAL_SECONDS",
+            "SCIWEAVE_EMAIL_RETRY_MULTIPLIER",
+            "SCIWEAVE_EMAIL_RETRY_MAX_SECONDS",
+            "SCIWEAVE_EMAIL_DISPATCH_POLL_SECONDS",
+            "SCIWEAVE_EMAIL_SENDING_TIMEOUT_SECONDS",
         )
         missing = [name for name in required if not os.environ.get(name)]
         if missing:
@@ -85,6 +100,13 @@ class EmailServiceConfig:
                 smtp_username=os.environ["SCIWEAVE_EMAIL_SMTP_USERNAME"],
                 smtp_password=os.environ["SCIWEAVE_EMAIL_SMTP_PASSWORD"],
             ),
+            retry=RetrySettings(
+                initial_seconds=_seconds("SCIWEAVE_EMAIL_RETRY_INITIAL_SECONDS"),
+                multiplier=_multiplier("SCIWEAVE_EMAIL_RETRY_MULTIPLIER"),
+                max_seconds=_seconds("SCIWEAVE_EMAIL_RETRY_MAX_SECONDS"),
+                poll_seconds=_seconds("SCIWEAVE_EMAIL_DISPATCH_POLL_SECONDS"),
+                sending_timeout_seconds=_seconds("SCIWEAVE_EMAIL_SENDING_TIMEOUT_SECONDS"),
+            ),
         )
 
 
@@ -93,3 +115,20 @@ def _port(name: str) -> int:
     if not raw.isdigit():
         raise ValueError(f"{name} must be a non-negative integer")
     return int(raw)
+
+
+def _seconds(name: str) -> float:
+    try:
+        value = float(os.environ[name])
+    except ValueError as exc:
+        raise ValueError(f"{name} must be a non-negative number") from exc
+    if value < 0:
+        raise ValueError(f"{name} must be a non-negative number")
+    return value
+
+
+def _multiplier(name: str) -> float:
+    value = _seconds(name)
+    if value < 1:
+        raise ValueError(f"{name} must be at least 1")
+    return value
