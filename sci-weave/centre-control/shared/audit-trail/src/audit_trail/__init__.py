@@ -6,6 +6,7 @@ import contextlib
 import datetime as _datetime
 import logging
 import sqlite3
+import threading
 import time
 from dataclasses import dataclass
 from typing import Iterator
@@ -15,6 +16,11 @@ _LOG = logging.getLogger("audit_trail")
 _CALLER_TYPES = {"human", "agent", "system", "service"}
 _RESULTS = {"ok", "error", "denied", "unknown"}
 _PHASES = {"invoked", "completed", "attempted"}
+# The ledger is opened once per service and shared by a threaded MCP HTTP
+# server. sqlite3 connections default to same-thread use; the shared package
+# therefore allows cross-thread access and serializes every ledger operation
+# with one re-entrant lock so a single connection stays safe.
+_CONNECTION_LOCK = threading.RLock()
 
 
 class AuditUnavailableError(RuntimeError):
@@ -95,7 +101,9 @@ def open_connection(path: str, *, busy_timeout_ms: int = 5000, journal_mode: str
     if not isinstance(busy_timeout_ms, int) or busy_timeout_ms < 0:
         raise AuditValidationError("busy_timeout_ms must be a non-negative integer")
     try:
-        conn = sqlite3.connect(path)
+        # check_same_thread=False lets one ledger connection serve the threaded
+        # MCP HTTP server; all accessors serialize through _CONNECTION_LOCK.
+        conn = sqlite3.connect(path, check_same_thread=False)
         conn.row_factory = sqlite3.Row
         conn.execute(f"PRAGMA busy_timeout = {busy_timeout_ms}")
         try:
@@ -111,15 +119,16 @@ def open_connection(path: str, *, busy_timeout_ms: int = 5000, journal_mode: str
 
 
 def init_audit_table(conn: sqlite3.Connection) -> None:
-    try:
-        conn.execute("PRAGMA busy_timeout = 5000")
+    with _CONNECTION_LOCK:
         try:
-            conn.execute("PRAGMA journal_mode = 'WAL'")
-        except sqlite3.DatabaseError:
-            _LOG.debug("journal_mode 'WAL' unavailable; continuing")
-        conn.executescript(_SCHEMA)
-    except sqlite3.Error as exc:
-        raise AuditUnavailableError("cannot initialize audit database") from exc
+            conn.execute("PRAGMA busy_timeout = 5000")
+            try:
+                conn.execute("PRAGMA journal_mode = 'WAL'")
+            except sqlite3.DatabaseError:
+                _LOG.debug("journal_mode 'WAL' unavailable; continuing")
+            conn.executescript(_SCHEMA)
+        except sqlite3.Error as exc:
+            raise AuditUnavailableError("cannot initialize audit database") from exc
 
 
 def _insert(conn: sqlite3.Connection, values: tuple[object, ...]) -> None:
@@ -149,7 +158,8 @@ def _record_values(call_id: str, record: CallRecord, phase: str, result: str) ->
 def record_attempted(conn: sqlite3.Connection, record: CallRecord) -> str | None:
     call_id = _new_call_id()
     try:
-        _insert(conn, _record_values(call_id, record, "attempted", "unknown"))
+        with _CONNECTION_LOCK:
+            _insert(conn, _record_values(call_id, record, "attempted", "unknown"))
     except AuditValidationError:
         raise
     except Exception as exc:
@@ -166,7 +176,8 @@ def _new_call_id() -> str:
 def begin_call(conn: sqlite3.Connection, record: CallRecord) -> str:
     call_id = _new_call_id()
     try:
-        _insert(conn, _record_values(call_id, record, "invoked", "unknown"))
+        with _CONNECTION_LOCK:
+            _insert(conn, _record_values(call_id, record, "invoked", "unknown"))
     except AuditValidationError:
         raise
     except Exception as exc:
@@ -181,24 +192,25 @@ def finish_call(conn: sqlite3.Connection, call_id: str, *, result: str,
     if duration_ms is not None and (not isinstance(duration_ms, int) or duration_ms < 0):
         raise AuditValidationError("duration_ms must be a non-negative integer or None")
     try:
-        if conn.in_transaction:
-            raise AuditValidationError("audit append cannot run inside a transaction")
-        conn.execute("BEGIN IMMEDIATE")
-        row = conn.execute(
-            "SELECT 1 FROM audit_call WHERE call_id = ? AND phase = 'invoked' "
-            "AND NOT EXISTS (SELECT 1 FROM audit_call c2 WHERE c2.call_id = audit_call.call_id "
-            "AND c2.phase = 'completed') LIMIT 1", (call_id,)
-        ).fetchone()
-        if row is None:
-            conn.rollback()
-            raise AuditValidationError(f"no unfinished invoked call: {call_id}")
-        conn.execute(
-            "INSERT INTO audit_call SELECT call_id, ?, caller_id, channel_id, caller_type, service, tool, "
-            "'completed', ?, target_object_type, target_object_id, args_digest, ?, ?, refs "
-            "FROM audit_call WHERE call_id = ? AND phase = 'invoked' LIMIT 1",
-            (_now(), result, error_code, duration_ms, call_id),
-        )
-        conn.commit()
+        with _CONNECTION_LOCK:
+            if conn.in_transaction:
+                raise AuditValidationError("audit append cannot run inside a transaction")
+            conn.execute("BEGIN IMMEDIATE")
+            row = conn.execute(
+                "SELECT 1 FROM audit_call WHERE call_id = ? AND phase = 'invoked' "
+                "AND NOT EXISTS (SELECT 1 FROM audit_call c2 WHERE c2.call_id = audit_call.call_id "
+                "AND c2.phase = 'completed') LIMIT 1", (call_id,)
+            ).fetchone()
+            if row is None:
+                conn.rollback()
+                raise AuditValidationError(f"no unfinished invoked call: {call_id}")
+            conn.execute(
+                "INSERT INTO audit_call SELECT call_id, ?, caller_id, channel_id, caller_type, service, tool, "
+                "'completed', ?, target_object_type, target_object_id, args_digest, ?, ?, refs "
+                "FROM audit_call WHERE call_id = ? AND phase = 'invoked' LIMIT 1",
+                (_now(), result, error_code, duration_ms, call_id),
+            )
+            conn.commit()
     except AuditValidationError:
         raise
     except sqlite3.Error as exc:
@@ -252,7 +264,8 @@ def query_audit_calls(
     if clauses:
         sql += " WHERE " + " AND ".join(clauses)
     sql += " ORDER BY occurred_at DESC, rowid DESC"
-    return list(conn.execute(sql, params).fetchall())
+    with _CONNECTION_LOCK:
+        return list(conn.execute(sql, params).fetchall())
 
 
 def find_unfinished_calls(conn: sqlite3.Connection, *, occurred_after: str | None = None) -> list[sqlite3.Row]:
@@ -263,7 +276,8 @@ def find_unfinished_calls(conn: sqlite3.Connection, *, occurred_after: str | Non
         sql += " AND a.occurred_at >= ?"
         params.append(occurred_after)
     sql += " ORDER BY a.occurred_at DESC, a.rowid DESC"
-    return list(conn.execute(sql, params).fetchall())
+    with _CONNECTION_LOCK:
+        return list(conn.execute(sql, params).fetchall())
 
 
 @contextlib.contextmanager
