@@ -79,7 +79,7 @@ python humans/competition/demo-evidence/run_iris_baseline.py humans/competition/
 失败路径也在同一条真实链路上验证：
 
 - 无 `candidate_submit` 权限的 reviewer 提交 → `{code: forbidden}`；
-- 过期基准上的提交 → `{status: rejected, reason_code: stale_base}`；
+- 不存在的正式基准上的提交 → `{status: rejected, reason_code: base_revision_missing}`（自 `ai4-eex0` 起基准校验前移到写入时门禁，不存在基准在提交即拒绝，不再进入预审；`stale_base` 判定保留给「基准存在但已非当前」的场景）；
 - 驳回审阅 → 审计事件保留，正式图不含被驳回节点。
 
 运行命令（需本机 TerminusDB 已启动，凭据经环境变量提供）：

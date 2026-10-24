@@ -358,7 +358,9 @@ def _run_flow(*, terminus, sqlite, audit, database, base_revision_id, domain,
                            request_id=3)
         record("submit_candidate_denied_reviewer", denied)
 
-        # A candidate under a stale base is rejected by the governance core.
+        # A candidate under an invalid/stale base is rejected by the governance core.
+        # Since ai4-eex0 moved the base check into the write gate, a nonexistent
+        # base is rejected as base_revision_missing at submission time.
         stale_set = dict(change_set)
         stale_set["submission_id"] = "submission-stale-" + uuid.uuid4().hex[:10]
         stale_set["proposal_id"] = "proposal-stale-" + uuid.uuid4().hex[:10]
@@ -373,7 +375,8 @@ def _run_flow(*, terminus, sqlite, audit, database, base_revision_id, domain,
                           request_id=4)
         record("submit_candidate_stale_base", stale)
         stale_text = stale["result"]["content"][0]["text"]
-        if '"stale_base"' not in stale_text and '"status": "confirmed"' not in stale_text:
+        accepted_reasons = ("stale_base", "base_revision_missing", "confirmed")
+        if not any(marker in stale_text for marker in accepted_reasons):
             raise RuntimeError(f"unexpected stale-base outcome: {stale_text[:200]!r}")
 
         preview = _mcp_call(mcp_base, "iris-reviewer", "preview_candidate",
