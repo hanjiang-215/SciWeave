@@ -38,11 +38,11 @@ tags: [centre-control, centre-agents, candidate-prereview]
 
 ## Acceptance Criteria
 
-- 每项检查有明确输入、判定与稳定失败码
-- 每种失败对应确定的 Proposal 状态，且不产生新的正式版本
-- 基准变化或候选 head 变化使既有预审结论失效
-- 预审不越过 Project Owner 做批准
-- 预审结论经留痕工具记录，重复预审同一对象结论可复现
+- [x] 每项检查有明确输入、判定与稳定失败码（四项检查表已按 2026-10-24 重排，见 Design）
+- [x] 每种失败对应确定的 Proposal 状态，且不产生新的正式版本（`stale`/`conflict` 为报告事实列，Proposal 状态由 Project Owner 处置）
+- [x] 基准变化或候选 head 变化使既有预审结论失效（追加 `base_moved`/`head_moved` 判定，见 ai4-oz3s）
+- [x] 预审不越过 Project Owner 做批准（预审通过仅表示可送审，不是批准）
+- [ ] 预审结论经留痕工具记录，重复预审同一对象结论可复现（依赖 `append_prereview_log` 写端，待 ai4-t2wc/ai4-rlv6 收口）
 
 ## Notes
 
