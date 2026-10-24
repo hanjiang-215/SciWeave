@@ -1,15 +1,132 @@
 {
   "name": "draft-buffer",
   "version": "1.0.0",
-  "description": "Write and update the researcher's draft buffer.",
+  "description": "Write, submit and review researcher draft buffer records via the central draft buffer MCP.",
+  "transport": "streamable-http",
+  "endpoint": {
+    "url_env": "DRAFT_BUFFER_MCP_URL"
+  },
   "environment": ["DRAFT_BUFFER_MCP_URL", "DRAFT_BUFFER_MCP_TOKEN"],
-  "tools": [{
-    "name": "draft_box_write",
-    "description": "Create one draft from a completed task result.",
-    "input": {"title": "string", "content": "string", "metadata": "object (optional)"},
-    "output": {"draft_id": "string", "status": "string"},
-    "examples": [{"title": "Review", "content": "Evidence-backed result"}],
-    "allowed": ["final result persistence"],
-    "failures": ["empty content", "permission denied", "upstream unavailable"]
-  }]
+  "tools": [
+    {
+      "name": "create_draft",
+      "description": "Create a Mapping or Wiki draft under a stable idempotency key.",
+      "input": {
+        "type": "object",
+        "required": ["namespace", "kind", "title", "payload", "submitted_by", "idempotency_key"],
+        "properties": {
+          "namespace": {"type": "string", "enum": ["mapping", "wiki"]},
+          "kind": {"type": "string"},
+          "title": {"type": "string"},
+          "payload": {},
+          "submitted_by": {"type": "string"},
+          "base_formal_revision_id": {"type": ["string", "null"]},
+          "source_task_node_id": {"type": ["string", "null"]},
+          "source_execution_record_id": {"type": ["string", "null"]},
+          "idempotency_key": {"type": "string"}
+        }
+      },
+      "output": {"draft_id": "string", "status": "string"},
+      "examples": [{"namespace": "wiki", "kind": "wiki_document", "title": "Baseline result", "payload": {"text": "completed pipeline"}, "idempotency_key": "run-1"}],
+      "allowed": ["final result persistence"],
+      "failures": ["invalid_namespace", "invalid_kind", "idempotency_conflict", "upstream unavailable"]
+    },
+    {
+      "name": "update_draft",
+      "description": "Update a draft owned by the authenticated submitter while it is editable.",
+      "input": {
+        "type": "object",
+        "required": ["draft_id", "idempotency_key"],
+        "properties": {
+          "draft_id": {"type": "string"},
+          "idempotency_key": {"type": "string"},
+          "title": {"type": ["string", "null"]},
+          "payload": {}
+        }
+      },
+      "output": {"draft_id": "string", "status": "string"},
+      "examples": [{"draft_id": "draft-1", "idempotency_key": "update-1", "title": "Revised title"}],
+      "allowed": ["draft revision before submission"],
+      "failures": ["draft_not_found", "forbidden", "invalid_transition"]
+    },
+    {
+      "name": "submit_draft",
+      "description": "Freeze the exact TerminusDB commit for human review.",
+      "input": {
+        "type": "object",
+        "required": ["draft_id", "idempotency_key"],
+        "properties": {"draft_id": {"type": "string"}, "idempotency_key": {"type": "string"}}
+      },
+      "output": {"draft_id": "string", "status": "string", "snapshot_commit": "string"},
+      "examples": [{"draft_id": "draft-1", "idempotency_key": "submit-1"}],
+      "allowed": ["moving a draft into human review"],
+      "failures": ["draft_not_found", "forbidden", "invalid_transition"]
+    },
+    {
+      "name": "list_drafts",
+      "description": "List drafts visible in the caller's authorized namespace.",
+      "input": {
+        "type": "object",
+        "required": ["namespace"],
+        "properties": {
+          "namespace": {"type": "string", "enum": ["mapping", "wiki"]},
+          "status": {"type": ["string", "null"]},
+          "submitted_by": {"type": ["string", "null"]}
+        }
+      },
+      "output": {"drafts": "array of draft records"},
+      "examples": [{"namespace": "wiki", "status": "submitted"}],
+      "allowed": ["reviewing outstanding drafts"],
+      "failures": ["namespace_required", "forbidden"]
+    },
+    {
+      "name": "read_draft",
+      "description": "Read draft metadata and current or submitted-commit content.",
+      "input": {
+        "type": "object",
+        "required": ["draft_id"],
+        "properties": {"draft_id": {"type": "string"}, "submitted_commit": {"type": ["string", "null"]}}
+      },
+      "output": {"draft": "draft record", "snapshot_commit": "string"},
+      "examples": [{"draft_id": "draft-1"}],
+      "allowed": ["restoring review context"],
+      "failures": ["draft_not_found", "submitted_commit_mismatch", "forbidden"]
+    },
+    {
+      "name": "review_draft",
+      "description": "Accept or reject a submitted draft as its configured namespace reviewer.",
+      "input": {
+        "type": "object",
+        "required": ["draft_id", "decision", "reason", "idempotency_key"],
+        "properties": {
+          "draft_id": {"type": "string"},
+          "decision": {"type": "string", "enum": ["accept", "reject"]},
+          "reason": {"type": "string"},
+          "idempotency_key": {"type": "string"}
+        }
+      },
+      "output": {"draft_id": "string", "status": "string", "reviewer_id": "string"},
+      "examples": [{"draft_id": "draft-1", "decision": "accept", "reason": "evidence complete", "idempotency_key": "review-1"}],
+      "allowed": ["human first-stage review"],
+      "failures": ["draft_not_found", "forbidden", "invalid_transition", "invalid_decision"]
+    },
+    {
+      "name": "mark_promoted",
+      "description": "Record the exact candidate ID and commit created by a domain MCP caller.",
+      "input": {
+        "type": "object",
+        "required": ["draft_id", "candidate_id", "candidate_commit", "idempotency_key"],
+        "properties": {
+          "draft_id": {"type": "string"},
+          "candidate_id": {"type": "string"},
+          "candidate_commit": {"type": "string"},
+          "idempotency_key": {"type": "string"}
+        }
+      },
+      "output": {"draft_id": "string", "status": "string", "promoted_candidate_id": "string"},
+      "examples": [{"draft_id": "draft-1", "candidate_id": "cand-1", "candidate_commit": "abc123", "idempotency_key": "promote-1"}],
+      "allowed": ["linking an accepted draft to its domain candidate"],
+      "failures": ["draft_not_found", "forbidden", "invalid_transition", "invalid_candidate"]
+    }
+  ]
 }

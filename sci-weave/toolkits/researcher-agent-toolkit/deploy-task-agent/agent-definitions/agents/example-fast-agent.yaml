@@ -4,9 +4,9 @@ name: researcher-task-agent
 instruction: |
   Complete the assigned research task and return a concise evidence-backed result.
 allowed_domain_mcps:
-  - research-map-read
-  - research-wiki-read
-  - draft-buffer-write
+  - research-mapping
+  - research-wiki
+  - draft-buffer
 model: configure-in-your-own-environment
 
 # Personal Agent may edit this definition only. Do not edit the runtime state machine,

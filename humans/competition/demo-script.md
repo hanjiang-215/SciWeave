@@ -1,11 +1,12 @@
 # 3–5 分钟可复现演示脚本（草稿）
 
-> 状态：脚本草稿（2026-10-23）。实际计时与录制需在 SciencePal 接入后复核；各段预计时长以 `[秒]` 标注，合计目标 3–5 分钟。输入快照、T1 检查与 T2 基线均已在本机固定（见 `demo-evidence/`），SciencePal 实演后回填真实执行记录。
+> 状态：脚本草稿（2026-10-23），2026-10-24 补充平台治理链路实演。实际计时与录制需在 SciencePal 接入后复核；各段预计时长以 `[秒]` 标注，合计目标 3–5 分钟。输入快照、T1 检查、T2 基线与本机真实治理链路均已跑通（见 `demo-evidence/`），SciencePal 实演后回填真实执行记录。
 
 ## 前置（SciencePal 接入后）
 
 - SciencePal 项目/工作流链接：待回填
 - 固定 T1/T2 脚本与参数（`check_iris_input.py`、`run_iris_baseline.py`）
+- 真实平台治理链路已可独立实演（不依赖 SciencePal）：`run_iris_mapping_pipeline.py`
 - 准备好 3 个浏览器/窗口：Web 看板或任务面板、SciencePal、TerminusDB 或审计视图
 
 ## 脚本正文
@@ -40,13 +41,22 @@
 
 **预期演示**：失败原因清晰（如 `missing_columns`），恢复后成功。
 
-### 5. 路线变更展示（约 60 秒）
+### 5. 平台治理链路实演：候选 → 审阅 → 正式化（约 90 秒，不依赖 SciencePal）
 
-**演示动作**：TaskNode Owner 提出加入分层交叉验证 `T4`，形成 `T1 → T2 → T4 → T3`；创建 Mapping Proposal，展示 Diff 和影响预览；Project Owner 批准。
+**演示动作**：运行 `run_iris_mapping_pipeline.py`（真实 TerminusDB + 真实管理 MCP），按逗号分隔的时序把六类 MCP 调用逐个展示：
 
-> 口播要点：把路线从基线改成带交叉验证，这一步必须走 Proposal——不是直接改图。Project Owner 看到 Diff 与影响后批准，才生成新的 Formal MappingRevision。先让节点 Owner 接纳结果，再让 Project Owner 批准路线，两层审核不混在一起。
+1. `get_formal_mapping` 读取初始正式路线；
+2. `submit_candidate` 提交加入 T4 分层交叉验证的路线变更候选（`status: confirmed`，候选 Commit 落真实 TerminusDB）；
+3. `preview_candidate` 生成 Diff 与影响预览；
+4. `record_review` 先驳回一次（`rejected`，正式图不变），再批准（`approved`）；
+5. `formalize_candidate` 生成新的 Formal MappingRevision（`status: succeeded`）；
+6. `get_formal_mapping` 确认 T4 已进入正式图，`list_candidates` 读回候选治理记录。
 
-**预期演示**：Proposal 状态流转、Diff 可见、批准后正式版本更新。
+同时展示三条失败路径的稳定错误：无 `candidate_submit` 权限返回 `forbidden`、过期基准返回 `stale_base`、驳回后正式图不含被驳回节点。
+
+> 口播要点：候选不是直接改正式图。它先在隔离分支上产生不可变 Commit，经差异预览和两层审核（TaskNode Owner 接纳结果、Project Owner 批准路线）后才正式化；正式化只是一次原子 SQLite 激活，把指针切到已锁定的 Commit。每次 MCP 调用都写接口层审计账本，失败路径各自留下稳定错误码。
+
+**预期演示**：终端按序打印每步 JSON，最终正式图中出现 T4；`iris_platform_pipeline.json` 保留完整时间线供评审追溯。
 
 ### 6. 审计追溯 + 收尾（约 30 秒）
 
@@ -62,8 +72,14 @@
 | 2 T1 检查 | 40s | |
 | 3 T2 基线 | 60s | |
 | 4 失败+重试 | 50s | |
-| 5 路线变更 | 60s | |
+| 5 平台治理链路 | 90s | |
 | 6 审计收尾 | 30s | |
-| 合计 | 280s（≈4:40） | |
+| 合计 | 310s（≈5:10，预留压缩空间） | |
 
-> 若超时，优先压缩段 3 的讲解、段 4 的失败注入展示保留（它是区分"故障恢复"与"路线变更"的关键）。
+> 若超时，优先压缩段 3 的讲解；段 4 的失败注入与段 5 的平台链路保留，前者是"故障恢复 vs 路线变更"的关键区分，后者是平台本身的可演示核心。段 5 已有本机实测运行时间基线（真实 TerminusDB 内容约数十秒，见 `run_iris_mapping_pipeline.py` 输出）。
+
+## 本机实测记录（2026-10-24）
+
+- 平台治理链路脚本在真实 TerminusDB（本机 `127.0.0.1:6363`，凭据经环境变量提供）上完整跑通，退出码 0；完整 MCP 请求/响应时间线见 `demo-evidence/iris_platform_pipeline.json`。
+- 该链路同时经真实 HTTP 管理 MCP 验证了 `tools/list` 暴露的工具面与套件标准卡片一致（`ai4-emfn`），并触发修复了共享留痕包的多线程访问缺陷（`ai4-fmco`）。
+- SciencePal 段（2、3）的实际计时与执行记录仍待回填；回填后本表的"实际"列更新并复核总时长。

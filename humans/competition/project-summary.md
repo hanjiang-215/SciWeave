@@ -12,7 +12,7 @@ SciWeave 是一个面向科研团队的协作与智能体平台，把「科研�
 - **LLM-Wiki（知识库）**：WikiDocument 与 ResourceVersion 的引用资格审核、候选 Proposal 与正式 WikiRevision 生命周期，与 Research Mapping 共用治理语义但保持独立 MCP、存储与审计边界。
 - **Work Agent（执行）**：Task Agent（研究员端侧）与 Centre Agent（中央）统一架构——消息驱动触发、短生命周期 Worker 执行一轮 fast-agent loop、ExecutionRecord 为唯一状态机、结果写入中央草稿箱后由人一审。
 
-对外接口是两套独立的领域管理 MCP（Mapping 6 工具 / Wiki 7 工具），覆盖正式只读、候选提交、候选审阅、Owner 正式化/恢复与健康检查；服务端按五档能力（read / candidate_submit / candidate_review / formalize / centre）鉴权，Bearer 令牌注入调用者身份，不信任客户端自报角色；所有工具调用写入接口层审计账本（读 attempted fail-open，写 invoked/completed fail-closed）。
+对外接口是两套独立的领域管理 MCP（Mapping 7 工具 / Wiki 8 工具），覆盖正式只读、候选提交、候选审阅、Owner 正式化/恢复与健康检查；服务端按五档能力（read / candidate_submit / candidate_review / formalize / centre）鉴权，Bearer 令牌注入调用者身份，不信任客户端自报角色；所有工具调用写入接口层审计账本（读 attempted fail-open，写 invoked/completed fail-closed）。
 
 ## 2. 创新点
 
@@ -26,12 +26,14 @@ SciWeave 是一个面向科研团队的协作与智能体平台，把「科研�
 
 | 模块 | 证据 |
 | --- | --- |
-| Research Mapping 持久化与正式化 | 36+ 单测 + 真实 TerminusDB 12.0.8 集成（候选隔离、正式化、精确读回、失败恢复） |
-| LLM-Wiki 候选与资格审核 | 97 单测 + 12 真实 TerminusDB 集成（引用精确绑定、资格门槛、Owner 正式化、撤回阻断） |
-| 中央草稿箱 | 28 项测试（含真实 TerminusDB 临时库集成），幂等、固定提交、命名空间隔离 |
-| 领域管理 MCP 与权限分层 | Mapping 12 + Wiki 10 项管理测试，全量 Mapping 89 / Wiki 107 项通过 |
-| 看板只读聚合 API | 16 项测试，来源降级 unavailable/partial、不泄露凭据/堆栈 |
-| 演示证据链 | T1 输入检查通过（150 行、哈希匹配、3 类各 50）；T2 确定性 KNN 基线本机可复现（准确率 0.955556，混淆矩阵完整） |
+| Research Mapping 持久化与正式化 | 90 项测试（5 跳过） + 真实 TerminusDB 12.0.8 集成（候选隔离、正式化、精确读回、失败恢复） |
+| LLM-Wiki 候选与资格审核 | 96 项测试（4 跳过） + 真实 TerminusDB 集成（引用精确绑定、资格门槛、Owner 正式化、撤回阻断） |
+| 中央草稿箱 | 25 项测试（1 跳过，含真实 TerminusDB 临时库集成），幂等、固定提交、命名空间隔离 |
+| 领域管理 MCP 与权限分层 | Mapping 13 + Wiki 11 项管理测试，全量 Mapping 90 / Wiki 96 项通过（2026-10-24 本机实测） |
+| 看板只读聚合 API | 17 项测试（2026-10-24 实测），来源降级 unavailable/partial、不泄露凭据/堆栈 |
+| Web 看板前端 | 26 项测试通过、Vite 构建通过（2026-10-24 实测） |
+| 研究员套件 runtime | 18 项测试通过（含标准 MCP 卡片加载验证，2026-10-24 实测） |
+| 演示证据链 | T1 输入检查通过（150 行、哈希匹配、3 类各 50）；T2 确定性 KNN 基线本机可复现（准确率 0.955556，混淆矩阵完整）；真实平台治理链路（TerminusDB + 管理 MCP）完整跑通并产出 `iris_platform_pipeline.json` |
 
 ## 4. 当前局限
 

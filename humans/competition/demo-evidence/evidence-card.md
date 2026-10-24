@@ -65,6 +65,37 @@ python humans/competition/demo-evidence/run_iris_baseline.py humans/competition/
 
 **SciencePal 硬门槛不变**：以上证明演示闭环在平台外可复现，但赛事要求 SciencePal 实际承接核心数据检查或分析执行。SciencePal 接入后应封装该脚本或同参数实现，并回填真实运行环境的解释器/库版本、输出定位与执行记录；不得以本机结果冒充 SciencePal 实演。
 
+## 平台侧真实治理链路证据（2026-10-24 已运行）
+
+不依赖 SciencePal、也不依赖假存储/内存 Store 的完整真实链路：脚本 `run_iris_mapping_pipeline.py` 用**真实 TerminusDB**（本机 `127.0.0.1:6363` admin/root，临时库建库→定义 TaskNode/DependencyEdge schema→种子正式路线 T1→T2→T3），启动真实的 Research Mapping 管理 MCP（Streamable HTTP、Bearer 鉴权、接口层留痕），然后用 MCP JSON-RPC 客户端像真实 agent harness 一样驱动完整闭环：
+
+1. `get_formal_mapping` 初始正式图可读；
+2. `submit_candidate` 提交 T4 分层交叉验证路线变更 → `status: confirmed`，候选 Commit 落真实 TerminusDB；
+3. `preview_candidate` 生成审阅预览（`status: available`）；
+4. `record_review` 驳回一次（`decision: rejected`）→ 正式图不变；
+5. `record_review` 批准（`approved`）→ `formalize_candidate` → `status: succeeded`；
+6. `get_formal_mapping` 确认 T4 已进入正式图；`list_candidates` 可读回候选治理记录。
+
+失败路径也在同一条真实链路上验证：
+
+- 无 `candidate_submit` 权限的 reviewer 提交 → `{code: forbidden}`；
+- 过期基准上的提交 → `{status: rejected, reason_code: stale_base}`；
+- 驳回审阅 → 审计事件保留，正式图不含被驳回节点。
+
+运行命令（需本机 TerminusDB 已启动，凭据经环境变量提供）：
+
+```text
+$env:SCIWEAVE_MAPPING_TERMINUSDB_URL="http://127.0.0.1:6363"
+$env:SCIWEAVE_MAPPING_TERMINUSDB_STORE="admin"
+$env:SCIWEAVE_MAPPING_TERMINUSDB_USERNAME="admin"
+$env:SCIWEAVE_MAPPING_TERMINUSDB_PASSWORD="root"
+python humans/competition/demo-evidence/run_iris_mapping_pipeline.py
+```
+
+完整证据（每步 MCP 请求/响应与正式的审计时间线）已写入 `demo-evidence/iris_platform_pipeline.json`。本次运行同时暴露并修复了共享留痕包的多线程访问缺陷（`ai4-fmco`），修复前写工具在真实 HTTP 部署下返回 `audit_unavailable`。
+
+**平台链路 vs SciencePal 的分工**：本证据证明 SciWeave 治理闭环（候选→审阅→正式化→查询）在真实存储上可复现；T1 数据检查与 T2 分析执行本身仍由 `check_iris_input.py` / `run_iris_baseline.py` 承担，赛事硬门槛（SciencePal 实际承担核心任务）不变。
+
 ## 演示流程（3–5 分钟可复现脚本）
 
 1. T1 固定并检查输入：SciencePal Agent 读取 `iris_data.csv`，按证据卡字段核验；缺列/类别计数不符/哈希不符时失败。

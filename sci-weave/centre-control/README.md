@@ -4,12 +4,13 @@
 
 | 目录 | 是什么 |
 | --- | --- |
-| `research-map` | Research Mapping，同事已在实现 |
-| `research-wiki` | LLM-Wiki，同事已在实现 |
-| `buffer` | 中央草稿箱，尚未实现 |
-| `centre-agents` | 中央协调 Agent，尚未实现 |
+| `research-map` | Research Mapping，领域服务 + 管理 MCP 已实现 |
+| `research-wiki` | LLM-Wiki，领域服务 + 管理 MCP 已实现 |
+| `buffer` | 中央草稿箱，MCP 服务已实现（Streamable HTTP + stdio） |
+| `centre-agents` | 中央协调 Agent；gateway/mcp 处置面已实现，预审与注册表待实现 |
 | `registery` | 主体与端侧 Agent 的登记表，尚未实现 |
-| `web-ui` | 可视化网页，尚未实现 |
+| `dashboard-api` | Web 看板只读聚合 API，已实现 |
+| `web-ui` | Web 看板前端，已实现 |
 | `shared/audit-trail` | 中央留痕工具，接口层调用账本；多个中央项目共用的代码，不是独立部署单元 |
 
 `shared/` 是**代码归属边界**，不是项目组：这里的代码被至少两个中央项目以 uv path 依赖引用，不产生组级 `pyproject.toml` 或组级 `uv.lock`，各调用方各自提交锁文件。

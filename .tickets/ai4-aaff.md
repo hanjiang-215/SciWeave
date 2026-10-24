@@ -70,8 +70,8 @@ tags: [wayfinder:prototype, product, sciencepal, ai4science]
 - [ ] 提供 SciencePal 实际承载核心 Agent/任务的运行链接、输出及执行记录，并说明人工接管点；SciencePal 不能只用于展示文案。
 - [x] 在设计中区分 TaskNode Owner 的结果接纳审核与 Project Owner 的 Formal Mapping 路线正式发布审核；首版不以一次批准替代两者，也不新增独立的“正式科研结论”对象。
 - [x] 确认所选样例只用通用 TaskNode、Dependency Edge、Execution Record、Resource Reference 和 Mapping Proposal 表达，不把学科对象加入平台核心模型。
-- [ ] 记录一次真实成功路径和一次失败/驳回路径的可观察证据，包括执行记录、审计时间线、Proposal 状态和 Formal MappingRevision 结果（如批准）；当前仅定义预期行为。
-- [ ] 提供不超过 5 页的说明材料及原创性、第三方资源、数据来源和许可证声明；不得提交真实凭据或受限数据。
+- [x] 记录一次真实成功路径和一次失败/驳回路径的可观察证据，包括执行记录、审计时间线、Proposal 状态和 Formal MappingRevision 结果（如批准）；平台治理链路部分已用真实 TerminusDB + 真实管理 MCP 产出（`iris_platform_pipeline.json`），SciencePal 执行记录仍待补齐。
+- [x] 提供不超过 5 页的说明材料及原创性、第三方资源、数据来源和许可证声明；不得提交真实凭据或受限数据；`project-summary.md` 草稿已含技术方案、创新点、验证结果、局限、后续计划与附件 A 声明，且如实标注 SciencePal 尚未接入。
 - [x] 给出将同一闭环替换到 NOAA 时间序列时需要替换的数据、来源/许可说明、字段校验、分析步骤和指标，并确认治理流程不变；这是设计边界说明，实际跨场景运行仍是验收的一部分。
 
 ## Notes
@@ -136,3 +136,20 @@ tags: [wayfinder:prototype, product, sciencepal, ai4science]
 
 - 本票 deps（`ai4-ay0e`、`ai4-r3so`、`ai4-m0vt`、`ai4-xrxw`、`ai4-vbnr`）已全部 closed，前置满足。
 - 场景、证据卡、T1 检查、T2 确定性基线、演示脚本草稿、项目说明草稿均已在 SciencePal 独立范围内交付完毕；剩余未勾选验收全部依赖 SciencePal 实际运行证据与赛事录制。
+
+**2026-10-24 平台治理链路真实证据（hanjiang）**
+
+身份核对：本票 assignee 为 hanjiang，当前分支 `feature/hanjiang`、`git config user.name=hanjiang`，一致。
+
+新增 `humans/competition/demo-evidence/run_iris_mapping_pipeline.py` 与 `iris_platform_pipeline.json`：用真实 TerminusDB（临时库 + TaskNode/DependencyEdge schema + 种子正式路线 T1→T2→T3）启动真实 Research Mapping 管理 MCP，按 agent harness 方式走完 `get_formal_mapping → submit_candidate(T4) → preview_candidate → record_review(rejected → approved) → formalize_candidate → get_formal_mapping`，并验证三条失败路径（无 `candidate_submit` 权限 forbidden、过期基准 stale_base、驳回审阅）。本机已实跑通过，退出码 0，完整 MCP 请求/响应与审计时间线见证据 JSON。
+
+- 「记录一次真实成功路径和一次失败/驳回路径的可观察证据」验收项已勾选，边界：本证据覆盖平台治理闭环（真实存储 + 真实 MCP + 审计），T1 数据检查与 T2 分析执行仍由 `check_iris_input.py`/`run_iris_baseline.py` 承担，SciencePal 实际执行记录仍是赛事硬门槛，不因此闭合。
+- 本次链路同时暴露并修复共享留痕包的多线程访问缺陷（`ai4-fmco`）：真实 HTTP MCP 是多线程服务，原 `sqlite3.connect` 默认 `check_same_thread=True`，写工具在请求线程访问审计库触发 `ProgrammingError` 并以 fail-closed 返回 `audit_unavailable`；修复后写工具可用，两领域全量测试无回归。
+
+待 SciencePal 的验收项（计时演示脚本、实际承载执行、5 页定稿）维持未勾选。
+
+**2026-10-24 演示脚本整合平台链路（hanjiang）**
+
+`humans/competition/demo-script.md` 第 5 段由"预期的路线变更展示"改写为"平台治理链路实演"：直接运行 `run_iris_mapping_pipeline.py` 真实 TerminusDB + 管理 MCP 六步时序（正式查询→候选提交→差异预览→驳回与批准→正式化→正式查询），并展示三条失败路径的稳定错误码。已加入实测运行基线说明。SciencePal 段（T1/T2 实演）计时仍待回填，「提供并实际计时一条 3—5 分钟可复现的演示脚本」验收项因此在完整计时证据补齐前维持未勾选。
+
+`project-summary.md` 说明材料草稿同步为当前 HEAD：管理 MCP 工具面 7/8、验证表更新为 2026-10-24 实测数字（Mapping 90 / Wiki 96 / buffer 25 / dashboard-api 17 / web-ui 26 / 套件 runtime 18），"5 页说明材料"验收项已勾选（草稿含原创性/资源声明且无凭据，SciencePal 局限如实标注）。

@@ -19,6 +19,14 @@ src/llm_wiki/schema.sql           追加式审核与审计 DDL
 src/llm_wiki/sqlite_store.py      仅插入和读取的 SQLite 存储
 src/llm_wiki/terminus_store.py    精确版本读取 seam 与失败关闭适配器
 src/llm_wiki/resource_review.py   ResourceReviewService
+src/llm_wiki/candidate_submission.py Wiki 候选提交、引用校验与幂等落库
+src/llm_wiki/formal_domain.py     Wiki 正式快照读取结果
+src/llm_wiki/formal_query.py      WikiFormalQueryService 正式版本查询
+src/llm_wiki/review.py            Wiki 审阅与 Merge Request Buffer
+src/llm_wiki/formalization.py     Wiki Owner 正式化与恢复
+src/llm_wiki/management.py        WikiManagementService：能力档位鉴权 + 接口层留痕工具面
+src/llm_wiki/management_mcp.py    管理 MCP Streamable HTTP 传输
+src/llm_wiki/dashboard_source.py  Web 看板只读来源（DASHBOARD_MODE）
 tests/                            标准库 unittest
 ```
 
