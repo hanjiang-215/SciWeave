@@ -1,6 +1,6 @@
 ---
 id: ai4-8dgd
-status: open
+status: closed
 deps: [ai4-oz3s]
 links: [ai4-oebi, ai4-iciy, ai4-oz3s, ai4-rlv6]
 created: 2026-10-21T15:37:18Z
@@ -52,7 +52,7 @@ tags: [centre-agents, governance, merge, wayfinder:grilling]
 - [x] 混合候选不可被二次混合，需要改动时走驳回与重新提交
 - [x] 混合候选不引入新的 Proposal 状态，走与人工候选相同的预审与批准路径
 - [x] 语义依据不足的组合不被标记为已验证兼容
-- [ ] 有回归测试覆盖多来源合成、来源集合可追溯、二次混合被拒绝（依赖 `create_merged_candidate` 实现，待 ai4-t2wc/ai4-rlv6 收口）
+- [x] 有回归测试覆盖多来源合成、来源集合可追溯、二次混合被拒绝（`create_merged_candidate` 已随 `ai4-5auy` 实现，测试覆盖两来源合成、`merged_from` 来源记录、`nested_merged_candidate` 拒绝）
 
 ## Notes
 
@@ -78,3 +78,7 @@ tags: [centre-agents, governance, merge, wayfinder:grilling]
 2026-10-24 核对 Design 与验收：前六条验收的规格约束均在 Design 中有明确结论（只新建分支、多值作者、来源作者无操作权、不可二次混合、不引入新状态、语义不足不标已验证），已勾选；第 7 条「回归测试」依赖 `create_merged_candidate` 实现，等待「注册表登记中央 Agent 与开放面第四档」(ai4-t2wc) 与「中央 Agent 能力接口收口」(ai4-rlv6) 收口（Frank Qi），已通过 issue IKQ6XQ 汇总催办。本票规格侧完成，保持 open 待实现回归测试。
 
 另：转让附条件第 1 条所述 ai4-iciy 表述收敛，仍按属人规则留待 Frank Qi 侧处理，本票不擅改。
+
+**2026-10-25 实现落地与关闭（hanjiang）**
+
+`create_merged_candidate` 已随 `ai4-5auy`（提交 `1dada55`）实现并验证：两领域 `merged_candidate.py` 只新建分支、`submitter_id` 用稳定 `merged:<digest>` 多值作者标记、`merged_from` 记录来源候选与作者、来源含 `merged:` 前缀时返回 `nested_merged_candidate`。回归测试覆盖多来源合成、来源集合可追溯、二次混合被拒绝（`test_merged_candidate_rejects_nested_merge` 等）。第 7 项验收勾选，七项全部满足。本票规格与实现边界均闭合，状态置 `closed`。转让附条件第 2 条（grilling 分歧裁决权归 Frank Qi）不影响本票验收，本票不产生新分歧。
