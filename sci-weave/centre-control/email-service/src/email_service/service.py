@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 import threading
 from dataclasses import dataclass
@@ -8,13 +9,44 @@ from datetime import datetime, timezone
 from typing import Any
 
 from .config import MailboxSettings
-from .ports import EmailServiceError, MailSender, OutboundMail, RecipientResolver
+from .ports import (
+    NON_RETRYABLE_RECIPIENT_ERRORS,
+    EmailServiceError,
+    MailSender,
+    OutboundMail,
+    RecipientResolver,
+)
 
 
 @dataclass(frozen=True)
 class Caller:
     caller_id: str
     caller_type: str
+
+
+CONFIGURED_NOTIFICATION_KINDS = frozenset(
+    {
+        "draft_ready",
+        "execution_question",
+        "execution_failed",
+        "revision_draft_ready",
+        "revision_failed",
+        "prereview_completed",
+        "candidate_revision_requested",
+        "candidate_rejected",
+        "workflow_binding_required",
+        "workflow_load_failed",
+        "workflow_start_failed",
+        "agent_unavailable",
+        "task_terminal_summary",
+    }
+)
+SUBJECT_MAX_CHARS = 200
+BODY_MAX_CHARS = 4000
+_HTML_MARKUP = re.compile(r"<\s*/?\s*[A-Za-z!]")
+_SENSITIVE_CONTENT = re.compile(
+    r"(?i)(?:\b(?:password|passwd|secret|api[_-]?key|token|credential)s?\b\s*[:=]|bearer\s+\S+|traceback \(most recent call last\)|-----BEGIN [A-Z ]*PRIVATE KEY-----)"
+)
 
 
 class EmailDeliveryService:
@@ -73,11 +105,16 @@ class EmailDeliveryService:
                 "notification_id": existing["notification_id"],
                 "delivery_status": existing["delivery_status"],
             }
+        if _content_problem(intent):
+            self.record_invalid(caller, intent)
         notification_id = intent["notification_id"]
-        resolved = [
-            {"principal_id": recipient["principal_id"], "email": self.resolver.resolve(recipient["principal_id"])}
-            for recipient in intent["recipients"]
-        ]
+        try:
+            resolved = [_resolved_recipient(self.resolver, recipient) for recipient in intent["recipients"]]
+        except EmailServiceError as exc:
+            if exc.code not in NON_RETRYABLE_RECIPIENT_ERRORS:
+                raise
+            self._record_terminal(caller, intent, "permanent_failure")
+            raise
         now = _now()
         try:
             self.conn.execute(
@@ -108,6 +145,51 @@ class EmailDeliveryService:
             raise EmailServiceError("storage_unavailable") from None
         threading.Thread(target=self._dispatch, args=(notification_id,), daemon=True).start()
         return {"notification_id": notification_id, "acceptance": "accepted_for_delivery"}
+
+    def record_invalid(self, caller: Caller, intent: dict[str, Any]) -> None:
+        notification_id = intent.get("notification_id")
+        if not isinstance(notification_id, str) or not notification_id.strip():
+            raise EmailServiceError("invalid")
+        self._record_terminal(caller, intent, "invalid")
+        raise EmailServiceError("invalid")
+
+    def _record_terminal(self, caller: Caller, intent: dict[str, Any], delivery_status: str) -> None:
+        now = _now()
+        related = intent.get("related")
+        recipients = intent.get("recipients")
+        subject = _text(intent.get("subject"))
+        body = _text(intent.get("body"))
+        if _contains_sensitive(subject) or _contains_sensitive(body):
+            subject = ""
+            body = ""
+        try:
+            self.conn.execute(
+                """
+                INSERT INTO notification_delivery (
+                  notification_id, caller_id, dedupe_key, notification_kind, subject, body,
+                  related_json, schema_version, recipients_json, delivery_status, attempt_count,
+                  created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
+                """,
+                (
+                    intent["notification_id"],
+                    caller.caller_id,
+                    _text(intent.get("dedupe_key")),
+                    _text(intent.get("notification_kind")),
+                    subject,
+                    body,
+                    json.dumps(related if isinstance(related, dict) else {}, ensure_ascii=False, sort_keys=True),
+                    _text(intent.get("schema_version")),
+                    json.dumps(recipients if isinstance(recipients, list) else [], ensure_ascii=False),
+                    delivery_status,
+                    now,
+                    now,
+                ),
+            )
+            self.conn.commit()
+        except sqlite3.Error:
+            self.conn.rollback()
+            raise EmailServiceError("storage_unavailable") from None
 
     def status(self, caller: Caller, notification_id: str) -> dict[str, Any]:
         try:
@@ -188,6 +270,54 @@ def _same_notification(row: sqlite3.Row, intent: dict[str, Any]) -> bool:
         and row["notification_kind"] == intent["notification_kind"]
         and stored_recipients == requested_recipients
     )
+
+
+def _resolved_recipient(resolver: RecipientResolver, recipient: dict[str, Any]) -> dict[str, str]:
+    email = resolver.resolve(recipient["principal_id"])
+    claimed = recipient.get("email")
+    if isinstance(claimed, str) and claimed.strip() and claimed != email:
+        raise EmailServiceError("address_mismatch")
+    return {"principal_id": recipient["principal_id"], "email": email}
+
+
+def _text(value: Any) -> str:
+    if isinstance(value, str):
+        return value
+    return ""
+
+
+def _nonempty(value: Any) -> bool:
+    return isinstance(value, str) and bool(value.strip())
+
+
+def _contains_sensitive(value: str) -> bool:
+    return _SENSITIVE_CONTENT.search(value) is not None
+
+
+def _content_problem(intent: dict[str, Any]) -> bool:
+    if not _nonempty(intent.get("dedupe_key")) or not _nonempty(intent.get("notification_kind")):
+        return True
+    if intent.get("notification_kind") not in CONFIGURED_NOTIFICATION_KINDS:
+        return True
+    subject = intent.get("subject")
+    body = intent.get("body")
+    if not _nonempty(subject) or not _nonempty(body):
+        return True
+    if intent.get("schema_version") != "1" or not isinstance(intent.get("related"), dict):
+        return True
+    recipients = intent.get("recipients")
+    if not isinstance(recipients, list) or not recipients:
+        return True
+    for recipient in recipients:
+        if not isinstance(recipient, dict) or not _nonempty(recipient.get("principal_id")):
+            return True
+    if _HTML_MARKUP.search(subject) or _HTML_MARKUP.search(body):
+        return True
+    if len(subject) > SUBJECT_MAX_CHARS or len(body) > BODY_MAX_CHARS:
+        return True
+    if _contains_sensitive(subject) or _contains_sensitive(body):
+        return True
+    return False
 
 
 def _now() -> str:

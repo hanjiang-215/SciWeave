@@ -24,6 +24,8 @@ uv run --env-file .env python src/main.py
 
 MCP 路径是 `/mcp`，需要 bearer token。未认证的 `GET /health` 只返回 `status`、服务名和 API 版本。
 
+不能发送的通知记成可查询终态，不调用发送端口，也不自动重试。缺少必填字段、未配置的 `notification_kind`、非 `1` 的 `schema_version`、HTML、附件、超过 200 字的主题、超过 4000 字的正文、敏感内容，以及调用方传入的 From、SMTP 或凭据，状态为 `invalid`。联系人缺失、禁用、不存在，或调用方地址与解析结果不一致，状态为 `permanent_failure`，工具错误码分别为 `contact_missing`、`contact_disabled`、`principal_not_found`、`address_mismatch`。投递记录写不进去时返回 `storage_unavailable`，并且不发信。发件信息只来自 `SCIWEAVE_EMAIL_*`。
+
 ## 验证
 
 ```bash

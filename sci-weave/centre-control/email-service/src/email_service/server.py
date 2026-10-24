@@ -19,6 +19,7 @@ from mcp.server.auth.middleware.auth_context import get_access_token
 from mcp.server.auth.provider import AccessToken, TokenVerifier
 from mcp.server.auth.settings import AuthSettings
 from mcp.server.fastmcp import FastMCP
+from pydantic import ValidationError
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
@@ -202,7 +203,42 @@ def create_email_server(
         return app
 
     server.streamable_http_app = streamable_http_app
+    _reject_undeclared_send_arguments(server, service, caller_from_token)
     return server
+
+
+_SEND_NOTIFICATION_FIELDS = frozenset(
+    {
+        "notification_id",
+        "dedupe_key",
+        "notification_kind",
+        "recipients",
+        "subject",
+        "body",
+        "related",
+        "schema_version",
+    }
+)
+
+
+def _reject_undeclared_send_arguments(server: FastMCP, service: EmailDeliveryService, caller_from_token) -> None:
+    tool = server._tool_manager.get_tool("send_notification")
+    if tool is None:
+        raise RuntimeError("send_notification tool is not registered")
+    original = tool.fn_metadata.call_fn_with_arg_validation
+
+    async def call_fn_with_arg_validation(fn, fn_is_async, arguments_to_validate, arguments_to_pass_directly):
+        arguments = arguments_to_validate or {}
+        undeclared = set(arguments) - _SEND_NOTIFICATION_FIELDS
+        missing = _SEND_NOTIFICATION_FIELDS - set(arguments)
+        if undeclared or missing:
+            service.record_invalid(caller_from_token(), arguments)
+        try:
+            return await original(fn, fn_is_async, arguments_to_validate, arguments_to_pass_directly)
+        except ValidationError:
+            service.record_invalid(caller_from_token(), arguments)
+
+    object.__setattr__(tool.fn_metadata, "call_fn_with_arg_validation", call_fn_with_arg_validation)
 
 
 def _begin_audit(audit: sqlite3.Connection, record: CallRecord) -> str:
