@@ -188,6 +188,7 @@ def test_transient_failure_retries_to_sent_as_the_same_notification(tmp_path: Pa
             "notification_id": NOTIFICATION_ID,
             "delivery_status": "retryable",
             "attempt_count": 1,
+            "error_summary": "transient_sender_failure",
         }
         sent = statuses_until(mcp_url, NOTIFICATION_ID, "sent", timeout=5)
         assert sent[-1] == {
@@ -307,6 +308,7 @@ def test_restart_continues_retryable_without_a_new_notification(tmp_path: Path, 
             "notification_id": NOTIFICATION_ID,
             "delivery_status": "retryable",
             "attempt_count": 1,
+            "error_summary": "transient_sender_failure",
         }
     resumed = ScriptedSender([])
     with running_server(
@@ -344,6 +346,7 @@ def test_permanent_sender_failure_stays_queryable_and_is_not_retried(tmp_path: P
             "notification_id": NOTIFICATION_ID,
             "delivery_status": "permanent_failure",
             "attempt_count": 1,
+            "error_summary": "permanent_sender_failure",
         }
         assert len(sender.calls) == 1
     resumed = ScriptedSender([])
@@ -360,6 +363,7 @@ def test_permanent_sender_failure_stays_queryable_and_is_not_retried(tmp_path: P
         "notification_id": NOTIFICATION_ID,
         "delivery_status": "permanent_failure",
         "attempt_count": 1,
+        "error_summary": "permanent_sender_failure",
     }
     assert resumed.calls == []
 
@@ -381,6 +385,7 @@ def test_non_retryable_content_stays_invalid_after_restart(tmp_path: Path, monke
             "notification_id": NOTIFICATION_ID,
             "delivery_status": "invalid",
             "attempt_count": 1,
+            "error_summary": "non_retryable_content",
         }
         assert len(sender.calls) == 1
     resumed = ScriptedSender([])
@@ -397,6 +402,7 @@ def test_non_retryable_content_stays_invalid_after_restart(tmp_path: Path, monke
         "notification_id": NOTIFICATION_ID,
         "delivery_status": "invalid",
         "attempt_count": 1,
+        "error_summary": "non_retryable_content",
     }
     assert resumed.calls == []
 
@@ -443,5 +449,6 @@ def test_manual_resend_uses_a_new_notification_id(tmp_path: Path, monkeypatch: p
             "notification_id": NOTIFICATION_ID,
             "delivery_status": "permanent_failure",
             "attempt_count": 1,
+            "error_summary": "permanent_sender_failure",
         }
     assert [message.notification_id for message in sender.calls] == [NOTIFICATION_ID, RESEND_ID]
