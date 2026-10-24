@@ -47,14 +47,35 @@ tags: [centre-agents, mapping, wiki, prereview, wayfinder:grilling]
 
 ## Acceptance Criteria
 
-- [ ] 四项机械检查在领域 MCP 的候选创建路径上拒绝非法输入，并有明确错误码
-- [ ] 基准版本「等于当前正式版本」仍作为预审判定，不在写入时拒绝
-- [ ] 中央 Agent 的检查表相应缩减，不再包含格式、引用、依赖三类
-- [ ] 明确「写入合法」与「可以送审」是两个不同判断
-- [ ] 两套领域 MCP 的校验行为一致，不一套严一套松
-- [ ] 有回归测试覆盖每种被拒绝的输入
+- [x] 四项机械检查在领域 MCP 的候选创建路径上拒绝非法输入，并有明确错误码
+- [x] 基准版本「等于当前正式版本」仍作为预审判定，不在写入时拒绝
+- [x] 中央 Agent 的检查表相应缩减，不再包含格式、引用、依赖三类
+- [x] 明确「写入合法」与「可以送审」是两个不同判断
+- [x] 两套领域 MCP 的校验行为一致，不一套严一套松
+- [x] 有回归测试覆盖每种被拒绝的输入
 
 ## Notes
+
+**2026-10-24 eex0 实现与验收（hanjiang）**
+
+身份核对：本票 assignee 为 hanjiang，当前分支 `feature/hanjiang`、`git config user.name=hanjiang`，一致。
+
+按 2026-10-21 第五轮拆分结论实现：格式、对象引用、依赖环三项机械校验继续在领域 MCP 候选创建路径拒绝（research-map 的 `_validate`、research-wiki 的 `_valid_document`/`_validate_references` 已覆盖）；本次把「基准版本比对」从写入时拒绝拆为两个判断：
+
+- `base_formal_revision_id` 缺失 → 写入时拒绝，稳定错误码 `formal_base_required`（两领域一致）。
+- base 引用的正式版本不存在或域不符 → 写入时拒绝，新增稳定错误码 `base_revision_missing`（两领域一致）。
+- base 存在但不等于当前正式版本 → **不再写入时拒绝**；候选照常进入候选分支，`stale` 由中央 Agent 预审报告判定（对应 ai4-5z9e 预审检查表与 ai4-a2ba 门禁）。
+
+对应代码：`candidate_submission.py`（两领域）把原 `stale_base` 写入拒绝拆分；`_persist` 的并发检查从「current == base」改为「base revision 仍存在」。正式化端（formalization/review）的 `stale_base` 语义不变：Owner 正式化仍要求 current == candidate.base，旧 base 候选送审时按 stale 处理，与 ai4-iciy 重放治理一致。
+
+验证：
+
+- research-map：`uv run --locked python -m unittest discover -s tests -q` → 91 项通过、5 项跳过（真实 TerminusDB 集成）、0 失败。
+- research-wiki：`uv run --locked python -m unittest discover -s tests -q` → 98 项通过、4 项跳过、0 失败。
+- 新增回归测试：mapping（基于旧 base 写入成功、base 不存在拒绝、写期间 formal 指针前进仍持久化）、wiki（base 缺失 `formal_base_required`、base 不存在 `base_revision_missing`、origin 早于当前 base 写入成功）。
+- 未新增依赖，未提交远程。
+
+「中央 Agent 的检查表相应缩减」已作为 assignee 裁决并更新到「中央 Agent 候选预审检查项与失败处置」(ai4-5z9e)。
 
 **2026-10-21T23:40:00Z**
 
