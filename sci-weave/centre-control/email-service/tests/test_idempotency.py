@@ -147,6 +147,29 @@ def wait_until_sent(mcp: dict) -> dict:
     raise AssertionError(last)
 
 
+def test_credential_like_body_is_accepted_and_replay_returns_existing(idempotent_mcp):
+    intent = {**INTENT, "body": "Reset with password=hunter2 before review."}
+    accepted = body(send(idempotent_mcp, intent))
+    assert accepted == {
+        "notification_id": NOTIFICATION_ID,
+        "acceptance": "accepted_for_delivery",
+    }
+    status = wait_until_sent(idempotent_mcp)
+    assert status == {
+        "notification_id": NOTIFICATION_ID,
+        "delivery_status": "sent",
+        "attempt_count": 1,
+    }
+    assert "hunter2" not in json.dumps(status)
+    replayed = body(send(idempotent_mcp, {**intent, "notification_id": REPLAY_NOTIFICATION_ID}))
+    assert replayed == {
+        "notification_id": NOTIFICATION_ID,
+        "delivery_status": "sent",
+    }
+    assert len(idempotent_mcp["sender"].sent) == 1
+    assert idempotent_mcp["sender"].sent[0].body == intent["body"]
+
+
 def test_equivalent_replay_returns_original_notification_and_does_not_send_again(idempotent_mcp):
     accepted = body(send(idempotent_mcp, INTENT))
     assert accepted == {

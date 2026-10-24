@@ -4,6 +4,7 @@ import json
 import re
 import sqlite3
 import threading
+import unicodedata
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -48,9 +49,12 @@ CONFIGURED_NOTIFICATION_KINDS = frozenset(
 SUBJECT_MAX_CHARS = 200
 BODY_MAX_CHARS = 4000
 _HTML_MARKUP = re.compile(r"<\s*/?\s*[A-Za-z!]")
-_SENSITIVE_CONTENT = re.compile(
-    r"(?i)(?:\b(?:password|passwd|secret|api[_-]?key|token|credential)s?\b\s*[:=]|bearer\s+\S+|traceback \(most recent call last\)|-----BEGIN [A-Z ]*PRIVATE KEY-----)"
-)
+_KEPT_CONTROLS = frozenset("\n\r\t")
+_FAILURE_SUMMARIES = {
+    "retryable": "transient_sender_failure",
+    "permanent_failure": "permanent_sender_failure",
+    "invalid": "non_retryable_content",
+}
 
 
 class EmailDeliveryService:
@@ -62,6 +66,7 @@ class EmailDeliveryService:
         mailbox: MailboxSettings,
         retry: RetrySettings,
         lock: threading.RLock,
+        kind_allowlist: dict[str, frozenset[str]],
     ) -> None:
         self.conn = connection
         self.resolver = resolver
@@ -69,6 +74,7 @@ class EmailDeliveryService:
         self.mailbox = mailbox
         self.retry = retry
         self.lock = lock
+        self.kind_allowlist = kind_allowlist
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         self._recover_before = ""
@@ -104,6 +110,8 @@ class EmailDeliveryService:
             self.conn.execute("ALTER TABLE notification_delivery ADD COLUMN claim_token TEXT")
         if "next_attempt_at" not in present:
             self.conn.execute("ALTER TABLE notification_delivery ADD COLUMN next_attempt_at TEXT")
+        if "error_summary" not in present:
+            self.conn.execute("ALTER TABLE notification_delivery ADD COLUMN error_summary TEXT")
         self.conn.commit()
 
     def accept(self, caller: Caller, intent: dict[str, Any]) -> dict[str, str]:
@@ -125,7 +133,7 @@ class EmailDeliveryService:
                 "notification_id": existing["notification_id"],
                 "delivery_status": existing["delivery_status"],
             }
-        if _content_problem(intent):
+        if _content_problem(caller, intent, self.kind_allowlist):
             self.record_invalid(caller, intent)
         notification_id = intent["notification_id"]
         try:
@@ -133,7 +141,7 @@ class EmailDeliveryService:
         except EmailServiceError as exc:
             if exc.code not in NON_RETRYABLE_RECIPIENT_ERRORS:
                 raise
-            self._record_terminal(caller, intent, "permanent_failure")
+            self._record_terminal(caller, intent, "permanent_failure", exc.code)
             raise
         now = _now()
         try:
@@ -169,26 +177,29 @@ class EmailDeliveryService:
         notification_id = intent.get("notification_id")
         if not isinstance(notification_id, str) or not notification_id.strip():
             raise EmailServiceError("invalid")
-        self._record_terminal(caller, intent, "invalid")
+        self._record_terminal(caller, intent, "invalid", "invalid")
         raise EmailServiceError("invalid")
 
-    def _record_terminal(self, caller: Caller, intent: dict[str, Any], delivery_status: str) -> None:
+    def _record_terminal(
+        self,
+        caller: Caller,
+        intent: dict[str, Any],
+        delivery_status: str,
+        error_summary: str,
+    ) -> None:
         now = _now()
         related = intent.get("related")
         recipients = intent.get("recipients")
         subject = _text(intent.get("subject"))
         body = _text(intent.get("body"))
-        if _contains_sensitive(subject) or _contains_sensitive(body):
-            subject = ""
-            body = ""
         try:
             self.conn.execute(
                 """
                 INSERT INTO notification_delivery (
                   notification_id, caller_id, dedupe_key, notification_kind, subject, body,
                   related_json, schema_version, recipients_json, delivery_status, attempt_count,
-                  created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
+                  error_summary, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)
                 """,
                 (
                     intent["notification_id"],
@@ -201,6 +212,7 @@ class EmailDeliveryService:
                     _text(intent.get("schema_version")),
                     json.dumps(recipients if isinstance(recipients, list) else [], ensure_ascii=False),
                     delivery_status,
+                    error_summary,
                     now,
                     now,
                 ),
@@ -229,7 +241,7 @@ class EmailDeliveryService:
         try:
             row = self.conn.execute(
                 """
-                SELECT caller_id, delivery_status, attempt_count
+                SELECT caller_id, delivery_status, attempt_count, error_summary
                 FROM notification_delivery
                 WHERE notification_id = ?
                 """,
@@ -237,13 +249,16 @@ class EmailDeliveryService:
             ).fetchone()
         except sqlite3.Error:
             raise EmailServiceError("storage_unavailable") from None
-        if row is None or row["caller_id"] != caller.caller_id:
+        if row is None or (caller.caller_type != "operator" and row["caller_id"] != caller.caller_id):
             raise EmailServiceError("denied")
-        return {
+        payload = {
             "notification_id": notification_id,
             "delivery_status": row["delivery_status"],
             "attempt_count": row["attempt_count"],
         }
+        if row["delivery_status"] in _FAILURE_SUMMARIES:
+            payload["error_summary"] = row["error_summary"] or "send_failed"
+        return payload
 
     def _run(self) -> None:
         seen: set[str] = set()
@@ -346,10 +361,17 @@ class EmailDeliveryService:
             self.conn.execute(
                 """
                 UPDATE notification_delivery
-                SET delivery_status = ?, next_attempt_at = ?, claim_token = NULL, updated_at = ?
+                SET delivery_status = ?, error_summary = ?, next_attempt_at = ?, claim_token = NULL, updated_at = ?
                 WHERE notification_id = ? AND claim_token = ? AND delivery_status = 'sending'
                 """,
-                (status, next_attempt_at, _now(), notification_id, claim_token),
+                (
+                    status,
+                    _FAILURE_SUMMARIES.get(status),
+                    next_attempt_at,
+                    _now(),
+                    notification_id,
+                    claim_token,
+                ),
             )
             self.conn.commit()
 
@@ -389,14 +411,10 @@ def _nonempty(value: Any) -> bool:
     return isinstance(value, str) and bool(value.strip())
 
 
-def _contains_sensitive(value: str) -> bool:
-    return _SENSITIVE_CONTENT.search(value) is not None
-
-
-def _content_problem(intent: dict[str, Any]) -> bool:
+def _content_problem(caller: Caller, intent: dict[str, Any], kind_allowlist: dict[str, frozenset[str]]) -> bool:
     if not _nonempty(intent.get("dedupe_key")) or not _nonempty(intent.get("notification_kind")):
         return True
-    if intent.get("notification_kind") not in CONFIGURED_NOTIFICATION_KINDS:
+    if not _kind_allowed(caller, intent["notification_kind"], kind_allowlist):
         return True
     subject = intent.get("subject")
     body = intent.get("body")
@@ -412,11 +430,21 @@ def _content_problem(intent: dict[str, Any]) -> bool:
             return True
     if _HTML_MARKUP.search(subject) or _HTML_MARKUP.search(body):
         return True
+    if _has_disallowed_control(subject) or _has_disallowed_control(body):
+        return True
     if len(subject) > SUBJECT_MAX_CHARS or len(body) > BODY_MAX_CHARS:
         return True
-    if _contains_sensitive(subject) or _contains_sensitive(body):
-        return True
     return False
+
+
+def _kind_allowed(caller: Caller, kind: str, kind_allowlist: dict[str, frozenset[str]]) -> bool:
+    if kind in CONFIGURED_NOTIFICATION_KINDS:
+        return True
+    return kind in kind_allowlist.get(caller.caller_id, frozenset())
+
+
+def _has_disallowed_control(text: str) -> bool:
+    return any(unicodedata.category(char) == "Cc" and char not in _KEPT_CONTROLS for char in text)
 
 
 def _now() -> str:

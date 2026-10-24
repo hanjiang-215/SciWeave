@@ -55,7 +55,15 @@ def create_email_server(
     conn = sqlite3.connect(config.sqlite_path, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     lock = RLock()
-    service = EmailDeliveryService(conn, resolver, sender, config.mailbox, config.retry, lock)
+    service = EmailDeliveryService(
+        conn,
+        resolver,
+        sender,
+        config.mailbox,
+        config.retry,
+        lock,
+        config.kind_allowlist,
+    )
     audit_box: dict[str, sqlite3.Connection] = {}
     server = FastMCP(
         name="SciWeave Email Service",
@@ -82,7 +90,7 @@ def create_email_server(
             raise EmailServiceError("unauthorized")
         caller_id = token.claims.get("caller_id")
         caller_type = token.claims.get("caller_type")
-        if not isinstance(caller_id, str) or caller_type not in {"researcher", "project_owner", "service"}:
+        if not isinstance(caller_id, str) or caller_type not in {"researcher", "project_owner", "service", "operator"}:
             raise EmailServiceError("unauthorized")
         return Caller(caller_id, caller_type)
 
@@ -142,7 +150,7 @@ def create_email_server(
             write=True,
         )
 
-    @server.tool(description="Read delivery status for a notification submitted by this caller.")
+    @server.tool(description="Read delivery status. Ordinary callers only see their own notifications.")
     def get_notification_status(notification_id: str) -> dict[str, Any]:
         caller = caller_from_token()
         return audited(
@@ -169,7 +177,7 @@ def create_email_server(
     @server.custom_route("/health", methods=["GET"], include_in_schema=False)
     async def http_health(_: Request) -> JSONResponse:
         payload = {
-            "status": "ready" if _stores_ready(conn, audit_box.get("conn"), lock) else "unavailable",
+            "status": _public_status(conn, audit_box.get("conn"), lock, config.mailbox),
             "service": "email-service",
             "api_version": config.api_version,
         }
@@ -259,13 +267,25 @@ def _finish_audit(audit: sqlite3.Connection, call_id: str, error_code: str | Non
     finish_call(audit, call_id, result=result, error_code=error_code, duration_ms=duration_ms)
 
 
-def _stores_ready(facts: sqlite3.Connection, audit: sqlite3.Connection | None, lock: RLock) -> bool:
-    if audit is None:
-        return False
+def _public_status(
+    facts: sqlite3.Connection,
+    audit: sqlite3.Connection | None,
+    lock: RLock,
+    mailbox: MailboxSettings,
+) -> str:
+    if not _query_ready(facts, lock, "SELECT 1 FROM notification_delivery LIMIT 1"):
+        return "unavailable"
+    if _mailbox_state(mailbox) != "ready":
+        return "not_configured"
+    if audit is None or not _query_ready(audit, lock, "SELECT 1 FROM audit_call LIMIT 1"):
+        return "unavailable"
+    return "ready"
+
+
+def _query_ready(connection: sqlite3.Connection, lock: RLock, statement: str) -> bool:
     try:
         with lock:
-            facts.execute("SELECT 1 FROM notification_delivery LIMIT 1").fetchone()
-            audit.execute("SELECT 1 FROM audit_call LIMIT 1").fetchone()
+            connection.execute(statement).fetchone()
     except sqlite3.Error:
         return False
     return True
@@ -290,10 +310,11 @@ def _component_health(
     except sqlite3.Error:
         audit_state = "unavailable"
     mailbox_state = _mailbox_state(mailbox)
-    states = {delivery, audit_state, mailbox_state}
-    if "unavailable" in states:
+    if delivery == "unavailable":
         overall = "unavailable"
-    elif "not_configured" in states:
+    elif audit_state == "unavailable":
+        overall = "degraded"
+    elif mailbox_state == "not_configured":
         overall = "not_configured"
     else:
         overall = "ready"

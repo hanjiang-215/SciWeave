@@ -41,6 +41,7 @@ class EmailServiceConfig:
     token_identities: dict[str, TokenIdentity]
     mailbox: MailboxSettings
     retry: RetrySettings
+    kind_allowlist: dict[str, frozenset[str]]
 
     @classmethod
     def from_environment(cls) -> "EmailServiceConfig":
@@ -53,11 +54,6 @@ class EmailServiceConfig:
             "SCIWEAVE_EMAIL_RESOURCE_URL",
             "SCIWEAVE_EMAIL_API_VERSION",
             "SCIWEAVE_EMAIL_TOKENS_JSON",
-            "SCIWEAVE_EMAIL_FROM_ADDRESS",
-            "SCIWEAVE_EMAIL_SMTP_HOST",
-            "SCIWEAVE_EMAIL_SMTP_PORT",
-            "SCIWEAVE_EMAIL_SMTP_USERNAME",
-            "SCIWEAVE_EMAIL_SMTP_PASSWORD",
             "SCIWEAVE_EMAIL_RETRY_INITIAL_SECONDS",
             "SCIWEAVE_EMAIL_RETRY_MULTIPLIER",
             "SCIWEAVE_EMAIL_RETRY_MAX_SECONDS",
@@ -81,7 +77,7 @@ class EmailServiceConfig:
             caller_type = raw_identity.get("caller_type")
             if not isinstance(caller_id, str) or not caller_id:
                 raise ValueError("email-service token identity requires caller_id")
-            if caller_type not in {"researcher", "project_owner", "service"}:
+            if caller_type not in {"researcher", "project_owner", "service", "operator"}:
                 raise ValueError("email-service token identity has invalid caller_type")
             identities[token] = TokenIdentity(caller_id, caller_type)
         return cls(
@@ -94,11 +90,11 @@ class EmailServiceConfig:
             api_version=os.environ["SCIWEAVE_EMAIL_API_VERSION"],
             token_identities=identities,
             mailbox=MailboxSettings(
-                from_address=os.environ["SCIWEAVE_EMAIL_FROM_ADDRESS"],
-                smtp_host=os.environ["SCIWEAVE_EMAIL_SMTP_HOST"],
-                smtp_port=_port("SCIWEAVE_EMAIL_SMTP_PORT"),
-                smtp_username=os.environ["SCIWEAVE_EMAIL_SMTP_USERNAME"],
-                smtp_password=os.environ["SCIWEAVE_EMAIL_SMTP_PASSWORD"],
+                from_address=os.environ.get("SCIWEAVE_EMAIL_FROM_ADDRESS", ""),
+                smtp_host=os.environ.get("SCIWEAVE_EMAIL_SMTP_HOST", ""),
+                smtp_port=_optional_port("SCIWEAVE_EMAIL_SMTP_PORT"),
+                smtp_username=os.environ.get("SCIWEAVE_EMAIL_SMTP_USERNAME", ""),
+                smtp_password=os.environ.get("SCIWEAVE_EMAIL_SMTP_PASSWORD", ""),
             ),
             retry=RetrySettings(
                 initial_seconds=_seconds("SCIWEAVE_EMAIL_RETRY_INITIAL_SECONDS"),
@@ -107,7 +103,40 @@ class EmailServiceConfig:
                 poll_seconds=_seconds("SCIWEAVE_EMAIL_DISPATCH_POLL_SECONDS"),
                 sending_timeout_seconds=_seconds("SCIWEAVE_EMAIL_SENDING_TIMEOUT_SECONDS"),
             ),
+            kind_allowlist=_kind_allowlist(),
         )
+
+
+def _optional_port(name: str) -> int:
+    raw = os.environ.get(name, "").strip()
+    if not raw:
+        return 0
+    if not raw.isdigit():
+        raise ValueError(f"{name} must be a non-negative integer")
+    return int(raw)
+
+
+def _kind_allowlist() -> dict[str, frozenset[str]]:
+    raw = os.environ.get("SCIWEAVE_EMAIL_KIND_ALLOWLIST_JSON", "").strip()
+    if not raw:
+        return {}
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise ValueError("SCIWEAVE_EMAIL_KIND_ALLOWLIST_JSON must be a JSON object") from exc
+    if not isinstance(parsed, dict):
+        raise ValueError("SCIWEAVE_EMAIL_KIND_ALLOWLIST_JSON must be a JSON object")
+    allowlist: dict[str, frozenset[str]] = {}
+    for caller_id, kinds in parsed.items():
+        if not isinstance(caller_id, str) or not caller_id or not isinstance(kinds, list):
+            raise ValueError("SCIWEAVE_EMAIL_KIND_ALLOWLIST_JSON entries must map caller_id to a list")
+        cleaned: list[str] = []
+        for kind in kinds:
+            if not isinstance(kind, str) or not kind.strip():
+                raise ValueError("SCIWEAVE_EMAIL_KIND_ALLOWLIST_JSON kinds must be non-empty strings")
+            cleaned.append(kind)
+        allowlist[caller_id] = frozenset(cleaned)
+    return allowlist
 
 
 def _port(name: str) -> int:

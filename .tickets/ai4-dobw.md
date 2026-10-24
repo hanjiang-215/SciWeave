@@ -55,3 +55,7 @@ tags: [centre-control, email-service, notification]
 验证：在 sci-weave/centre-control/email-service 执行 uv run --env-file .env pytest -q，52 passed in 28.35s；uv run --env-file .env python -m compileall -q src tests 通过。没有真实 SMTP，也没有消费 Redpanda。
 
 未认证 GET /health 在公共邮箱环境变量缺失时返回 503，正文只有 status=not_configured、service 和 api_version。认证 health 在删掉 audit_call 后整体为 degraded，投递库仍是 ready。caller_type=operator 能按 notification_id 读到他人的 sent 状态，其他 service 仍是 denied，响应不含正文和凭据。NUL、ESC、DEL 记为 invalid 且不发信；换行、回车、制表符和中文仍投递。SCIWEAVE_EMAIL_KIND_ALLOWLIST_JSON 只放行列出的 caller_id，marketing_blast 仍拒绝。永久发送失败的 error_summary 是 permanent_sender_failure，不包含正文、邮箱口令或原始 550 文本。
+
+**2026-10-24T15:37:09Z**
+
+2026-10-24T15:40:00Z 收口验证复跑（提交前）：在 sci-weave/centre-control/email-service 执行 uv run --env-file .env pytest -q，52 passed in 28.41s；uv run --env-file .env python -m compileall -q src tests 通过。本票实现与 tests/test_constraints.py 一并进入提交 feat(email-service): 补齐健康分项、运维查询与调用方约束。

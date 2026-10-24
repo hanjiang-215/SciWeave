@@ -782,6 +782,7 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "mcp" },
+    { name = "pydantic" },
     { name = "sciweave-audit-trail" },
     { name = "starlette" },
 ]
@@ -796,6 +797,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "mcp", specifier = ">=1.30,<2" },
+    { name = "pydantic", specifier = ">=2,<3" },
     { name = "sciweave-audit-trail", editable = "../shared/audit-trail" },
     { name = "starlette", specifier = ">=0.27,<2" },
 ]
