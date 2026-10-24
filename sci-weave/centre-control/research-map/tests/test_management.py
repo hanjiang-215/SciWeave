@@ -11,6 +11,7 @@ import urllib.request
 
 from audit_trail import query_audit_calls
 
+from research_mapping.candidate_reader import MappingCandidateReader
 from research_mapping.candidate_submission import MappingCandidateService
 from research_mapping.config import MappingConfig
 from research_mapping.domain import FormalMappingRevision, FormalizationResult, FormalQueryResult
@@ -371,6 +372,123 @@ class ManagementMcpTransportTestCase(unittest.TestCase):
         response = urllib.request.urlopen(f"http://127.0.0.1:{self.port}/health", timeout=5)
         self.assertEqual(response.status, 200)
         self.assertEqual(json.loads(response.read().decode("utf-8"))["protocol"], "mcp-streamable-http")
+
+
+class _ReaderTerminus:
+    """Return confirmed snapshots per commit, with per-commit fail injection."""
+
+    def __init__(self, documents):
+        self._documents = documents
+        self.unavailable_commits = set()
+
+    def read_exact_snapshot(self, store_id, database, branch_id, commit_hash):
+        from research_mapping.domain import SnapshotRead
+        docs = self._documents.get(commit_hash)
+        if commit_hash in self.unavailable_commits or docs is None:
+            return SnapshotRead.unavailable("store_unavailable")
+        return SnapshotRead.confirmed(store_id=store_id, database=database, branch_id=branch_id,
+                                      commit_hash=commit_hash, documents=tuple(docs))
+
+
+class ReviewableCandidatesToolTestCase(unittest.TestCase):
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.sqlite = SqliteStore(os.path.join(self.tmp.name, "mapping.db"))
+        self.sqlite.initialize()
+        self.sqlite.add_formal_revision(FormalMappingRevision(
+            formal_revision_id=BASE, mapping_domain_id=DOMAIN, terminus_store_id="store",
+            formal_branch_id="formal", formal_commit_hash="base-commit", base_formal_revision_id=None,
+            source_proposal_id=None, approval_audit_event_id=None, published_by="owner",
+            published_at="2026-10-22T00:00:00Z",
+        ))
+        self.sqlite.set_current_formal_revision(DOMAIN, BASE, updated_at="2026-10-22T00:00:00Z")
+        self.terminus = _ReaderTerminus({
+            "candidate-commit": ({"@id": "TaskNode/n1", "@type": "TaskNode", "title": "New",
+                                  "lifecycle_state": "candidate", "proposal_id": "proposal-1",
+                                  "base_formal_revision_id": BASE},),
+            "candidate-commit-2": ({"@id": "TaskNode/n2", "@type": "TaskNode", "title": "New2",
+                                    "lifecycle_state": "candidate", "proposal_id": "proposal-2",
+                                    "base_formal_revision_id": BASE},),
+        })
+        reader = MappingCandidateReader(
+            sqlite_store=self.sqlite, terminus_store=self.terminus, terminus_database="db",
+        )
+        formal = FormalQueryService(
+            sqlite_store=self.sqlite, terminus_store=_FakeFormalTerminus(), terminus_database="db",
+        )
+        candidate = MappingCandidateService(self.sqlite, _FakeTerminusForManagement(), terminus_database="db")
+        self.service = MappingManagementService(
+            formal_query=formal,
+            candidate_service=candidate,
+            candidate_reader=reader,
+            caller_capabilities={
+                "reader": frozenset({"read"}),
+                "submitter": frozenset({"candidate_submit"}),
+                "centre": frozenset({"centre"}),
+            },
+            sqlite_store=self.sqlite,
+        )
+
+    def _insert_candidate(self, proposal_id="proposal-1", *, submission_id="submission-1",
+                          commit="candidate-commit", status="candidate", candidate_digest=None):
+        from research_mapping.canonical import sha256_json
+        if candidate_digest is None:
+            candidate_digest = sha256_json(tuple(self.terminus._documents[commit]))
+        with self.sqlite.connection() as db:
+            db.execute("INSERT INTO mapping_submission VALUES (?,?,?,?,?,?,?,?,?)",
+                (submission_id, DOMAIN, "author", BASE, f"key-{proposal_id}", "digest",
+                 proposal_id, "now", "candidate_created"))
+            db.execute("INSERT INTO mapping_proposal VALUES (?,?,?,?,?,?,?,?)",
+                (proposal_id, DOMAIN, BASE, "store", f"candidate-branch/{proposal_id}",
+                 status, "author", "now"))
+            db.execute("INSERT INTO mapping_candidate_commit VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                (f"candidate-id-{proposal_id}", DOMAIN, proposal_id, "store",
+                 f"candidate-branch/{proposal_id}", commit, BASE, "digest", candidate_digest,
+                 "author", "now"))
+            db.commit()
+
+    def test_lists_reviewable_candidates_with_snapshot_content(self):
+        self._insert_candidate()
+        outcome = self.service.call_tool(
+            "list_reviewable_candidates", {"mapping_domain_id": DOMAIN}, actor_id="reader",
+        )
+        self.assertEqual(outcome.status, "ok")
+        candidates = outcome.result["candidates"]  # type: ignore[index]
+        self.assertEqual(len(candidates), 1)
+        candidate = candidates[0]
+        self.assertEqual(candidate["proposal_id"], "proposal-1")
+        self.assertEqual(candidate["candidate_head"], "candidate-commit")
+        self.assertEqual(candidate["snapshot_status"], "available")
+        self.assertEqual(candidate["documents"][0]["@type"], "TaskNode")
+
+    def test_merged_candidate_is_excluded_from_reviewable_set(self):
+        self._insert_candidate(status="merged")
+        outcome = self.service.call_tool(
+            "list_reviewable_candidates", {"mapping_domain_id": DOMAIN}, actor_id="reader",
+        )
+        self.assertEqual(outcome.result["candidates"], [])  # type: ignore[index]
+
+    def test_snapshot_failure_is_isolated_per_candidate(self):
+        self._insert_candidate(proposal_id="proposal-1", submission_id="submission-1", commit="candidate-commit")
+        self._insert_candidate(proposal_id="proposal-2", submission_id="submission-2", commit="candidate-commit-2")
+        self.terminus.unavailable_commits.add("candidate-commit-2")
+        outcome = self.service.call_tool(
+            "list_reviewable_candidates", {"mapping_domain_id": DOMAIN}, actor_id="centre",
+        )
+        self.assertEqual(outcome.status, "ok")
+        by_proposal = {candidate["proposal_id"]: candidate for candidate in outcome.result["candidates"]}  # type: ignore[index]
+        self.assertEqual(by_proposal["proposal-1"]["snapshot_status"], "available")
+        self.assertEqual(by_proposal["proposal-2"]["snapshot_status"], "unavailable")
+        self.assertEqual(by_proposal["proposal-2"]["reason_code"], "store_unavailable")
+
+    def test_requires_read_or_centre_capability(self):
+        self._insert_candidate()
+        denied = self.service.call_tool(
+            "list_reviewable_candidates", {"mapping_domain_id": DOMAIN}, actor_id="submitter",
+        )
+        self.assertEqual(denied.error_code, "forbidden")
+        self.assertEqual(denied.result, None)
 
 
 if __name__ == "__main__":

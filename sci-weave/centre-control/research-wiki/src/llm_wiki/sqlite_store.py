@@ -140,6 +140,34 @@ class SqliteStore:
             ).fetchall()
         return [dict(row) for row in rows]
 
+    def list_reviewable_candidates(self, wiki_domain_id: str) -> list[dict[str, object]]:
+        """List candidate governance records that are still reviewable.
+
+        A reviewable candidate is not merged, rejected or abandoned and has a
+        persisted candidate commit. Each record carries the exact fixed head,
+        base revision and store location so a prereview scan can read the
+        immutable snapshot by identity (ai4-he04 input gate).
+        """
+        with self.connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT s.submission_id, s.wiki_domain_id, s.submitter_id,
+                       s.base_formal_revision_id, s.status AS submission_status,
+                       s.submitted_at, s.content_digest,
+                       p.proposal_id, p.status AS proposal_status,
+                       c.candidate_commit_id, c.terminus_store_id, c.branch_id,
+                       c.commit_hash, c.candidate_snapshot_digest, c.created_at
+                FROM wiki_proposal p
+                JOIN wiki_candidate_commit c ON c.proposal_id = p.proposal_id
+                JOIN wiki_buffer_submission s ON s.proposal_id = p.proposal_id
+                WHERE p.wiki_domain_id = ?
+                  AND p.status NOT IN ('merged', 'rejected', 'abandoned')
+                ORDER BY s.submitted_at ASC, s.rowid ASC
+                """,
+                (wiki_domain_id,),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
     def add_formal_revision(
         self,
         *,
