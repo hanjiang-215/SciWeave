@@ -86,7 +86,7 @@ tags: [audit, shared, mapping, wiki]
 
 **2026-10-22T10:40:00Z**
 
-已向 Gitee 提 issue 通知 zhanyunfei：[请 zhanyunfei 评估：Map 与 Wiki 接入统一审计留痕接口](https://gitee.com/qi-yueran/ai4science/issues/IKPL20)。正文含本票三处冲突与五个待裁决项，首行 @zhanyunfei。
+已向 Gitee 提 issue 通知 hanjiang：[请 hanjiang 评估：Map 与 Wiki 接入统一审计留痕接口](https://gitee.com/qi-yueran/ai4science/issues/IKPL20)。正文含本票三处冲突与五个待裁决项，首行 @hanjiang。
 
 操作说明：Gitee CLI 的 `issue comment` 端点返回 authentication failed（`issue create` 与 `issue edit` 正常），因此 @ 通知写在 issue 正文首行而非单独评论；Gitee CLI 也不支持设置 issue 负责人。
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -14,6 +15,8 @@ _REQUIRED_VARIABLES = (
     "SCIWEAVE_WIKI_TERMINUSDB_STORE",
 )
 
+_CAPABILITY_ORDER = ("read", "candidate_submit", "candidate_review", "formalize", "centre")
+
 
 @dataclass(frozen=True)
 class WikiConfig:
@@ -25,6 +28,11 @@ class WikiConfig:
     terminusdb_token: str | None = None
     terminusdb_username: str | None = None
     terminusdb_password: str | None = None
+    mcp_host: str | None = None
+    mcp_port: int | None = None
+    mcp_tokens: dict[str, str] | None = None
+    caller_capabilities: dict[str, frozenset[str]] | None = None
+    audit_sqlite_path: str | None = None
 
     @classmethod
     def from_environment(
@@ -37,6 +45,21 @@ class WikiConfig:
                 "missing required environment variables: " + ", ".join(missing)
             )
         token = env.get("SCIWEAVE_WIKI_TERMINUSDB_TOKEN") or None
+        mcp_host = env.get("SCIWEAVE_WIKI_MCP_HOST") or None
+        mcp_port_text = env.get("SCIWEAVE_WIKI_MCP_PORT")
+        if (mcp_host is None) != (mcp_port_text is None):
+            raise ConfigError(
+                "configure both SCIWEAVE_WIKI_MCP_HOST and SCIWEAVE_WIKI_MCP_PORT for the management MCP endpoint"
+            )
+        mcp_port = None
+        if mcp_port_text is not None:
+            try:
+                mcp_port = int(mcp_port_text)
+            except ValueError:
+                raise ConfigError("SCIWEAVE_WIKI_MCP_PORT must be an integer") from None
+        mcp_tokens = _parse_token_map(env.get("SCIWEAVE_WIKI_MCP_TOKENS_JSON"))
+        caller_capabilities = _parse_capabilities(env.get("SCIWEAVE_WIKI_CALLER_CAPABILITIES_JSON"))
+        audit_sqlite_path = env.get("SCIWEAVE_WIKI_AUDIT_SQLITE_PATH") or None
         return cls(
             sqlite_path=env["SCIWEAVE_WIKI_SQLITE_PATH"],
             domain_id=env["SCIWEAVE_WIKI_DOMAIN_ID"],
@@ -46,4 +69,44 @@ class WikiConfig:
             terminusdb_token=token,
             terminusdb_username=env.get("SCIWEAVE_WIKI_TERMINUSDB_USERNAME") or None,
             terminusdb_password=env.get("SCIWEAVE_WIKI_TERMINUSDB_PASSWORD") or None,
+            mcp_host=mcp_host,
+            mcp_port=mcp_port,
+            mcp_tokens=mcp_tokens or None,
+            caller_capabilities=caller_capabilities or None,
+            audit_sqlite_path=audit_sqlite_path,
         )
+
+
+def _parse_token_map(raw: str | None) -> dict[str, str]:
+    if not raw:
+        return {}
+    try:
+        decoded = json.loads(raw)
+    except json.JSONDecodeError:
+        raise ConfigError("SCIWEAVE_WIKI_MCP_TOKENS_JSON must be valid JSON") from None
+    if not isinstance(decoded, dict) or not all(
+        isinstance(value, str) and value.strip()
+        for value in decoded.values()
+    ):
+        raise ConfigError("SCIWEAVE_WIKI_MCP_TOKENS_JSON must map tokens to non-empty actor IDs")
+    return {str(key): str(value) for key, value in decoded.items() if key}
+
+
+def _parse_capabilities(raw: str | None) -> dict[str, frozenset[str]]:
+    if not raw:
+        return {}
+    try:
+        decoded = json.loads(raw)
+    except json.JSONDecodeError:
+        raise ConfigError("SCIWEAVE_WIKI_CALLER_CAPABILITIES_JSON must be valid JSON") from None
+    if not isinstance(decoded, dict):
+        raise ConfigError("SCIWEAVE_WIKI_CALLER_CAPABILITIES_JSON must be an object")
+    result: dict[str, frozenset[str]] = {}
+    for actor, capabilities in decoded.items():
+        if not isinstance(capabilities, list) or not capabilities:
+            raise ConfigError(f"capabilities for {actor} must be a non-empty list")
+        unknown = set(capabilities) - set(_CAPABILITY_ORDER)
+        if unknown:
+            raise ConfigError(f"unknown capabilities for {actor}: {sorted(unknown)}")
+        result[str(actor)] = frozenset(capabilities)
+    return result

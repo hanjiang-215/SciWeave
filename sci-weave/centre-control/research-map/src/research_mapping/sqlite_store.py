@@ -172,6 +172,48 @@ class SqliteStore:
             ).fetchone()
         return None if row is None else _row_to_result(row)
 
+    def get_candidate_for_submission(self, submission_id: str) -> dict | None:
+        """Read the governance record of one submission and its candidate.
+
+        Returns a plain dict (submission + proposal + candidate commit) or
+        None when the submission does not exist. Graph content stays in
+        TerminusDB; only identities and fixed head facts are returned here.
+        """
+        with self.connection() as connection:
+            row = connection.execute(
+                """
+                SELECT s.submission_id, s.mapping_domain_id, s.submitter_id,
+                       s.base_formal_revision_id, s.status AS submission_status,
+                       s.submitted_at, s.content_digest,
+                       p.proposal_id, p.status AS proposal_status,
+                       c.candidate_commit_id, c.terminus_store_id, c.branch_id,
+                       c.commit_hash, c.candidate_snapshot_digest, c.created_at
+                FROM mapping_submission s
+                LEFT JOIN mapping_proposal p ON p.proposal_id = s.proposal_id
+                LEFT JOIN mapping_candidate_commit c ON c.proposal_id = s.proposal_id
+                WHERE s.submission_id = ?
+                """,
+                (submission_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        return {
+            "submission_id": str(row["submission_id"]),
+            "mapping_domain_id": str(row["mapping_domain_id"]),
+            "submitter_id": str(row["submitter_id"]),
+            "base_formal_revision_id": row["base_formal_revision_id"],
+            "submission_status": str(row["submission_status"]),
+            "submitted_at": str(row["submitted_at"]),
+            "proposal_id": row["proposal_id"],
+            "proposal_status": row["proposal_status"],
+            "candidate_commit_id": row["candidate_commit_id"],
+            "terminus_store_id": row["terminus_store_id"],
+            "branch_id": row["branch_id"],
+            "commit_hash": row["commit_hash"],
+            "candidate_snapshot_digest": row["candidate_snapshot_digest"],
+            "created_at": row["created_at"],
+        }
+
 
 def _row_to_revision(row: sqlite3.Row) -> FormalMappingRevision:
     return FormalMappingRevision(

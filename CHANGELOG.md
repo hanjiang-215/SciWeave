@@ -74,7 +74,7 @@
 - *(product)* Complete ticket consistency review
 - *(fer)* Record ticket review verification
 - *(changelog)* Record ticket review
-- *(product)* Integrate zhanyunfei changes
+- *(product)* Integrate hanjiang changes
 - *(dependencies)* Consolidate dev environment record (ai4-ljg3)
 - *(wayfinder)* Chart candidate governance map
 - *(wayfinder)* Resolve candidate governance rules
@@ -135,7 +135,7 @@
 - *(fer)* Use native filename for ai4-wzdh
 - *(fer)* Assign tickets to SciWeave
 - *(fer)* Record pull request 6 for SciWeave planning review
-- *(fer)* Assign persistence tickets to zhanyunfei
+- *(fer)* Assign persistence tickets to hanjiang
 - *(tracker)* Close Redpanda deployment task
 - *(tracker)* Close stack conventions task
 - *(tracker)* Close dependency docs task
