@@ -6,7 +6,7 @@ links: [ai4-5z9e, ai4-he04]
 created: 2026-10-21T15:36:52Z
 type: feature
 priority: 1
-assignee: Frank Qi
+assignee: hanjiang
 parent: ai4-fv1r
 tags: [centre-agents, mapping, wiki, prereview, wayfinder:grilling]
 ---
@@ -61,3 +61,7 @@ tags: [centre-agents, mapping, wiki, prereview, wayfinder:grilling]
 来源：2026-10-21 第五轮讨论。用户裁决「对」——机械检查前移到领域 MCP。
 
 与「中央 Agent 候选预审检查项与失败处置」(ai4-5z9e) 的关系：本票缩减它的检查表，由该票负责人裁决是否接受。按仓库规则不直接改写他人票的结论。
+
+**2026-10-24T04:36:53Z**
+
+负责人转交：原负责人为 Frank Qi。2026-10-24 经原负责人确认，转交给 hanjiang。原因：机械校验落在 Research Mapping 与 LLM-Wiki 的候选创建路径上，这两套领域由 hanjiang 负责。本次不改写 Design 与验收标准。拆分结论仍是 2026-10-21 第五轮裁决：格式、对象引用、依赖环在写入时拒绝；基准是否等于当前正式版本仍留给中央 Agent。检查表缩减是否接受，由已转交的「中央 Agent 候选预审检查项与失败处置」(ai4-5z9e) 负责人裁决。
