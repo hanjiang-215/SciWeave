@@ -46,13 +46,13 @@ tags: [centre-agents, governance, merge, wayfinder:grilling]
 
 ## Acceptance Criteria
 
-- [ ] 混合候选只能新建分支，不改写已有候选与正式版本
-- [ ] 作者字段为多值，记录全部来源作者，并在正文列明来源候选与被采用部分
-- [ ] 来源作者对混合候选无编辑、推进、撤回、批准权
-- [ ] 混合候选不可被二次混合，需要改动时走驳回与重新提交
-- [ ] 混合候选不引入新的 Proposal 状态，走与人工候选相同的预审与批准路径
-- [ ] 语义依据不足的组合不被标记为已验证兼容
-- [ ] 有回归测试覆盖多来源合成、来源集合可追溯、二次混合被拒绝
+- [x] 混合候选只能新建分支，不改写已有候选与正式版本
+- [x] 作者字段为多值，记录全部来源作者，并在正文列明来源候选与被采用部分
+- [x] 来源作者对混合候选无编辑、推进、撤回、批准权
+- [x] 混合候选不可被二次混合，需要改动时走驳回与重新提交
+- [x] 混合候选不引入新的 Proposal 状态，走与人工候选相同的预审与批准路径
+- [x] 语义依据不足的组合不被标记为已验证兼容
+- [ ] 有回归测试覆盖多来源合成、来源集合可追溯、二次混合被拒绝（依赖 `create_merged_candidate` 实现，待 ai4-t2wc/ai4-rlv6 收口）
 
 ## Notes
 
@@ -70,3 +70,11 @@ tags: [centre-agents, governance, merge, wayfinder:grilling]
 
 1. 本票 Notes 中「需要该票负责人确认」指向已关闭的 ai4-iciy，其实源自 2026-10-21T23:40 的本条。ai4-iciy 的 assignee 是 Frank Qi 且已关闭，按票属人规则不由 hanjiang 修改；该表述的收敛仍留在 Frank Qi 侧处理，或在获得明确授权后由 hanjiang 追加修订 Notes。
 2. 本票带 wayfinder:grilling 标签，若后续出现新的治理分歧，裁决权回到地图负责人 Frank Qi，hanjiang 只把结论回写到本票。
+
+**2026-10-24 规格定稿确认（hanjiang）**
+
+身份核对：本票 assignee 为 hanjiang，当前分支 `feature/hanjiang`、`git config user.name=hanjiang`，一致。
+
+2026-10-24 核对 Design 与验收：前六条验收的规格约束均在 Design 中有明确结论（只新建分支、多值作者、来源作者无操作权、不可二次混合、不引入新状态、语义不足不标已验证），已勾选；第 7 条「回归测试」依赖 `create_merged_candidate` 实现，等待「注册表登记中央 Agent 与开放面第四档」(ai4-t2wc) 与「中央 Agent 能力接口收口」(ai4-rlv6) 收口（Frank Qi），已通过 issue IKQ6XQ 汇总催办。本票规格侧完成，保持 open 待实现回归测试。
+
+另：转让附条件第 1 条所述 ai4-iciy 表述收敛，仍按属人规则留待 Frank Qi 侧处理，本票不擅改。
