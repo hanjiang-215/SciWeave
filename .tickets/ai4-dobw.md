@@ -59,3 +59,7 @@ tags: [centre-control, email-service, notification]
 **2026-10-24T15:37:09Z**
 
 2026-10-24T15:40:00Z 收口验证复跑（提交前）：在 sci-weave/centre-control/email-service 执行 uv run --env-file .env pytest -q，52 passed in 28.41s；uv run --env-file .env python -m compileall -q src tests 通过。本票实现与 tests/test_constraints.py 一并进入提交 feat(email-service): 补齐健康分项、运维查询与调用方约束。
+
+**2026-10-24T15:39:35Z**
+
+2026-10-24T15:45:00Z 已提交并进入 PR #37（https://gitee.com/qi-yueran/ai4science/pulls/37 ，目标 develop）。实现提交 de83ffb feat(email-service): 补齐健康分项、运维查询与调用方约束。
