@@ -6,7 +6,7 @@ links: [ai4-6ljq, ai4-orpg, ai4-emsk, ai4-gvan]
 created: 2026-10-21T08:58:49Z
 type: task
 priority: 1
-assignee: Frank Qi
+assignee: hanjiang
 tags: [architecture]
 ---
 # 中央侧项目与服务的实现位置
@@ -37,3 +37,9 @@ Research Mapping、LLM-Wiki、TerminusDB、Redpanda 的后续实现位置已写�
 - `centre-control` 仍不是项目组、各目录仍不共用锁文件；`centre-control/shared/` 是**代码归属边界**，表示「部署在中央的多个独立项目共用这段代码」，不表示同一个部署单元，也不产生组级 `pyproject.toml` 或组级 `uv.lock`。
 - 各调用方以 uv `[tool.uv.sources]` path 可编辑依赖引用该包，各自提交自己的锁文件。
 - 迁移后 `sci-weave/shared/` 目录清空，规则上也不再保留这个顶层共享目录的名称。
+
+## Notes
+
+**2026-10-24T10:08:22Z**
+
+转交说明（2026-10-24）：assignee 由 Frank Qi 改为 hanjiang，依据 Gitee issue https://gitee.com/qi-yueran/ai4science/issues/IKQ63M 的第 1 条请求与本节裁决。原负责人 Frank Qi，转交原因：正文描述的落位已在仓库落地（sci-weave/centre-control/research-map、research-wiki、shared/audit-trail 均存在），剩余为核对与验收回写，由实际承建方 hanjiang 确认更准确。
