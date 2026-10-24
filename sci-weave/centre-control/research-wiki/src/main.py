@@ -65,6 +65,52 @@ def main(argv: list[str] | None = None) -> int:
             return build_wiki_fragment(formal_query.get_current(config.domain_id), candidates)
 
         return run_wiki_dashboard_from_environment(read_dashboard_fragment)
+    if config.mcp_host is not None:
+        from llm_wiki.candidate_submission import WikiCandidateService
+        from llm_wiki.formalization import WikiFormalizationService
+        from llm_wiki.management import WikiManagementService, open_audit_database
+        from llm_wiki.management_mcp import run_wiki_management_server_from_config
+        from llm_wiki.review import WikiReviewService
+        if not config.mcp_tokens:
+            raise RuntimeError("SCIWEAVE_WIKI_MCP_TOKENS_JSON is required for the management MCP endpoint")
+        capabilities = config.caller_capabilities or {}
+        audit = None
+        if config.audit_sqlite_path:
+            audit = open_audit_database(config.audit_sqlite_path)
+        candidate_service = WikiCandidateService(
+            sqlite_store=sqlite_store,
+            terminus_store=terminus_store,
+            resource_review_service=service,
+            terminus_database=config.terminusdb_database,
+        )
+        class _OwnerVerifier:
+            def verify_owner(self, actor_id, wiki_domain_id):
+                return "formalize" in capabilities.get(actor_id, ())
+
+        review_service = WikiReviewService(
+            sqlite_store=sqlite_store,
+            terminus_store=terminus_store,
+            terminus_database=config.terminusdb_database,
+            resource_review_service=service,
+            owner_authorization_verifier=_OwnerVerifier(),
+        )
+        formalization_service = WikiFormalizationService(
+            sqlite_store=sqlite_store,
+            terminus_store=terminus_store,
+            terminus_database=config.terminusdb_database,
+            resource_review_service=service,
+            owner_authorization_verifier=_OwnerVerifier(),
+        )
+        management = WikiManagementService(
+            formal_query=formal_query,
+            candidate_service=candidate_service,
+            caller_capabilities=capabilities,
+            audit_connection=audit,
+            review_service=review_service,
+            formalization_service=formalization_service,
+            sqlite_store=sqlite_store,
+        )
+        return run_wiki_management_server_from_config(config, management)
     if len(arguments) > 1:
         qualification = service.get_current_qualification(arguments[1])
         print(json.dumps(asdict(qualification), ensure_ascii=False))

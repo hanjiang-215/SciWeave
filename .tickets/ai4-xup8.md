@@ -30,7 +30,8 @@ tags: [wayfinder:map]
 
 ## Out of scope
 
-- 具体 MCP/API 参数、冲突检测算法、消息队列产品选型、代码实现和部署架构。
+- 具体 MCP/API 参数、冲突检测算法、代码实现和部署架构。
+- 消息队列产品选型已完成（Redpanda，见 docs/TECH_STACK.md）；主题、分区、消费者组与投递语义由 ai4-te1v 定义，不在本地图范围外。
 
 **2026-10-18T15:39:58Z**
 
@@ -76,3 +77,10 @@ Out of scope 中「消息队列产品选型」这一项已被现实超越：2026
 建议把该项改为「消息队列的产品选型已完成（Redpanda）；主题、分区、消费者组与投递语义由 ai4-te1v 定义」，避免本图继续把已决定的事列为范围外。
 
 相关改动：ai4-te1v 已从「不选产品」改为「产品已定，只定语义」。
+
+**2026-10-23 分支状态（地图 owner hanjiang 记录）**
+
+- `ai4-v19u`（Agent 套件接入与协作边界分支）已由 hanjiang 认领并收敛：套件三件套（MCP、Skills、Hooks）的职责与接入边界规格落为 `docs/superpowers/specs/2026-10-23-agent-suite-boundary-design.md`，继承 `ai4-dhpv` 两类 MCP 分工、`ai4-353s` 物理隔离与 `docs/端侧Agent运行时调研.md` 的运行时装载边界；Agent Kit manifest / Skills-Hooks 模板 / ZIP 交付维持 `ai4-jfvy` 的范围外结论。该分支规格已交付，子票 owner（hanjiang）与地图 owner（hanjiang）确认收敛完成，`ai4-v19u` 已置为 `closed`。
+- 消息协作分支（`ai4-te1v`）与端侧 Agent 分支（`ai4-kpvp`）仍由 Frank Qi 收敛，不在本地图侧再展开。
+- 2026-10-23 地图正文修订（hanjiang，地图 owner）：Out of scope 的「消息队列产品选型」已从范围外移除，改为「已完成（Redpanda，见 docs/TECH_STACK.md）；主题、分区、消费者组与投递语义由 ai4-te1v 定义」。依据 2026-10-21 Notes 已确认的 Redpanda 选型，消除正文与现状不一致。
+- `ai4-w73z`（Mapping/Wiki 对外管理接口）由 hanjiang 实现三个切片：两套独立领域管理 MCP（Mapping 6 工具、Wiki 7 工具）覆盖正式只读、候选提交、候选审阅、Owner 正式化/恢复与健康检查；五档能力鉴权（read/candidate_submit/candidate_review/formalize/centre）、接口层审计（读 attempted fail-open、写 invoked/completed fail-closed）。唯一未闭合项为中央 Agent 专属写工具，依赖 `ai4-ujvn`/`ai4-t2wc` 开放面收口（Frank Qi），已提 issue `IKQ2QB` 知会。该分支实现侧已交付，验收核对见 w73z Notes。

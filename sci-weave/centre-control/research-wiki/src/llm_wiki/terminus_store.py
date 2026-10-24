@@ -365,7 +365,8 @@ class TerminusDBWikiCandidateStore(TerminusDBResourceStore):
             branches = self._candidate_branches()
             if branches is None:
                 return CandidateSnapshotResult("unknown", reason_code="store_result_unknown")
-            if branch not in branches:
+            matching_branch = branch in branches
+            if not matching_branch:
                 status, _, _ = self._request("POST", self._candidate_branch_url(branch), json.dumps({
                     "origin": f"{quote(self.store_id, safe='')}/{quote(self.database, safe='')}/{quote(self.remote, safe='')}/branch/main"
                 }, separators=(",", ":")).encode())
@@ -381,10 +382,10 @@ class TerminusDBWikiCandidateStore(TerminusDBResourceStore):
             head = self._candidate_head(branch)
             if not head:
                 return CandidateSnapshotResult("unknown", reason_code="store_result_unknown")
-            if head.get("identifier") != base_commit_ref:
+            if head.get("message") == marker and head.get("author") == "sciweave":
                 return self._candidate_reconcile(branch, marker, documents)
-            if branch in branches:
-                return CandidateSnapshotResult("unknown", reason_code="store_result_unknown")
+            if head.get("identifier") != base_commit_ref:
+                return CandidateSnapshotResult("unknown", reason_code="candidate_branch_conflict")
             status, _, _ = self._request("POST", self._candidate_document_url(branch) + "?author=sciweave&message=" + quote(marker, safe=""), canonical_snapshot.encode())
             if not 200 <= status < 300 and status < 500:
                 return CandidateSnapshotResult("failed", reason_code="store_rejected")
