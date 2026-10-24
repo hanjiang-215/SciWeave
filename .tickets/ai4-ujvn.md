@@ -1,102 +1,88 @@
 ---
 id: ai4-ujvn
-status: open
+status: closed
 deps: [ai4-we38]
 links: [ai4-we38, ai4-yyy9, ai4-u3rs, ai4-9322, ai4-6ljq, ai4-orpg, ai4-w73z, ai4-0s02, ai4-z3z4]
 created: 2026-10-21T21:06:00Z
 type: feature
 priority: 1
 assignee: Frank Qi
-tags: [agent, task-agent, mcp, registery]
+tags: [agent, task-agent, mcp, registery, ready-for-agent]
 ---
-# 端侧 Agent 的注册记录与中央服务开放面
-
-定义 `centre-control/registery` 的登记契约，以及中央服务对端侧开放的能力面。两者是分开的两件事：开放面决定一个调用方**能做什么**；注册记录只说明**谁在跑什么**，不参与鉴权。
+# Registry 登记事实与中央服务开放面规格
 
 ## Problem Statement
 
-端侧自持后，`sci-weave/centre-control/registery/` 只有一行说明，没有字段契约；中央各管理 MCP 也没有明确规定哪些能力对端侧开放。
-
-需要同时回答两个问题：端侧 Agent 和研究员能被允许做什么；以及怎么知道某个 Agent 是谁部署的。
+端侧 Task Agent 由研究员自持后，平台需要知道谁在运行什么 Workflow Agent、由哪个主体持有、有哪些运行实例以及通知联系人。同时，中央服务需要向受控调用方提供登记和查询能力，但 Registry 不能演变为统一授权源，也不能保存第二份 TaskNode 执行关系。
 
 ## Solution
 
-**开放面按能力面切分，不按主体逐条授权。** 三档：
+建立最小 Registry 事实登记边界，提供受鉴权的登记/查询 MCP。Registry 保存 Principal、Workflow Agent、Agent Instance 和当前通知联系人事实；登记工具只追加或标记状态变化，查询工具只返回事实。TaskNode 执行资格继续由正式 Map 的 `executor_refs` 决定，服务能力继续由各自 MCP 的调用方能力面决定。
 
-| 调用方 | 能做什么 | 不能做什么 |
-| --- | --- | --- |
-| 端侧 task-agent | 读写草稿箱，只能检索到自己提交的内容 | 读他人草稿；写正式存储；调用审核、正式化、推进工具 |
-| 研究员（作为人） | 提交 candidate | 直接改正式版本；接管他人的 TaskNode |
-| Project Owner | 全部中央服务 | — |
+Registry 与 email-service 解耦：email-service 通过 `RecipientResolver` 调用 Registry 的只读联系人查询，再向 email-service 自己的 `send_notification` MCP 提交通知，不直连 Registry 存储，不把联系人查询当作授权依据。
 
-**注册只是记录。** 研究员部署完自己的 Agent 后写一条记录，这是事实留痕，不是代码约束：不阻断调用，不参与鉴权决定。
+## User Stories
 
-一条硬边界：一个研究员只能访问自己负责任务的 Agent。
+1. 作为研究员，我希望登记自己创建的 Workflow Agent，以便平台知道哪个 Agent 属于我。
+2. 作为研究员，我希望登记 Agent 运行实例，以便平台知道同一 Agent 的实例状态。
+3. 作为 Project Owner，我希望登记 Principal 和中央 Agent，以便平台保留完整的事实账本。
+4. 作为 email-service，我希望按 `principal_id` 查询当前有效联系人，以便发送通知而不复制联系人数据库。
+5. 作为中央服务，我希望查询 Agent 登记和实例状态，以便生成配置提示和诊断信息。
+6. 作为系统维护者，我希望登记记录不包含权限清单，以便 Registry 不成为统一授权源。
+7. 作为 Project Owner，我希望 Agent 注销后仍保留历史记录，以便追溯过去的运行事实。
+8. 作为研究员，我希望能够标记 Agent 恢复，使离线 Agent 的登记状态可更新。
+9. 作为多实例 Workflow 持有人，我希望同一 `agent_id` 支持多个 `agent_instance_id`，以便多个实例共享任务消费组。
+10. 作为 Registry 调用方，我希望重复登记具有幂等结果，以便重试不会产生重复身份事实。
+11. 作为审计人员，我希望每个 MCP 登记/查询调用都有访问账本记录，以便追溯谁访问或修改了登记事实。
+12. 作为系统维护者，我希望 Registry 不修改正式 Map，以便登记变更不会隐式改变 TaskNode 执行关系。
 
-## Design
+## Implementation Decisions
 
-### 登记字段
+- Registry 提供受鉴权的 MCP 工具：`register_principal`、`register_workflow_agent`、`register_agent_instance`、`get_principal_contact`、`get_agent_registration` 和 `health`。
+- 登记工具不提供物理删除；支持状态标记和恢复：Principal 使用 `active/disabled`，Workflow Agent 使用 `active/retired`，Agent Instance 使用 `starting/online/offline/revoked`。注销、恢复和运行状态变化都保留历史登记记录并追加状态变化。
+- Principal 最小字段为：`principal_id`、`role`（`researcher` 或 `project_owner`）、当前 `contact_email`、登记状态、记录时间和更新时间。
+- Workflow Agent 最小字段为：`agent_id`、`workflow_id`、`kind`（`endpoint` 或 `centre`）、所属 `principal_id`（`endpoint` 必填、`centre` 留空）、`workflow_kind`、`created_by`、登记状态、记录时间和更新时间。
+- Agent Instance 最小字段为：`agent_id`、`agent_instance_id`、运行状态、`last_seen_at`、记录时间和更新时间。同一 `agent_id` 可登记多个实例；相同实例重复登记采用幂等更新。
+- Registry 不保存 `allowed_mcp`、`readable_task_nodes`、`writable_namespaces`、`executor_refs`、TaskNode 集合、模型凭据、SMTP 凭据或部署主机网络地址。
+- 研究员注册自己的 Task Agent 后，可以登记和更新自己持有的 `endpoint` Agent 与实例；不能登记 `centre` Agent，不能修改其他主体的登记记录。Project Owner 可以登记 Principal、endpoint Agent 和 centre Agent。Centre 服务按最小读取面查询事实；email-service 只通过 `RecipientResolver` 查询联系人，不获得 Registry 管理写入能力。
+- `get_principal_contact` 只返回当前有效联系人及其状态和版本；联系人不存在、缺失、禁用或 Registry 不可用返回稳定错误码：`principal_not_found`、`contact_missing`、`contact_disabled`、`registry_unavailable`。email-service 不把查询结果缓存为授权事实。
+- 所有 Registry MCP 调用都经过共享 `audit-trail` 记录访问信息；登记事实与访问账本分开保存。访问账本只记录调用者、通道、服务、工具、目标、结果、错误码和耗时，不记录登记正文、凭据或完整入参。登记写入失败不改变正式 Map，也不修改 `executor_refs`。
+- 登记使用 `operation_id`/`idempotency_key` 幂等：同键同内容返回首次结果并标记 `duplicate=true`；同键不同内容返回 `idempotency_conflict`；身份冲突返回 `agent_owner_conflict` 或 `instance_identity_conflict`。
+- Registry `health` 提供存储和服务状态，不返回凭据、完整联系人数据或内部异常堆栈。
+- Registry MCP 的具体实现、部署和存储适配由后续实现票承载；本票固定事实、工具和开放面契约。
+- 目录名沿用现有 `registery` 约定；是否迁移为 `registry` 不属于本票范围。
 
-| 对象 | 由谁登记 | 字段 |
-| --- | --- | --- |
-| 人 | Project Owner | `principal_id`、角色（`researcher` 或 `project_owner`）、通知联系人基本信息 |
-| Workflow Agent | 创建者/部署者，创建后 | `agent_id`、`kind`、所属 `principal_id`、`created_by`、Workflow 类型、部署位置描述、登记时间和登记状态 |
-| Agent 运行实例 | 部署者，启动或部署后 | `agent_id`、`agent_instance_id`、运行状态、最近心跳或登记时间 |
+## Testing Decisions
 
-Registry 不保存 `task_node_id` 集合、`registered_task_nodes` 或“负责哪些节点”的关系；任务负责人和执行者关系由正式 Map 的 `task_owner_id`、`executor_refs` 保存，反向查询从 Map 派生。
+- 最高测试接缝是认证后的 Registry MCP 调用，验证登记、查询、状态标记、恢复、幂等、权限拒绝和稳定错误码；不测试私有表访问顺序。
+- 使用临时 SQLite 验证 Principal、Workflow Agent、Agent Instance 的登记和状态历史；验证注销后记录保留、恢复后追加状态变化和多个实例。
+- 使用 Fake audit-trail 验证所有 MCP 调用只记录访问信息，登记事实和访问账本不混用。
+- 使用 Fake Registry 查询验证 `get_principal_contact` 的成功、联系人缺失、禁用、版本和服务不可用场景。
+- 验证 Registry 登记不会改变正式 Map、`executor_refs`、Task Agent 订阅或 email-service 投递状态。
+- 验证研究员、Project Owner、Centre 服务和 email-service 的工具级开放面；验证不同主体不能登记或读取超出范围的事实。
+- 使用临时资源、Fake 调用和系统分配端口；不依赖真实凭据、真实邮件、真实消息队列或固定部署端口。
 
-不存密钥、令牌、密码、模型凭据或部署主机的网络地址。
+## Out of Scope
 
-字段刻意保持最小：既然它不参与鉴权，就不需要 `allowed_mcp`、`readable_task_nodes`、`writable_namespaces` 这类授权字段。这些语义由开放面承担，写在服务端代码里，而不是写成每个主体的一行配置。
+- Registry 作为统一权限系统、TaskNode 执行授权源或 MCP 授权清单。
+- Registry 修改 Research Mapping、LLM-Wiki、正式 Map、`executor_refs` 或任务分配关系。
+- Registry 托管 Task Agent、启动 Worker、管理模型凭据或保存主机网络地址。
+- email-service 的邮件发送、SMTP 适配器和投递状态实现。
+- Task Agent 动态订阅、consumer group、Inbox 和 Workflow 卡片加载实现。
+- Centre Agent 预审规则和 Project Owner 正式化流程。
 
-### 开放面落在哪
+## Further Notes
 
-开放面由中央服务侧实现，不由登记表驱动：
-
-- 草稿箱按提交者过滤检索结果，端侧 Agent 只能看到自己提交的草稿。
-- 管理 MCP 的审核、正式化、推进工具不暴露给端侧调用方。
-- Project Owner 的完整能力来自它是 PO，不来自它登记了什么。
-
-### 为什么不做成权限系统
-
-Agent 跑在研究员自己的机器上，平台无法强制它做什么。若把登记表当成权限源，会产生两种错误印象：以为平台能阻断越权（实际不能），以及以为改一行配置就能扩权（实际会绕过审计）。把它定位成「谁在跑什么 Agent」的账本，语义才诚实。
-
-### 首版形态
-
-`centre-control/registery` 不做独立服务，就是一张表加一个只写追加的登记入口。查询入口供人查看。
-
-## Acceptance Criteria
-
-- [ ] 人的登记字段与 Agent 的登记字段明确，且不含授权类字段
-- [ ] 中央服务对端侧的三档开放面写清，并明确由服务端代码实现而非登记表驱动
-- [ ] 明确端侧 Agent 只能检索自己提交的草稿
-- [ ] 明确「一个研究员只能访问自己负责任务的 Agent」
-- [ ] 明确登记是事实留痕，不阻断调用、不参与鉴权
-- [ ] 不存任何凭据与主机地址
+- Registry 是“谁在运行什么”的事实账本；执行资格来自正式 Map，调用能力来自各服务端 MCP 的能力面。
+- `get_principal_contact` 是 email-service 的联系人事实依赖，但不把两个服务耦合成一个授权或事务边界。
+- 本票完成后，Registry 实现票可以独立实现登记/查询 MCP；email-service 先用 Fake `RecipientResolver`，再接入真实 Registry MCP 适配器。
 
 ## Notes
 
-**2026-10-21T21:06:00Z**
+**2026-10-23T16:26:37Z**
 
-来源：「Task Agent 改由研究员端侧自持」。讨论中确认「researcher 只能注册部分 mcp，PO 可注册所有，目前就按这种方式吧，不要令牌」。
+Resolution（2026-10-24）：本票收敛为 Registry 登记事实与中央服务开放面规格。Registry 通过受鉴权 MCP 提供 Principal、Workflow Agent、Agent Instance 的登记/状态更新和查询；不提供物理删除，注销与恢复通过追加状态变化保留历史。研究员只能登记和更新自己持有的 endpoint Agent/实例，Project Owner 可登记 Principal、endpoint 与 centre Agent，Centre 服务按最小读取面查询；email-service 只通过 RecipientResolver 查询联系人。所有 MCP 访问使用 shared/audit-trail 记录访问信息，Registry 登记事实单独保存。Registry 不保存 executor_refs、TaskNode 关系或授权清单，也不参与 TaskNode 鉴权；执行资格由正式 Map.executor_refs 决定。具体实现由后续 Registry 实现票承载。
 
-本票与 `ai4-u3rs`（多人和多 Agent 协作执行的注册信息）的关系待定：后者描述的是「授权 Agent 和人员的注册信息」这一职责。若负责人认为应合并，由该票负责人裁决。
+**2026-10-23T16:35:18Z**
 
-**2026-10-21T22:18:00Z**
-
-改写（同日第三轮讨论）：原设计把登记表当成权限系统，字段含 `allowed_mcp`、`readable_task_nodes`、`writable_namespaces`，并在 MCP 入口按主体校验。讨论后改为两条分开的机制：
-
-- 开放面按能力面切分（task-agent / 研究员 / PO 三档），写在服务端代码里。
-- 登记只是记录，字段精简为「谁、是什么角色、负责哪些节点」与「哪个 Agent 属于谁、部署在哪」。
-
-原话要点：「中央服务是部分开放给研究员和 task-agents 的」「研究员注册一个 task-agents 后，写 reg 只是一个记录，不作为代码的约束」。
-
-**2026-10-21T23:50:00Z**
-
-2026-10-21 第五轮讨论的补充。本票的三档开放面需要增加第四档，登记字段需要增加 `kind`。由本票负责人裁决是否接受，本条不直接改正文：
-
-- 新增 `kind` 字段，取值 `endpoint`（研究员自持的 task-agent，所属主体必填）与 `centre`（中央 Agent，所属主体留空）。
-- 中央 Agent 一档：读两套管理 MCP 的候选与正式版本、`append_prereview_log`、`create_merged_candidate；不写正式版本、不改已有候选、不写草稿箱接纳状态、不下发任务。
-- 中央 Agent 读全部候选，不受「只看自己提交」的限制。
-
-详细契约见「注册表登记中央 Agent 与开放面第四档」(ai4-t2wc)。
+关闭说明（2026-10-24）：本票此前已完成多轮讨论，现将结论正式视为 Resolution 并关闭。Registry 事实模型、状态标记/恢复、研究员与 Project Owner 开放面、联系人查询、共享访问留痕及非授权边界均已收敛。Centre Agent 第四档能力继续由 ai4-t2wc/ai4-rlv6 承载；具体实现由 ai4-w4su 承载。email-service 先使用 Fake RecipientResolver，真实 Registry 适配在 Registry 实现完成后接入。

@@ -6,7 +6,7 @@ links: [ai4-upsm, ai4-5z9e, ai4-oz3s, ai4-eex0]
 created: 2026-10-21T12:14:32Z
 type: feature
 priority: 1
-assignee: Frank Qi
+assignee: hanjiang
 parent: ai4-fv1r
 tags: [centre-control, centre-agents, candidate-prereview]
 ---
@@ -88,3 +88,7 @@ tags: [centre-control, centre-agents, candidate-prereview]
 
 - 候选头变化：新报告条目 + 追加 `head_moved` 判定指向它，旧报告不修改。
 - 正式版本发布：追加 `base_moved` 判定（`superseding_report_id` 为空），`stale` 不再是报告字段；重算前该候选卡住。
+
+**2026-10-24T04:34:57Z**
+
+负责人转交：原负责人为 Frank Qi。2026-10-24 经原负责人确认，转交给 hanjiang。原因：入口与结论回写的决策已写入本票 Resolution，剩余实现与「中央 Agent 候选预审检查项与失败处置」(ai4-5z9e) 一并交给 hanjiang。本次不改写 Resolution 正文。已知未完成：领域管理 MCP 尚未提供同一时点全部可送审候选及内容快照；append_prereview_log 与 create_merged_candidate 仍在「Research Mapping 与 LLM-Wiki 对外管理接口及权限分层」(ai4-w73z) 的后续切片。

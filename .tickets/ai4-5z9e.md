@@ -6,7 +6,7 @@ links: [ai4-he04, ai4-eex0, ai4-a2ba, ai4-oz3s]
 created: 2026-10-21T12:14:41Z
 type: feature
 priority: 1
-assignee: Frank Qi
+assignee: hanjiang
 parent: ai4-fv1r
 tags: [centre-control, centre-agents, candidate-prereview]
 ---
@@ -62,3 +62,7 @@ tags: [centre-control, centre-agents, candidate-prereview]
 - **纳入范围不按基准过滤**：基准过旧的候选同样纳入预审，`stale` 只是报告里的一列。见「预审门禁、触发范围与故障处置」(ai4-a2ba)。
 - **冲突矩阵并入本票的报告格式**：一轮预审拉取同一时点的全量可送审候选做快照，不再逐候选独立判定。
 - **判据版本化**：报告须记 `rule_set_version`，只记版本号与检查项清单，不记提示词全文。
+
+**2026-10-24T04:34:57Z**
+
+负责人转交：原负责人为 Frank Qi。2026-10-24 经原负责人确认，与「中央 Agent 候选预审入口与结论回写」(ai4-he04) 一并转交给 hanjiang。原因：检查表仍由入口票挡住，两张票交给同一人收口。本票 deps 仍是 ai4-he04，未解除。正文检查表尚未按 2026-10-21T23:45:00Z 的 Notes 重排：格式、对象引用、依赖三项前移见「候选创建的机械校验前置」(ai4-eex0)；预审结论不改 Proposal 状态，见 he04 的 Resolution。原文保留，由新负责人裁决是否接受。

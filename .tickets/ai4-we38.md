@@ -1,106 +1,119 @@
 ---
 id: ai4-we38
-status: open
+status: closed
 deps: []
 links: [ai4-yyy9, ai4-s12u, ai4-z3z4, ai4-iyyn, ai4-csyj, ai4-c2t7, ai4-ufqu, ai4-ujvn, ai4-xem8, ai4-kpvp, ai4-dhpv]
 created: 2026-10-21T21:05:00Z
-type: epic
+type: feature
 priority: 1
 assignee: Frank Qi
 parent: ai4-kpvp
-tags: [wayfinder:grilling, agent, task-agent, endpoint]
+tags: [agent, task-agent, endpoint, ready-for-agent]
 ---
-# Task Agent 改由研究员端侧自持
+# 研究员端侧 Task Agent 运行与治理边界规格
 
-推翻「中央部署 Task Agent」的设计。研究员在自己的电脑上编写和运行 task-agent，中央不再承担 agent 的部署、绑定、审核和拉起 Worker。本票是这次推翻的决策入口，并作为受影响的既有票的改写依据。
+## Problem Statement
 
-## Question
+Task Agent 需要执行研究员负责的 TaskNode，但研究员的 Workflow 定义、模型凭据和运行环境属于研究员自己的电脑。中央部署 Task Agent 会迫使平台托管研究员代码和凭据，增加部署、审核、绑定和调试成本，也会模糊 Project Owner、Centre Agent 与 Task Agent 的责任边界。
 
-确认端侧自持形态下的四条边界：运行时归谁、消息怎么进来、权限怎么限制、结果怎么回到平台。不实现运行时代码。
+同时，端侧 Agent 需要接收中央正式路线下发的任务、把结果提交回平台，并接受研究员的人工作业；这些路径必须清楚分离，避免把本地 Operator 控制、正式 Map 授权、Registry 登记和消息投递混成一套权限系统。
 
-## Design
+## Solution
 
-### 推翻的旧设计
+Task Agent 由研究员在自己的电脑上编写、安装、启动和维护。平台不安装、部署、重启或托管研究员的 Task Agent，也不持有其模型凭据。
 
-旧链路（`docs/data-flow/task-agent-binding.md`）：任务节点创建 → 负责人提交声明式设计 → Project Owner 审核 → 中央 Agent 写入绑定 → Gateway 在中央 `task-agent` 容器内拉起短生命周期 Worker。
+Task Agent 通过出站连接订阅中央消息队列中的任务交接。只有正式 Map 的 `TaskNode.executor_refs` 指向该稳定 `agent_id` 时，交接协调服务才会向该 Agent 的任务交接频道发布 `task_handoff_ready`。端侧 Gateway 持久化消息、根据本地 `agent_id → workflow_id` binding 定位 Workflow 卡片并启动执行。
 
-旧设计的四个成本，是本轮推翻的理由：
+研究员自己的 Codex 通过本机 Gateway MCP 进行查询、回答问题、取消、返修、放弃和人工接管。Gateway MCP 不承担任务下发，任务下发只走消息队列。
 
-1. 中央 Agent 要「部署」，就必须把研究员提交的设计落成可执行形态，等于开出一条执行研究员代码的通道，与「中央 Agent 不执行研究员提交的代码」正面冲突。
-2. 需要绑定表、注册表、pending 生效态、部署与启动的区分，而 `registery` 至今没有字段契约。
-3. 研究员无法自己调试自己的 agent，改一行要等审核和部署。
-4. 中央要维护 task-agent 集群，且每个 agent 的模型与凭据都堆在中央。
+Worker 结果写入中央草稿箱。后续一审、候选提交、Centre Workflow 预审和 Project Owner 正式化属于领域治理；只有正式版本发布后，系统才计算并发送下游交接。
 
-### 新形态
+Registry 只记录 Principal、Workflow Agent 和 Agent Instance 的身份、持有人、联系人与运行登记事实，不授予 TaskNode 执行权限。Registry 可以通过受鉴权 MCP 提供登记和查询；email-service 通过独立 `RecipientResolver` 查询联系人后发送通知，不直连 Registry 存储，也不把联系人查询当作授权依据。
 
-研究员在自己的电脑上写 task-agent（fast-agent 卡片或 Python 模块都行），自己启动、自己重启、自己改。中央服务器上没有 task-agent 服务，也没有 agent 注册后部署这一步。
+## User Stories
 
-四条边界：
+1. 作为研究员，我希望在自己的电脑上编写和修改 Task Agent，以便快速调试自己的科研 Workflow。
+2. 作为研究员，我希望自己启动、停止、重启和维护 Task Agent，以便平台不成为本地运行环境的操作瓶颈。
+3. 作为研究员，我希望 Task Agent 使用我自己的模型和工具凭据，以便凭据不需要上传中央服务器。
+4. 作为平台维护者，我希望中央不安装、不部署、不重启、不托管研究员 Task Agent，以便中央服务不执行未经平台托管的研究员代码。
+5. 作为 Task Agent，我希望通过出站连接订阅任务交接，以便研究员电脑不需要公网入站地址。
+6. 作为 Task Agent，我希望只接收正式 Map 分配给我的 `agent_id` 的任务，以便 Registry 登记不会被误当成执行授权。
+7. 作为 Task Agent，我希望使用稳定的 `agent_id` 表示逻辑 Workflow Agent，以便同一个 Agent 可以负责多个 TaskNode。
+8. 作为 Task Agent，我希望使用 `agent_instance_id` 表示本次部署或运行实例，以便多个实例可以共享消息消费组并竞争消费。
+9. 作为 Gateway，我希望通过本地 `agent_id → workflow_id` binding 定位 Workflow 卡片，以便消息到达后能够加载正确的 Workflow 定义。
+10. 作为 Gateway，我希望将消息中的目标节点版本保存到 Inbox 和 ExecutionRecord，以便每次执行都能追溯到精确的正式版本。
+11. 作为 Gateway，我希望消息先到但本地 Workflow 尚未绑定时保存 Inbox 记录，以便消息不会静默丢失。
+12. 作为 Gateway，我希望 Workflow 卡片不存在、版本不兼容、加载失败或进程启动失败时保留原消息并产生可观察错误，以便研究员能够修复配置后重试。
+13. 作为 Gateway，我希望同一 Agent 的多个实例使用同一 consumer group，以便同一条交接不会启动多轮并发执行。
+14. 作为 Gateway，我希望使用稳定业务键处理至少一次投递，以便重复消息不会重复创建执行。
+15. 作为研究员，我希望通过自己的 Codex 调用本机 Gateway MCP，以便查询执行、回答问题、取消、返修或人工接管。
+16. 作为研究员，我希望 Gateway MCP 的本地 Bearer token 只认证本机 Operator，以便它不被误解为 TaskNode 授权。
+17. 作为 Task Agent，我希望执行结果写入中央草稿箱，以便负责人可以在领域治理流程中审阅结果。
+18. 作为 TaskNode Owner，我希望收到草稿完成、执行失败、返修完成和待回答问题的通知，以便及时处理本地执行结果。
+19. 作为 TaskNode Owner，我希望把草稿提交为候选，以便结果进入正式领域治理流程。
+20. 作为 Centre Workflow，我希望接收候选和正式版本治理事件，以便执行预审，但不负责端侧 Task Agent 返修。
+21. 作为 Project Owner，我希望正式化候选后沿正式 DependencyEdge 推进下游，以便下游交接不依赖中央观察到端侧执行状态机。
+22. 作为平台维护者，我希望只有正式版本发布才触发下游交接，以便未审核草稿和候选不会绕过治理门禁。
+23. 作为 Registry，我希望记录 Principal、Workflow Agent 和 Agent Instance 的事实，以便平台知道谁在运行什么 Agent。
+24. 作为 Registry，我希望记录当前有效通知联系人，以便受控服务能够查询收件地址。
+25. 作为 Registry，我希望不保存 `executor_refs`、TaskNode 集合或 MCP 授权清单，以便不产生第二份任务分配事实或统一权限源。
+26. 作为 Registry 调用方，我希望通过受鉴权 MCP 登记和查询事实，以便登记过程可审计且不依赖直连数据库。
+27. 作为 email-service，我希望通过 `RecipientResolver` 查询联系人后发送通知，以便联系人解析与邮件投递保持解耦。
+28. 作为平台维护者，我希望 Task Agent、Centre Agent 和 Registry 的能力边界分别表达，以便一个 Agent 的登记不会自动扩展另一个领域的权限。
+29. 作为运维人员，我希望看到 Task Agent 的消息连接、Inbox、Workflow 加载和执行状态，以便诊断端侧配置和队列恢复问题。
+30. 作为测试维护者，我希望通过消息消费、Gateway MCP 和草稿提交等高层接缝验证行为，以便测试不依赖私有 Worker 实现细节。
 
-| 边界 | 结论 |
-| --- | --- |
-| 运行时归属 | 研究员自持。平台不安装、不部署、不重启研究员的 agent |
-| 上游消息 | 研究员的 agent 主动连接中央消息队列，订阅自己负责的 TaskNode。出站连接即可，端侧不需要公网可达地址 |
-| 权限范围 | 中央服务只部分开放给研究员的 agent，按能力面切分，不按主体逐条授权。见下节 |
-| 结果回平台 | agent 把结果作为草稿提交到中央草稿箱对应领域的命名空间；下游交接由领域正式版本发布触发 |
+## Implementation Decisions
 
-### 中央服务对端侧的开放面
+- Task Agent 的运行时归研究员所有；平台不安装、部署、重启、托管其代码或模型凭据。
+- Task Agent 通过出站消息连接订阅任务交接；端侧不提供公网入站服务。
+- `agent_id` 是注册后稳定的 Workflow Agent 逻辑身份；`agent_instance_id` 表示设备或部署实例；`workflow_id` 用于定位本地 Workflow 卡片。
+- Registry 只记录身份、持有人、Workflow 类型、部署描述、实例状态和通知联系人事实，不参与 TaskNode 鉴权，不保存 `executor_refs` 或 TaskNode 关系。
+- Registry 提供受鉴权 MCP 登记/查询工具，至少覆盖 Principal、Workflow Agent、Agent Instance、联系人查询、Agent 查询和健康检查；工具面按调用方能力限制，登记不写授权字段。
+- 正式 Map 的 `TaskNode.executor_refs` 是任务执行关系权威。只有它指向该 `agent_id` 时，系统才允许生成面向该 Agent 的 `task_handoff_ready`。
+- 端侧 Task Agent 的开放面由中央服务端能力面决定：可写入自己的草稿并读取自己的草稿；不得读取他人草稿、写正式存储、审核或正式化候选、修改 `executor_refs`、直接发布任务交接或操作 Redpanda 管理面。
+- Gateway MCP 由研究员自己的 Codex 调用，只承担本地执行的查询、回答问题、取消、返修、放弃和人工接管；它不承担任务下发。
+- Gateway MCP 的本地 Bearer token 只认证本机 Operator，不表示 TaskNode 授权，也不替代正式 Map 的 `executor_refs`。
+- Task Agent 接收消息后先持久化 Inbox；本地 binding 存在时加载 Workflow 卡片并创建 `queued ExecutionRecord`，不存在时保持 `awaiting_workflow_binding`。
+- Workflow 卡片不存在、版本不兼容、加载失败或进程启动失败时，消息保留在 Inbox，记录可观察配置错误并通过 email-service MCP 发送通知；不修改正式 Map，不静默丢弃消息。
+- Task Agent 与 Centre Agent 都是消息驱动；Task Agent 消费任务交接，Centre Agent 消费候选/正式版本治理事件，二者不互相消费对方的业务消息。
+- Worker 结果写入中央草稿箱并保存 `draft_id`；草稿之后的一审、候选、预审和正式化由领域治理流程完成。
+- 下游交接触发点是领域正式版本发布，而不是端侧 Worker 完成或本地 Gateway 状态。正式版本发布后沿正式 DependencyEdge 重新计算下游。
+- Registry 联系人查询与 email-service 通过 `RecipientResolver` 端口解耦；email-service 只查询联系人事实后提交邮件 MCP，不获得 Registry 管理写入能力。
+- 具体 Registry 字段契约、Task Agent subscriber、Workflow 卡片版本和邮件服务实现由各自后续规格/实现票承载；本票只固定它们之间的职责边界。
 
-按能力面切分，而不是给每个主体配一份权限清单：
+## Testing Decisions
 
-| 调用方 | 能做什么 | 不能做什么 |
-| --- | --- | --- |
-| 端侧 task-agent | 读写草稿箱，只能检索到自己提交的内容 | 不得读他人草稿；不得写正式存储；不得调管理 MCP 的审核、正式化、推进工具 |
-| 研究员（作为人） | 提交 candidate | 不得直接改正式版本；不得接管他人的 TaskNode |
-| Project Owner | 全部中央服务 | — |
+- 最高测试接缝是端侧消息 subscriber、Gateway MCP 和草稿提交的可观察行为；不测试私有 Worker 类、进程启动命令细节或数据库访问顺序。
+- 使用假队列、临时 SQLite、Fake Workflow 卡片加载器、Fake Worker Runtime 和 Fake 草稿箱验证端侧主动订阅、消息幂等、Inbox 等待 binding、加载失败、启动失败和恢复。
+- 验证同一 `agent_id` 多实例共享 consumer group、执行者转移后旧消息不得越权启动、新正式版本生成新交接。
+- 验证 Gateway MCP token 认证本机 Operator，但不能代替正式 Map 的执行资格。
+- 验证 Task Agent 只能写/读自己的草稿，不能调用正式化或任务下发工具。
+- 验证 Worker 结果生成草稿，且只有正式版本发布事件才能产生下游交接。
+- 验证 Registry 登记/查询 MCP 的事实边界，不写入授权字段；验证联系人查询可被 email-service 的 Fake `RecipientResolver` 使用。
+- 使用临时目录、回环地址和系统分配端口；不依赖真实模型、真实队列、真实邮件凭据或固定部署端口。
 
-一个研究员只能访问自己负责的任务的 task-agent。这条是边界，不是可配置项。
+## Out of Scope
 
-### 注册只是记录
+- Registry 的完整独立服务实现、生产部署和真实存储选型；由 Registry 相关规格和实现票承载。
+- Task Agent subscriber 的完整实现、topic 生命周期和 consumer group 具体实现；由动态订阅票承载。
+- email-service 的 MCP、投递状态和真实发送适配器实现；由邮件服务规格和实现票承载。
+- Research Mapping 或 LLM-Wiki 的领域 MCP、候选治理和正式化实现。
+- Centre Workflow 的预审规则、报告格式和混合候选实现。
+- Redpanda 客户端、MCP SDK、真实模型提供商和生产级部署编排。
+- 通过邮件回复驱动候选批准、正式化、任务分派或其他业务状态变更。
 
-研究员部署完自己的 task-agent 后写一条注册记录。这条记录是**事实留痕**，不是代码级约束：它不阻断调用，也不参与鉴权决定。真正的边界由上一节的能力面切分承担。
+## Further Notes
 
-这样做的理由是：agent 在研究员自己的机器上，平台无法强制它做什么；把注册表当成权限系统会给人错误的强制性印象。它是「谁在跑什么 agent」的可查账本。
-
-### 下游交接的触发点
-
-原设计把交接挂在执行状态机上：执行完成 → 节点负责人接纳 → 发交接消息。端侧自持后中央看不到执行状态机，因此交接改挂在领域正式化上：草稿 → 一审 → 候选 → Project Owner 批准 → 正式版本发布 → 触发下游交接。正式版本本来就有不可变版本号和审计链，触发点比执行状态机更可靠。
-
-## Acceptance Criteria
-
-- [ ] 明确端侧 task-agent 的运行时归属，以及平台不做的事（不安装、不部署、不重启、不托管凭据）
-- [ ] 明确上游交接消息的送达方式：端侧主动连接中央队列并订阅所属 TaskNode
-- [ ] 明确中央服务对端侧按能力面开放的三档边界，以及「一个研究员只能访问自己负责任务的 agent」这条边界
-- [ ] 明确注册记录是事实留痕而非代码约束
-- [ ] 明确执行结果的回平台路径与下游交接的触发点
-- [ ] 明确 task-agent 与 centre-agent 都是消息驱动：MCP 只承担返修与人工作业，不承担任务下发
-- [ ] 受影响的既有票已标注改写或关闭，并写明新的依据
+- 本 spec 取代早期“中央部署 Task Agent”的设计；中央不持有研究员 Task Agent 运行时。
+- Registry 的登记记录是事实留痕，不是统一授权源；任务执行关系始终以正式 Map `executor_refs` 为准。
+- 端侧 Gateway MCP 的职责与业务消息下发严格分离：研究员 Codex 通过 MCP 处置本地执行，Agent 通过消息队列接收正式任务。
+- 具体注册表、动态订阅和 Work Agent 实现票应引用本 spec，不重复定义端侧运行归属和权限边界。
 
 ## Notes
 
-**2026-10-21T21:05:00Z**
+**2026-10-23T16:14:06Z**
 
-决策来源：2026-10-21 与 Project Owner 的讨论。原话要点：「不要什么 agent 设计 buffer 了，分配任务后，研究员需要在自己的电脑上写 task-agent，提交一个设计稿留痕就行」「我们只要限制这些 agent 的 mcp 能力就行」「不要在中央搞一个 task-agents 集群，也不要 agent 审核这一套操作」。
+Resolution（2026-10-24）：本票收敛为「研究员端侧 Task Agent 运行与治理边界规格」。Task Agent 由研究员在本机自持，平台不安装、部署、重启或托管其代码和模型凭据；Agent 通过出站消息队列订阅正式任务交接。agent_id 是注册后稳定的 Workflow Agent 逻辑身份，agent_instance_id 表示运行实例，workflow_id 用于定位本地 Workflow 卡片。研究员自己的 Codex 通过本机 Gateway MCP 查询执行、回答问题、取消、返修、放弃和人工接管；Gateway MCP 不承担任务下发，任务下发继续走消息队列。Worker 结果写入中央草稿箱，只有领域正式版本发布后才触发下游交接。
 
-讨论中确认：
-
-- 上游消息由研究员的 agent 主动连中央队列（不做端侧入站可达）。
-- 注册只是记录，不作为代码约束。
-- 结果提交到中央草稿箱（`buffer`），走既有的一审到正式化链路。
-
-受影响票见 `links`。其中 `ai4-s12u` 整条立意消失；`ai4-z3z4`、`ai4-iyyn`、`ai4-csyj`、`ai4-c2t7` 需按端侧自持改写。
-
-**2026-10-21T22:10:00Z**
-
-修正与补充（同日第二轮讨论）：
-
-- 原「按主体注册可用 MCP 能力」改为「中央服务按能力面部分开放给端侧」，不再为每个主体配权限清单。三档边界见正文。
-- 明确注册记录只是事实留痕，不是鉴权依据。
-- 删去 `sci-weave/centre-control/task-agents/` 空目录：它的位置暗示「部署在中央」，与端侧自持矛盾。task-agent 源码留在 `sci-weave/task-agent/`。
-- 新增约束：task-agent 与 centre-agent 都是消息驱动，MCP 只承担返修与人工作业，不承担任务下发。这条推翻了若干已关闭票中的 Owner 命令语义，见「Agent 以消息驱动，MCP 只负责返修」。
-
-**2026-10-22T13:07:00Z**
-
-2026-10-22 修订，依据 ADR-0002。推翻同日「task-agent 源码留在 sci-weave/task-agent/」。
-
-Centre Agent 的源码迁到 sci-weave/centre-control/centre-agents，现有 sci-weave/task-agent 只作为 git mv 的起点，两处落地后删除。Task Agent 不在中央运行，发给研究员的是 deploy-task-agent 套件。删去 centre-control/task-agents 空目录这条仍然成立。
+Registry 只记录身份、持有人、Workflow/实例和通知联系人等事实，不是统一授权源，不保存 executor_refs、TaskNode 关系或 MCP 授权清单。Registry 提供受鉴权的登记/查询 MCP：register_principal、register_workflow_agent、register_agent_instance、get_principal_contact、get_agent_registration、health。email-service 通过 RecipientResolver 查询联系人后调用邮件 MCP，不直连 Registry 存储，也不把联系人查询当作授权依据。具体 Registry 字段和实现由 ai4-ujvn 承载；动态订阅由 ai4-nfty 承载。

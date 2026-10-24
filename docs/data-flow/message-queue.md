@@ -1,6 +1,6 @@
 # 消息队列：正式版本到下游执行
 
-本文描述 Research Mapping 正式版本发布后，如何通过消息队列通知下游、等待下游配置、选择 Workflow Agent 并触发一次执行。它只描述消息协作边界，不实现 Redpanda 客户端、邮件服务或领域管理 MCP。
+本文描述 Research Mapping 正式版本发布后，如何通过消息队列通知下游、等待下游配置、选择 Workflow Agent 并触发一次执行。它只描述消息协作边界，不实现 Redpanda 客户端、邮件服务或领域管理 MCP。文中所称“交接协调服务”目前是待决策的角色，其职责、存储边界和部署形态由[交接协调服务的职责、存储边界与 centre-control 部署形态](../../.tickets/ai4-p5f3.md)收敛；在该票关闭前，下文的服务名和部署位置均是设计约束，不代表已存在的代码项目。
 
 ## 参与者与事实归属
 
@@ -15,6 +15,9 @@ Registry
 
 Redpanda / 消息服务
     事件排队、消费者 offset、投递和消费过程
+
+交接协调服务
+    PendingHandoff、HandoffDispatch 和重算/派发状态
 ```
 
 `TaskNode.executor_refs` 直接引用稳定的 Workflow Agent `agent_id`。它是正式任务分配和自动执行路由的权威来源。
@@ -22,6 +25,48 @@ Redpanda / 消息服务
 Registry 不保存 `task_node_id` 集合，也不保存“某个 Agent 负责哪些节点”的第二份事实。Registry 中登记了某个 Agent，不代表它获得任何 TaskNode 的执行权限；消息服务只能依据正式 Map 的 `executor_refs` 判断执行关系。
 
 一个 Workflow 可以是单个 Agent，也可以包含 Router、Orchestrator、Parallel 或 Agents as Tools 等多个内部 Agent。平台只为这个 Workflow 注册一个逻辑 `agent_id`，内部 Agent 不单独成为消息消费者、Worker Lease 目标或平台级 ExecutionRecord。
+
+## 交接协调服务的暂定边界
+
+当前设计需要一个位于中央服务侧的交接协调角色，但仓库现有的 `centre-agents` 是执行候选预审的 Centre Agent，`research-map` 是 Research Mapping 领域服务，二者都不应默认承担通用交接协调职责。
+
+该角色的暂定职责是：
+
+- 消费 `downstream_dependency_notice`；
+- 查询当前正式 Mapping，而不是复制 TaskNode/DependencyEdge 正文；
+- 判断正式节点、正式边、版本引用、所需输出和激活条件；
+- 创建或更新 `PendingHandoff`；
+- 条件满足时生成 `task_handoff_ready`；
+- 没有可用自动执行主体时生成 `human_notification_intent` 或通知意图。
+
+它不负责修改正式 Mapping、授予执行权限、启动 Worker、执行 Centre Agent 预审或把邮件发送成功解释成任务完成。是否在 `sci-weave/centre-control/handoff-coordinator/` 形成独立 Python 子项目，以及 `PendingHandoff` 的权威存储归属，仍由上述决策票裁定。
+
+## 物理 topic 与逻辑频道
+
+消息交接按接收目标和处理语义分成四个固定物理 topic：
+
+```text
+sciweave.dependency-notice
+    → downstream_dependency_notice
+    → 交接协调服务
+
+sciweave.task-handoff.<agent_id>
+    → task-workflow 的 Task Agent subscriber
+
+sciweave.governance-events
+    → candidate_created、candidate_head_updated、formal_revision_published
+    → centre-workflow 的可扩展订阅者
+
+sciweave.notification-intent
+    → human_notification_intent
+    → email-service 或其他人工通知投递服务
+```
+
+业务上每个目标 TaskNode 仍拥有独立逻辑频道；物理 topic 不按 TaskNode 或每个 Workflow 动态创建。任务交接消息以目标 TaskNode 逻辑 ID或目标版本引用作为路由键和分区键。Centre Workflow 通过独立订阅声明和消费者组扩展；邮件服务只消费通知意图。topic 订阅不构成授权来源，正式 `executor_refs` 仍是 TaskNode 执行关系权威。
+
+三类接收目标可以共享统一消息封套，但不得把它们都伪装成 `task_handoff_ready`：`task-workflow` 才能创建 Task Agent 的 `ExecutionRecord`；`centre-workflow` 触发预审或其他中央 Workflow；`email-service` 只投递人工通知。
+
+详细的目标类型、可扩展订阅和启动恢复流程见 [`message-delivery-recovery.md`](message-delivery-recovery.md)。
 
 ## 两层消息语义
 
@@ -53,12 +98,15 @@ Registry 不保存 `task_node_id` 集合，也不保存“某个 Agent 负责哪
 ```text
 formal_revision_published
     → downstream_dependency_notice
+    → 交接协调服务
     → 检查正式目标、依赖输出和激活条件
     → task_handoff_ready
-    → Task Agent subscriber
+    → 目标 Task Agent subscriber
     → ExecutionRecord
     → Worker
 ```
+
+`downstream_dependency_notice` 的主消费者是交接协调服务，而不是 Centre Agent 或邮件服务。Centre Agent 可以通过独立消费者组旁路观察治理事件，但不负责全局依赖重算；邮件服务只消费人工通知意图，不负责判断是否可以执行。
 
 ## 严格的版本约束
 
@@ -237,13 +285,15 @@ task_handoff_ready
 随后：
 
 ```text
-task-handoff topic
-    → agent:data-analysis-workflow 的 consumer group
+sciweave.task-handoff
+    → target TaskNode + target agent_id 的消费范围
     → gateway/subscriber
     → queued ExecutionRecord
     → Worker Lease
     → Worker 执行一轮 Workflow
 ```
+
+首版不为每个 TaskNode 动态创建物理 Redpanda topic。任务交接使用按 `agent_id` 隔离的 topic 模板 `sciweave.task-handoff.<agent_id>`；一个 Agent 可负责多个 TaskNode，同一 Agent 的多个实例共享对应消费者组并竞争消费。业务上每个目标 TaskNode 仍拥有独立逻辑频道，消息以目标 TaskNode 逻辑 ID或目标版本引用作为路由和分区键。
 
 ## 没有可用 Workflow Agent
 
@@ -254,10 +304,10 @@ task-handoff topic
 - `executor_refs` 指向未登记的 `agent_id`；或
 - 目标 Agent 已注销或没有可用运行实例；
 
-则不发布 `task_handoff_ready`。系统发布或记录：
+则不发布 `task_handoff_ready`。交接协调服务生成：
 
 ```text
-human_handoff_ready
+human_notification_intent
 ```
 
 邮件服务根据 `task_owner_id` 查询通知联系人并发送邮件。邮件说明：
@@ -303,11 +353,13 @@ human_action_required
 队列不负责阻塞等待。处理原则是：
 
 ```text
-Redpanda 消息被正常消费并提交 offset
-    → 领域服务保存 PendingHandoff
+Redpanda 消息被交接协调服务正常消费并提交 offset
+    → 交接协调服务保存 PendingHandoff
     → 目标正式化或依赖条件变化时重新计算
     → 满足条件后生成新的 task_handoff_ready
 ```
+
+`PendingHandoff` 是交接协调领域的等待事实，不是 Redpanda offset，也不是 Task Agent 的 `ExecutionRecord`。它不得成为 Task Agent 的本地隐式状态；具体权威存储和服务部署形态由交接协调服务决策票确定。
 
 这样可以避免一个未满足条件的消息阻塞整个分区，也不会把领域等待状态伪装成队列消费状态。
 
@@ -355,13 +407,13 @@ Task Agent Worker
 
 这避免 Agent 自己宣布正式交接，绕过候选、审核和正式版本治理。
 
-如果当前正式 Map 没有下游 TaskNode，领域服务可以发布：
+如果当前正式 Map 没有下游 TaskNode，交接协调服务先记录待推进检测；确认当前确实没有任何后继时，发布：
 
 ```text
 task_terminal_summary
 ```
 
-邮件服务据此通知 Project Owner 或指定负责人。邮件发送成功只表示通知投递成功，不表示任务已完成或路线已正式推进。
+邮件服务据此通知 Project Owner 或指定负责人。PO 不直接操作队列；如果 PO 决定继续路线，通过最高权限领域 MCP 创建新的 TaskNode/DependencyEdge 候选。新后继正式化后，交接协调服务自动重新计算并生成 `task_handoff_ready`。邮件发送成功只表示通知投递成功，不表示任务已完成或路线已正式推进。
 
 ## 与队列消费的边界
 
@@ -402,9 +454,11 @@ Worker waiting / completed / cancelled
 ```text
 上游正式版本发布
     ↓
-领域服务查询当前正式 DependencyEdge
+交接协调服务消费 downstream_dependency_notice
     ↓
-为有效下游创建通知事实
+查询当前正式 DependencyEdge
+    ↓
+为有效下游创建或更新 PendingHandoff
     ↓
 目标未正式化？
     ├── 是：保存等待配置事实，通知负责人，不触发执行
@@ -415,8 +469,8 @@ Worker waiting / completed / cancelled
               └── 否：检查 executor_refs
                         ↓
                     已登记 Workflow Agent？
-                        ├── 是：发布 task_handoff_ready，Agent 执行
-                        └── 否：发布 human_handoff_ready，邮件通知负责人
+                        ├── 是：交接协调服务发布 task_handoff_ready，Agent 执行
+                        └── 否：交接协调服务生成 human_notification_intent，邮件通知负责人
 ```
 
 核心原则是：**队列传递事件，正式 Map 决定路线，Registry 只提供身份事实，PendingHandoff 保存领域等待，`task_handoff_ready` 才触发 Agent。**
