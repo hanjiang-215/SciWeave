@@ -6,7 +6,7 @@ links: [ai4-5z9e, ai4-8dgd]
 created: 2026-10-21T12:14:51Z
 type: feature
 priority: 1
-assignee: Frank Qi
+assignee: hanjiang
 parent: ai4-fv1r
 tags: [centre-control, centre-agents, proposal]
 ---
@@ -35,3 +35,9 @@ tags: [centre-control, centre-agents, proposal]
 - **混合候选确认保留**，不再是「待定」。生成方式、作者身份、操作权与禁止二次混合的约束见「混合候选的生成与作者身份」(ai4-8dgd)。
 - **「采用单个」与「建议放弃」两种方案不属于本票**：建议放弃属于预审结论，「采用单个」是 PO 的选择而不是中央 Agent 的合成产物。本票只剩混合候选的生成与送审。
 - **冲突矩阵移出本票**：它与「先看哪个候选」的判断一起并入「中央 Agent 候选预审检查项与失败处置」(ai4-5z9e) 的报告格式。
+
+## Notes
+
+**2026-10-24T10:08:21Z**
+
+转交说明（2026-10-24）：assignee 由 Frank Qi 改为 hanjiang，依据 Gitee issue https://gitee.com/qi-yueran/ai4science/issues/IKQ63M 的第 1 条请求与本节裁决。原负责人 Frank Qi，转交原因：本票 deps 为 ai4-5z9e（已转 hanjiang），正文已收窄为只承载混合候选，生成方式与作者身份约束见 ai4-8dgd，链路在 hanjiang 手上连贯。

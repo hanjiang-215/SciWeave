@@ -41,6 +41,7 @@ tags: [wayfinder:grilling, centre-control, message-queue, handoff]
 - 混合候选不可行时，PO 可以指派负责人组织返修，也可以通过高权限 PO MCP 创建新的混合候选；正式版本不可原地修改，Mapping 与 Wiki 仍分别治理。
 - 无后续 TaskNode 时发送 `task_terminal_summary` 通知 PO；PO 通过 MCP 创建后续任务/依赖候选，不直接操作队列。
 - 已新增 email-service spec；首版唯一入口是受鉴权的 MCP `send_notification`，不消费 Redpanda notification topic；统一公共邮箱发件，调用方提交主题、正文、notification_kind、收件人和稳定关联引用；通知投递不修改业务事实。
+- [email-service 通知意图协议与投递状态规格](ai4-f985) 已关闭。邮件 MCP 的协议不再是未决项；[实现 email-service 通知意图 MCP 与投递状态](ai4-m1d1) 可以开工，不拆更多决策票。真实 Registry 适配不在这张实现票里。
 
 ## Acceptance Criteria
 
@@ -63,9 +64,12 @@ tags: [wayfinder:grilling, centre-control, message-queue, handoff]
 - [Research Mapping 正式快照查询接口与交接协调服务访问边界](ai4-2982)：交接协调服务如何通过稳定领域接口读取一致的正式 Mapping 快照，仍需裁决传输方式和访问契约。
 - [研究员 Task Agent 动态订阅 task-workflow 交接消息](ai4-nfty)：研究员创建新 Workflow 后，端侧如何发现正式 `executor_refs` 并恢复任务交接订阅。
 - [PO 候选裁决、返修指派与根任务分派 MCP](ai4-9mf8)：收口 PO 高权限决策工具、混合候选返修负责人和无上游根任务分派边界。
-- [email-service 通知意图协议与投递状态规格](ai4-f985)：先定义公共邮箱 MCP 的通知 payload、幂等、状态、重试和失败边界，再实现服务。
 - [handoff coordinator 依赖重算与派发恢复规格](ai4-zc85)：先定义协调服务的输入端口、等待/派发状态和恢复契约，再实现服务。
 
 ## Notes
 
 **2026-10-23**：本轮进一步收敛候选和通知边界：取消 `defer`；PO 的候选决策只能是 `formalize`、`request_revision` 或 `reject`。返修必须指定唯一 `repair_owner_id`，由负责人自己的 Task Agent 执行；Centre Agent 只预审，不返修。混合候选不可行时，PO 可以指派负责人组织返修或通过高权限 MCP 创建新混合候选。无后续 TaskNode 时发送 `task_terminal_summary` 通知 PO，PO 通过 MCP 创建后续候选，不直接操作队列。相关 PO 工具边界另见「PO 候选裁决、返修指派与根任务分派 MCP」。
+
+**2026-10-24T05:20:00Z**
+
+邮件规格已从「未定」移到决策基线。它不再堵住邮件服务实现；本票仍开放，因为交接协调、正式快照查询、动态订阅和协调核心规格还没收敛。

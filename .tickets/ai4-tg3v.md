@@ -6,7 +6,7 @@ links: [ai4-dybh, ai4-gvan]
 created: 2026-10-22T01:20:55Z
 type: feature
 priority: 1
-assignee: Frank Qi
+assignee: hanjiang
 parent: ai4-fv1r
 tags: [spec, centre-control, audit, ready-for-agent]
 ---
@@ -172,3 +172,7 @@ tags: [spec, centre-control, audit, ready-for-agent]
 4. `caller_id` 的术语是套件调用标识，不是术语表里的 Caller。
 5. 打开或建表失败时包抛 `AuditUnavailableError`，不自己退出进程。调用方在开始对外服务之前完成这两步，任一步失败则不起服务。运行中的单次失败仍按原规则。
 6. 读调用只有一条 `attempted`，不能用 `finish_call` 补 `completed`。`finish_call` 只配对尚未完成的 `invoked`；对不上抛 `AuditValidationError`，不另插一行。数据库写失败仍只告警、不抛。不加幂等键：两次独立调用仍是两条记录。
+
+**2026-10-24T10:08:39Z**
+
+转交说明（2026-10-24）：assignee 由 Frank Qi 改为 hanjiang，依据 Gitee issue https://gitee.com/qi-yueran/ai4science/issues/IKQ63M 的第 1 条请求与本节裁决。原负责人 Frank Qi，转交原因：实现子票 ai4-gvan 已关闭，sci-weave/centre-control/shared/audit-trail 已按本票规格存在，剩余为验收核对与证据回写。

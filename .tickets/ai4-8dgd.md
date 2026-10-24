@@ -6,7 +6,7 @@ links: [ai4-oebi, ai4-iciy, ai4-oz3s, ai4-rlv6]
 created: 2026-10-21T15:37:18Z
 type: feature
 priority: 1
-assignee: Frank Qi
+assignee: hanjiang
 parent: ai4-fv1r
 tags: [centre-agents, governance, merge, wayfinder:grilling]
 ---
@@ -61,3 +61,12 @@ tags: [centre-agents, governance, merge, wayfinder:grilling]
 来源：2026-10-21 第五轮讨论。用户先裁决「目前不支持混合」，随后更正为「sorry搞错了，还是支持混合，作者身份为所有混合版本的」，并确认来源作者不附带操作权。
 
 对既有决策的影响：「正式版本前进后候选重放与冲突审核规则」(ai4-iciy) 的 Resolution 中「Central Agent 可生成完整组合方案、部分混合」仍然成立；其中「PO 可要求 Codex 经 MCP 修改或组合方案」与「任何修改都生成新的不可变候选版本」需要该票负责人确认在本票的作者与操作权约束下如何表述。
+
+**2026-10-24T10:08:40Z**
+
+转交说明（2026-10-24）：assignee 由 Frank Qi 改为 hanjiang，依据 Gitee issue https://gitee.com/qi-yueran/ai4science/issues/IKQ63M 的第 1 条请求与本节裁决。原负责人 Frank Qi。Design 已由 2026-10-21 第五轮讨论定格，转交原因为本票是 he04 / 5z9e 的语义上游，由同一人负责可减少实现返工。
+
+转交附条件两条：
+
+1. 本票 Notes 中「需要该票负责人确认」指向已关闭的 ai4-iciy，其实源自 2026-10-21T23:40 的本条。ai4-iciy 的 assignee 是 Frank Qi 且已关闭，按票属人规则不由 hanjiang 修改；该表述的收敛仍留在 Frank Qi 侧处理，或在获得明确授权后由 hanjiang 追加修订 Notes。
+2. 本票带 wayfinder:grilling 标签，若后续出现新的治理分歧，裁决权回到地图负责人 Frank Qi，hanjiang 只把结论回写到本票。
