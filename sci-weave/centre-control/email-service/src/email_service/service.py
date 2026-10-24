@@ -55,6 +55,24 @@ class EmailDeliveryService:
         self.conn.commit()
 
     def accept(self, caller: Caller, intent: dict[str, Any]) -> dict[str, str]:
+        try:
+            existing = self.conn.execute(
+                """
+                SELECT notification_id, delivery_status, notification_kind, subject, body, recipients_json
+                FROM notification_delivery
+                WHERE dedupe_key = ?
+                """,
+                (intent["dedupe_key"],),
+            ).fetchone()
+        except sqlite3.Error:
+            raise EmailServiceError("storage_unavailable") from None
+        if existing is not None:
+            if not _same_notification(existing, intent):
+                raise EmailServiceError("idempotency_conflict")
+            return {
+                "notification_id": existing["notification_id"],
+                "delivery_status": existing["delivery_status"],
+            }
         notification_id = intent["notification_id"]
         resolved = [
             {"principal_id": recipient["principal_id"], "email": self.resolver.resolve(recipient["principal_id"])}
@@ -159,6 +177,17 @@ class EmailDeliveryService:
                 (_now(), notification_id),
             )
             self.conn.commit()
+
+
+def _same_notification(row: sqlite3.Row, intent: dict[str, Any]) -> bool:
+    stored_recipients = sorted(item["principal_id"] for item in json.loads(row["recipients_json"]))
+    requested_recipients = sorted(item["principal_id"] for item in intent["recipients"])
+    return (
+        row["subject"] == intent["subject"]
+        and row["body"] == intent["body"]
+        and row["notification_kind"] == intent["notification_kind"]
+        and stored_recipients == requested_recipients
+    )
 
 
 def _now() -> str:
