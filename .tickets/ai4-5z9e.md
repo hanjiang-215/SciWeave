@@ -18,19 +18,16 @@ tags: [centre-control, centre-agents, candidate-prereview]
 
 修订（2026-10-21）：本票原写「对已接纳提交的预审」，把预审对象当作草稿。现改为作用在**候选分支**上：输入是精确 candidate head、base formal revision 和候选内容，不是草稿箱里的草稿。
 
-检查项：
+检查项（2026-10-24 依「候选创建的机械校验前置」ai4-eex0 重排）：格式与结构、对象引用、依赖关系三项已在领域 MCP 写入候选时拒绝，中央 Agent 的输入永远是干净候选，不再出现这三类失败。
 
 | 检查 | 输入 | 判定 |
 | --- | --- | --- |
-| 格式与结构 | 候选内容按领域 schema 校验 | 不符合领域模型即失败 |
-| 对象引用 | 候选内引用是否指向存在且未被废弃的对象 | 目标缺失、跨领域或指向其他候选即失败 |
 | 权限范围 | 提交者、审核人、目标单元的操作权限 | 越权即失败，不由中央 Agent 补授权 |
-| 依赖关系 | 候选引入或修改的 Dependency Edge | 自环、blocking 环、端点版本不存在即失败 |
-| 基准版本 | `base_formal_revision_id` 与当前正式版本 | 不相等即 `stale` |
-| 冲突 | 与正式版本或其他活动候选在同一逻辑对象上的改动 | 冲突即 `conflict`，须新候选解决 |
+| 基准版本 | 候选 `base_formal_revision_id` 是否等于当前正式版本 | 不相等即报告事实 `stale`（`base` 不存在已在写入时拒绝，见 ai4-eex0） |
+| 冲突 | 同批可送审候选在同一逻辑对象上的改动 | 冲突即报告事实 `conflict`，须新候选解决 |
 | 影响范围 | 从不可调度变可调度、受影响资源引用与执行记录 | 无法说明影响即不得进入送审 |
 
-失败处置映射到 Proposal 状态：结构或权限失败为 `abandoned`；基准过期为 `stale`；同对象冲突为 `conflict`。三者都必须由提交方生成新的候选，不改写原候选。
+失败处置映射（2026-10-24 依「中央 Agent 候选预审入口与结论回写」ai4-he04 Resolution 重述）：中央 Agent 不改 Proposal 状态、不写正式版本、不建 Merge Request Buffer；`stale` 与 `conflict` 是预审报告的事实列，Proposal 状态由 Project Owner 在批准或驳回时处置。`abandoned` 仅剩权限失败一类来源。stale/conflict/权限失败都须由提交方生成新的候选，不改写原候选。
 
 约束：
 
@@ -66,3 +63,16 @@ tags: [centre-control, centre-agents, candidate-prereview]
 **2026-10-24T04:34:57Z**
 
 负责人转交：原负责人为 Frank Qi。2026-10-24 经原负责人确认，与「中央 Agent 候选预审入口与结论回写」(ai4-he04) 一并转交给 hanjiang。原因：检查表仍由入口票挡住，两张票交给同一人收口。本票 deps 仍是 ai4-he04，未解除。正文检查表尚未按 2026-10-21T23:45:00Z 的 Notes 重排：格式、对象引用、依赖三项前移见「候选创建的机械校验前置」(ai4-eex0)；预审结论不改 Proposal 状态，见 he04 的 Resolution。原文保留，由新负责人裁决是否接受。
+
+**2026-10-24 eex0 落地后接受检查表重排（hanjiang）**
+
+身份核对：本票 assignee 为 hanjiang，当前分支 `feature/hanjiang`、`git config user.name=hanjiang`，一致。
+
+裁决：接受 2026-10-21T23:45:00Z Notes 的重排，正文检查表已按此更新，同时按 ai4-he04 Resolution 重述失败处置：
+
+- 格式、对象引用、依赖关系三项从中央 Agent 检查表移除，前移到领域 MCP 写入时拒绝（ai4-eex0 已实现并验收）。
+- 基准版本只判「base 是否等于当前正式版本」→ 报告事实 `stale`；`base` 不存在已在写入时以 `base_revision_missing` 拒绝。
+- `stale`/`conflict` 改为预审报告事实列，中央 Agent 不改 Proposal 状态；`abandoned` 只剩权限失败一类。
+- 保留的检查：权限范围、基准版本、冲突、影响范围。
+
+本票仍 open：入口「中央 Agent 候选预审入口与结论回写」(ai4-he04) 的领域管理 MCP 只读候选查询与 `append_prereview_log` 尚未闭环，检查表的重排生效依赖它。验收勾选待 he04 收口后复验。

@@ -11,6 +11,11 @@ from typing import Any, Protocol
 from .canonical import canonical_json, sha256_json
 from .formal_domain import WikiReferenceQualification, WikiSnapshotRead
 
+# Stable reason codes for candidate submission validation (write-time gates),
+# mirroring the mechanical checks moved to the domain MCP (ai4-eex0).
+FORMAL_BASE_REQUIRED = "formal_base_required"
+BASE_REVISION_MISSING = "base_revision_missing"
+
 
 @dataclass(frozen=True)
 class WikiCandidateSubmissionResult:
@@ -72,9 +77,11 @@ class WikiCandidateService:
             proposal_id = _required(document_change, "proposal_id")
             domain = _required(document_change, "wiki_domain_id")
             submitter = _required(document_change, "submitter_id")
-            base_id = _required(document_change, "base_formal_revision_id")
         except ValueError:
             return _result("rejected", "invalid_submission", "")
+        base_id = _text(document_change.get("base_formal_revision_id"))
+        if base_id is None:
+            return _result("rejected", FORMAL_BASE_REQUIRED, submission_id, proposal_id)
         if not _valid_document(document, submitter) or not isinstance(references, list):
             return _result("rejected", "invalid_document", submission_id)
         reason = self._validate_references(references, domain, document, base_id)
@@ -93,10 +100,9 @@ class WikiCandidateService:
                     if saved:
                         return self._result_from_rows(prior, saved)
                 else:
-                    current = self._sqlite.get_current_formal_revision_id(domain)
                     revision = self._sqlite.get_formal_revision(base_id)
-                    if current != base_id or revision is None or revision.wiki_domain_id != domain:
-                        return _result("rejected", "stale_base", submission_id, proposal_id)
+                    if revision is None or revision.wiki_domain_id != domain:
+                        return _result("rejected", BASE_REVISION_MISSING, submission_id, proposal_id)
                     collision = connection.execute("SELECT 1 FROM wiki_buffer_submission WHERE submission_id=? OR proposal_id=?", (submission_id, proposal_id)).fetchone()
                     if collision:
                         return _result("rejected", "identity_conflict", submission_id, proposal_id)
@@ -107,7 +113,7 @@ class WikiCandidateService:
             return _result("result_unknown", "sqlite_result_unknown", submission_id, proposal_id)
         revision = self._sqlite.get_formal_revision(base_id)
         if revision is None or revision.wiki_domain_id != domain:
-            return _result("result_unknown", "stale_base", submission_id, proposal_id)
+            return _result("result_unknown", BASE_REVISION_MISSING, submission_id, proposal_id)
         snapshot_documents = [_candidate_revision(document, domain, proposal_id, base_id), *references]
         snapshot = canonical_json(snapshot_documents)
         op_id = sha256_json({"key": idempotency_key, "submission_id": submission_id, "submitter_id": submitter,
@@ -129,8 +135,8 @@ class WikiCandidateService:
             read = None
         if not isinstance(read, WikiSnapshotRead) or read.status != "confirmed" or (read.store_id, read.database, read.branch_id, read.commit_hash) != (outcome.store_id, self._database, outcome.branch_id, outcome.commit_hash) or not _contains(read.documents, snapshot_documents):
             return _result("result_unknown", "candidate_snapshot_unverified", submission_id, proposal_id)
-        if self._sqlite.get_current_formal_revision_id(domain) != base_id:
-            return _result("rejected", "stale_base", submission_id, proposal_id)
+        if self._sqlite.get_formal_revision(base_id) is None:
+            return _result("rejected", BASE_REVISION_MISSING, submission_id, proposal_id)
         try:
             self._persist(document_change, idempotency_key, digest, read.content_digest or sha256_json(list(read.documents)), outcome, base_id)
         except Exception:
@@ -162,7 +168,7 @@ class WikiCandidateService:
                 if formal_snapshot is None:
                     base_revision = self._sqlite.get_formal_revision(base_id)
                     if base_revision is None or base_revision.wiki_domain_id != domain:
-                        return "stale_base"
+                        return BASE_REVISION_MISSING
                     try:
                         formal_snapshot = self._terminus.read_exact_snapshot(
                             base_revision.terminus_store_id, self._database,
@@ -194,7 +200,13 @@ class WikiCandidateService:
         event_id = "wiki-audit-" + hashlib.sha256((key + ":accepted").encode()).hexdigest()[:20]
         with self._sqlite.connection() as connection:
             connection.execute("BEGIN IMMEDIATE")
-            current = connection.execute("SELECT current_formal_revision_id FROM wiki_current_formal_revision WHERE wiki_domain_id=?", (domain,)).fetchone()
+            base_row = connection.execute(
+                "SELECT formal_wiki_revision_id FROM formal_wiki_revision "
+                "WHERE formal_wiki_revision_id=? AND wiki_domain_id=?",
+                (base_id, domain),
+            ).fetchone()
+            if base_row is None:
+                raise ValueError("base revision missing")
             existing = connection.execute("SELECT * FROM wiki_candidate_commit WHERE proposal_id=?", (proposal_id,)).fetchone()
             if existing:
                 if (existing["terminus_store_id"], existing["branch_id"], existing["commit_hash"], existing["content_digest"]) != (outcome.store_id, outcome.branch_id, outcome.commit_hash, digest):
@@ -203,8 +215,6 @@ class WikiCandidateService:
                 connection.execute("INSERT OR IGNORE INTO wiki_audit_event VALUES (?,?,?,?,?,?,?,?,?,?)", (event_id, now, submitter, "wiki_candidate_submitted", "WikiProposal", proposal_id, "confirmed", "candidate_created", canonical_json({"submission_id": submission_id, "candidate_commit_id": candidate_id}), None))
                 connection.commit()
                 return
-            if (None if current is None else current[0]) != base_id:
-                raise ValueError("stale base")
             connection.execute("INSERT INTO wiki_proposal VALUES (?,?,?,?,?,?,?,?)", (proposal_id, domain, base_id, outcome.store_id, outcome.branch_id, "candidate", submitter, now))
             connection.execute("INSERT INTO wiki_candidate_commit VALUES (?,?,?,?,?,?,?,?,?,?,?)", (candidate_id, domain, proposal_id, outcome.store_id, outcome.branch_id, outcome.commit_hash, base_id, digest, snapshot_digest, submitter, now))
             connection.execute("UPDATE wiki_buffer_submission SET status='candidate_created' WHERE idempotency_key=?", (key,))

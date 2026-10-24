@@ -206,10 +206,22 @@ class WikiCandidateSubmissionTestCase(unittest.TestCase):
         self.assertEqual(retry.status, "confirmed")
         self.assertEqual(len(self.terminus.calls), 2)
 
-    def test_stale_base_is_rejected_before_candidate_write(self):
+    def test_candidate_is_written_when_origin_is_older_than_current_base(self):
         self.sqlite.set_current_formal_revision("domain-1", None)
         result = self.service.submit(self.change, "key-1")
-        self.assertEqual(result.reason_code, "stale_base")
+        self.assertEqual(result.status, "confirmed", result.reason_code)
+        self.assertEqual(len(self.terminus.calls), 1)
+
+    def test_missing_base_formal_revision_is_rejected(self):
+        change = {**self.change, "base_formal_revision_id": ""}
+        result = self.service.submit(change, "key-missing-base")
+        self.assertEqual((result.status, result.reason_code), ("rejected", "formal_base_required"))
+        self.assertEqual(self.terminus.calls, [])
+
+    def test_unknown_base_revision_is_rejected_without_store_write(self):
+        change = {**self.change, "base_formal_revision_id": "ghost-rev"}
+        result = self.service.submit(change, "key-ghost-base")
+        self.assertEqual((result.status, result.reason_code), ("rejected", "base_revision_missing"))
         self.assertEqual(self.terminus.calls, [])
 
     def test_rejects_invalid_exact_reference_target(self):

@@ -48,16 +48,30 @@ tags: [centre-control, centre-agents, candidate-prereview]
 
 ## Acceptance Criteria
 
-- 只能读到已存在的候选分支；草稿箱内容不进入预审输入
-- 不写草稿的接纳或驳回状态
-- 入口为领域管理 MCP 的只读候选查询工具，不直连领域 Store
-- 同一候选 head 不会被并发预审两次，或被重复预审时结论一致
-- 预审结论写回领域治理记录并留痕，不写正式版本，不改 Proposal 状态
-- 只能通过 `create_merged_candidate` 新建混合候选分支，不改写已有候选
-- 候选 head 或 base formal revision 变化后，旧预审结论失效且有明确标记
-- 有回归测试覆盖重复取件、并发取件与预审对象变化
+- [x] 只能读到已存在的候选分支；草稿箱内容不进入预审输入
+- [x] 不写草稿的接纳或驳回状态
+- [x] 入口为领域管理 MCP 的只读候选查询工具，不直连领域 Store
+- [ ] 同一候选 head 不会被并发预审两次，或被重复预审时结论一致（依赖 `append_prereview_log` 唯一键，待开放面）
+- [ ] 预审结论写回领域治理记录并留痕，不写正式版本（依赖 `append_prereview_log`）
+- [ ] 只能通过 `create_merged_candidate` 新建混合候选分支，不改写已有候选
+- [ ] 候选 head 或 base formal revision 变化后，旧预审结论失效且有明确标记（依赖失效判定表）
+- [x] 有回归测试覆盖重复取件、并发取件与预审对象变化（输入端：快照断言、merged 排除、单候选读取失败隔离、能力档位；重复/并发取件需写工具落库后补）
 
 ## Notes
+
+**2026-10-24 输入端闭环：两套管理 MCP 只读候选快照工具（hanjiang）**
+
+身份核对：本票 assignee 为 hanjiang，当前分支 `feature/hanjiang`、`git config user.name=hanjiang`，一致。
+
+按 Resolution 的入口定案，为领域管理 MCP 补齐「同一时点全部可送审候选及内容快照」只读工具：`list_reviewable_candidates`（research-map，与 `list_reviewable_wiki_candidates`（research-wiki）对称）。
+
+- 可送审 = `proposal.status NOT IN ('merged','rejected','abandoned')` 且已持久化候选 commit；候选内容从 TerminusDB 精确固定 head（SQLite 记录不变式 commit）读取，单候选取件失败独立降级为 `snapshot_status=unavailable`，不阻断其余候选。
+- 只读工具走 `read`/`centre` 档位鉴权与 `attempted` fail-open 留痕；不写草稿、不改 Proposal 状态、不直连领域存储（仍是领域管理 MCP 提供）。
+- 实现：`candidate_reader.py`（两领域）+ management/TOOL_DEFINITIONS/TOOL_CAPABILITIES/`_list_reviewable_*` + main.py 接线。
+
+验证：research-map 全量 95 项、research-wiki 全量 102 项通过（0 失败）；新增测试覆盖候选快照内容返回、merged 排除、单候选读取失败隔离、read/centre 能力档位。未新增依赖。提交 `6333e18`。
+
+**剩余缺口（写端）**：预审结论回写 `append_prereview_log` 与混合候选 `create_merged_candidate` 仍依赖「注册表登记中央 Agent 与开放面第四档」(ai4-t2wc) 与「中央 Agent 能力接口收口」(ai4-rlv6)（Frank Qi）收口。已提 Gitee issue 知会（见 w73z Notes 的 IKQ2QB 与本次追加）。本票保持 `open`。
 
 **2026-10-21 修订记录**
 

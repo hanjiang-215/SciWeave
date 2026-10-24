@@ -173,16 +173,24 @@ class CandidateSubmissionTestCase(unittest.TestCase):
                 "created_at":"2026-10-21T00:00:00Z"})
         self.assertEqual(self.submit(change_set(nodes=nodes,edges=edges)).reason_code,"blocking_cycle")
         self.assertEqual(self.terminus.calls,[])
-    def test_expired_base_is_rejected(self):
+    def test_candidate_based_on_older_formal_base_is_written(self):
         self.sqlite.add_formal_revision(FormalMappingRevision(formal_revision_id="other",mapping_domain_id=DOMAIN,
             terminus_store_id="store",formal_branch_id="formal",formal_commit_hash="other-commit",
             base_formal_revision_id=BASE,source_proposal_id=None,approval_audit_event_id=None,published_by="owner",published_at="now"))
         self.sqlite.set_current_formal_revision(DOMAIN,"other",updated_at="now")
-        self.assertEqual(self.submit().reason_code,"stale_base"); self.assertEqual(self.terminus.calls,[])
+        result = self.submit()
+        self.assertEqual(result.status, "confirmed")
+        self.assertEqual(len(self.terminus.calls), 1)
+        self.assertEqual(self.sqlite.count_candidate_records(), (1, 1, 1, 1))
+    def test_base_revision_missing_is_rejected_without_store_write(self):
+        ghost = node() | {"base_formal_revision_id": "ghost-base"}
+        result = self.submit(change_set(base_formal_revision_id="ghost-base", nodes=[ghost]))
+        self.assertEqual((result.status, result.reason_code), ("rejected", "base_revision_missing"))
+        self.assertEqual(self.terminus.calls, [])
     def test_validation_rejects_missing_required_values(self):
         invalid=node(); invalid["acceptance_criteria"]=[]
         self.assertEqual(self.submit(change_set(nodes=[invalid])).reason_code,"invalid_task_node")
-    def test_unknown_retry_reconciles_stale_base_but_never_persists_candidate(self):
+    def test_unknown_retry_reconciles_after_formal_base_advanced(self):
         self.terminus.outcome="unknown"
         self.assertEqual(self.submit().status,"result_unknown")
         self.sqlite.add_formal_revision(FormalMappingRevision(formal_revision_id="advanced",mapping_domain_id=DOMAIN,
@@ -191,11 +199,10 @@ class CandidateSubmissionTestCase(unittest.TestCase):
         self.sqlite.set_current_formal_revision(DOMAIN,"advanced",updated_at="now")
         self.terminus.outcome="confirmed"
         replay=self.submit()
-        self.assertEqual(replay.status,"rejected")
-        self.assertEqual(replay.reason_code,"stale_base")
+        self.assertEqual(replay.status,"confirmed")
         self.assertEqual(len(self.terminus.calls),2)
         self.assertEqual(self.terminus.calls[0],self.terminus.calls[1])
-        self.assertEqual(self.sqlite.count_candidate_records(),(1,0,0,0))
+        self.assertEqual(self.sqlite.count_candidate_records(),(1,1,1,1))
     def test_unknown_retry_reconciles_when_stored_base_metadata_is_missing(self):
         self.terminus.outcome="unknown"
         self.assertEqual(self.submit().status,"result_unknown")
@@ -229,7 +236,7 @@ class CandidateSubmissionTestCase(unittest.TestCase):
         self.assertEqual((result.status, result.reason_code), ("failed", "store_rejected"))
         self.assertEqual(self.sqlite.count_candidate_records(), (1, 0, 0, 0))
 
-    def test_formal_pointer_change_during_store_call_prevents_persistence(self):
+    def test_formal_pointer_advance_during_store_call_still_persists(self):
         original = self.terminus.create_candidate_snapshot
 
         def advance_pointer(*args):
@@ -243,8 +250,8 @@ class CandidateSubmissionTestCase(unittest.TestCase):
 
         self.terminus.create_candidate_snapshot = advance_pointer
         result = self.submit()
-        self.assertEqual((result.status, result.reason_code), ("rejected", "stale_base"))
-        self.assertEqual(self.sqlite.count_candidate_records(), (1, 0, 0, 0))
+        self.assertEqual((result.status, result.reason_code), ("confirmed", "ok"))
+        self.assertEqual(self.sqlite.count_candidate_records(), (1, 1, 1, 1))
 
     def test_initial_empty_base_is_rejected_without_store_write(self):
         result = self.submit(change_set(base_formal_revision_id=None, nodes=[node() | {"base_formal_revision_id": None}]))

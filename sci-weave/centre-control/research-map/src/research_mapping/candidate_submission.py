@@ -9,6 +9,13 @@ from typing import Any, Protocol
 from .candidate_domain import CandidateSnapshotResult, CandidateSubmissionResult, utc_now
 from .canonical import canonical_json, sha256_json
 
+# Stable reason codes for candidate submission validation (write-time gates).
+# These mirror the mechanical checks moved to the domain MCP in ai4-eex0:
+# format/reference/cycle are write-time rejections; base staleness is a
+# prereview fact, not a write-time rejection.
+FORMAL_BASE_REQUIRED = "formal_base_required"
+BASE_REVISION_MISSING = "base_revision_missing"
+
 
 class CandidateSnapshotStore(Protocol):
     def create_candidate_snapshot(
@@ -99,18 +106,13 @@ class MappingCandidateService:
             if reason:
                 self._set_submission(identity, "rejected")
                 return _result("rejected", reason, identity)
-            current = self._sqlite.get_current_formal_revision_id(domain)
             if base is None:
                 self._set_submission(identity, "rejected")
-                return _result("rejected", "formal_base_required", identity)
-            stale_base = current != base
-            if stale_base:
-                self._set_submission(identity, "rejected")
-                return _result("rejected", "stale_base", identity)
+                return _result("rejected", FORMAL_BASE_REQUIRED, identity)
             revision = self._sqlite.get_formal_revision(base)
             if revision is None or revision.mapping_domain_id != domain:
                 self._set_submission(identity, "rejected")
-                return _result("rejected", "stale_base", identity)
+                return _result("rejected", BASE_REVISION_MISSING, identity)
             base_commit, store_id = revision.formal_commit_hash, revision.terminus_store_id
             candidate_documents = canonical_json(change_set["nodes"] + change_set["edges"])
 
@@ -137,14 +139,14 @@ class MappingCandidateService:
             return _result("failed", outcome.reason_code or "store_rejected", identity, change_set.get("proposal_id"))
         if store_id and outcome.store_id != store_id:
             return _result("result_unknown", "store_result_unknown", identity, change_set.get("proposal_id"))
-        if self._sqlite.get_current_formal_revision_id(domain) != base:
-            return _result("rejected", "stale_base", identity, change_set.get("proposal_id"))
+        if self._sqlite.get_formal_revision(base) is None:
+            return _result("rejected", BASE_REVISION_MISSING, identity, change_set.get("proposal_id"))
         try:
             self._persist(
                 change_set, idempotency_key, digest, snapshot_digest, outcome, expected_base=base
             )
         except _StaleFormalBase:
-            return _result("rejected", "stale_base", identity, change_set.get("proposal_id"))
+            return _result("rejected", BASE_REVISION_MISSING, identity, change_set.get("proposal_id"))
         except sqlite3.Error:
             return _result("result_unknown", "result_unknown", identity, change_set.get("proposal_id"))
         with self._sqlite.connection() as connection:
@@ -164,12 +166,12 @@ class MappingCandidateService:
         event_id = "audit-" + hashlib.sha256((key + ":candidate").encode()).hexdigest()[:16]
         with self._sqlite.connection() as connection:
             connection.execute("BEGIN IMMEDIATE")
-            pointer = connection.execute(
-                "SELECT current_formal_revision_id FROM mapping_current_formal_revision WHERE mapping_domain_id=?",
-                (cs["mapping_domain_id"],),
+            base_row = connection.execute(
+                "SELECT formal_revision_id FROM formal_mapping_revision "
+                "WHERE formal_revision_id=? AND mapping_domain_id=?",
+                (expected_base, cs["mapping_domain_id"]),
             ).fetchone()
-            current = None if pointer is None else pointer["current_formal_revision_id"]
-            if current != expected_base:
+            if base_row is None:
                 raise _StaleFormalBase()
             prior = connection.execute("SELECT * FROM mapping_candidate_commit WHERE proposal_id=?", (proposal,)).fetchone()
             if prior:
