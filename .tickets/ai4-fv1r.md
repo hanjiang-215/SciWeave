@@ -51,7 +51,7 @@ tags: [wayfinder:map, centre-agents, governance]
 - 任务下发、调度、重试、转交：已随「Agent 以消息驱动，Gateway 的 MCP 只负责返修」(ai4-dhpv) 改由消息队列与端侧自行处理。
 - 部署、绑定或托管端侧 Task Agent：已随「Task Agent 改由研究员端侧自持」(ai4-we38) 取消。
 - 推进正式版本：由 Project Owner 经自己的 MCP 完成。
-- 独立的人员与 Agent 注册服务：退化为事实留痕表，见「注册表登记中央 Agent 与开放面第四档」(ai4-t2wc)。
+- 独立的人员与 Agent 注册服务：退化为事实留痕表，见「注册表登记中央 Agent 与其开放面」(ai4-t2wc)。
 - 写审计：由「中央服务留痕工具」(ai4-upsm) 的固定接口承担，中央 Agent 无私有审计通道。
 
 **2026-10-22T09:35:00Z**

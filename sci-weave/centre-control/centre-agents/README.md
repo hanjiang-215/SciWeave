@@ -25,30 +25,30 @@ Centre Agent 可以读取全部可能进入正式化流程的候选，而不是�
 - 候选对应的正式基准；
 - 来源候选、来源作者和当前治理状态。
 
-建议的领域工具分组为：
+实际的领域工具为：
 
-- `list_mapping_candidates`、`read_mapping_candidate`；
-- `list_wiki_candidates`、`read_wiki_candidate`。
+- Mapping：`get_formal_mapping`、`list_candidates`、`list_reviewable_candidates`；
+- Wiki：`get_formal_wiki`、`list_wiki_candidates`、`list_reviewable_wiki_candidates`。
 
-候选正文由对应领域管理 MCP 提供，Centre Agent 不绕过领域服务读取存储。
+这 6 个读工具要求 `centre` 能力名。候选正文由对应领域管理 MCP 提供，Centre Agent 不绕过领域服务读取存储。
 
 ### 预审报告
 
-Centre Agent 对两个领域分别追加预审报告：
+Centre Agent 对两个领域追加预审报告，工具为单个 `append_prereview_log`，带必需的领域参数（`mapping_domain_id` 或 `wiki_domain_id`）：
 
-- `append_mapping_prereview_log`；
-- `append_wiki_prereview_log`。
+- Mapping：`append_prereview_log(mapping_domain_id, ...)`；
+- Wiki：`append_prereview_log(wiki_domain_id, ...)`。
 
-两个写工具独立授权。预审报告采用领域治理记录的追加语义，不能修改历史报告。预审是正式化前的硬门禁，但预审结论不等同于 PO 的正式发布决定。
+能力名为 `prereview_log`，与读候选用的 `centre` 分开配置。两个领域走两次独立调用，不共享领域对象或事务。预审报告采用领域治理记录的追加语义，不能修改历史报告。预审是正式化前的硬门禁，但预审结论不等同于 PO 的正式发布决定。
 
 ### 创建混合候选
 
-当多个候选需要合并时，Centre Agent 可以创建新的混合候选：
+当多个候选需要合并时，Centre Agent 可以创建新的混合候选，工具为单个 `create_merged_candidate`，同样带必需的领域参数：
 
-- `create_mapping_merged_candidate`；
-- `create_wiki_merged_candidate`。
+- Mapping：`create_merged_candidate(mapping_domain_id, ...)`；
+- Wiki：`create_merged_candidate(wiki_domain_id, ...)`。
 
-新候选必须记录全部来源候选和来源作者。Centre Agent 不修改已有候选；混合候选创建后，来源作者不因此获得对混合候选的操作权。
+能力名为 `merged_candidate`，与 `prereview_log` 分开配置。新候选必须记录全部来源候选和来源作者。Centre Agent 不修改已有候选；混合候选创建后，来源作者不因此获得对混合候选的操作权。
 
 ### 读取注册表
 

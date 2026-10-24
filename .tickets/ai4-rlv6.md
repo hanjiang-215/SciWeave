@@ -1,8 +1,8 @@
 ---
 id: ai4-rlv6
 status: open
-deps: [ai4-he04, ai4-5z9e, ai4-oebi, ai4-oz3s, ai4-8dgd, ai4-a2ba, ai4-t2wc]
-links: [ai4-upsm]
+deps: [ai4-a2ba, ai4-t2wc]
+links: [ai4-upsm, ai4-5auy, ai4-w73z, ai4-he04, ai4-5z9e, ai4-oebi, ai4-8dgd, ai4-oz3s]
 created: 2026-10-21T12:16:16Z
 type: feature
 priority: 1
@@ -28,18 +28,20 @@ tags: [centre-control, centre-agents, interface]
 
 ### 读取能力
 
-- `read_mapping_formal`：读取 Research Mapping 正式内容。
-- `read_wiki_formal`：读取 LLM-Wiki 正式内容。
-- `list_mapping_candidates`、`read_mapping_candidate`：读取全部 Mapping 候选及其固定 head、正式基准、来源与状态。
-- `list_wiki_candidates`、`read_wiki_candidate`：读取全部 Wiki 候选及其固定 head、正式基准、来源与状态。
-- `read_agent_registry`：读取主体与 Agent 登记事实，包括中央 Agent 和 Project Owner 的通知联系方式；注册表不参与鉴权。
+- `get_formal_mapping`：读取 Research Mapping 正式内容。
+- `get_formal_wiki`：读取 LLM-Wiki 正式内容。
+- `list_candidates`、`list_reviewable_candidates`：读取 Mapping 候选记录与全部可送审候选及其固定 head、正式基准、来源与状态。
+- `list_wiki_candidates`、`list_reviewable_wiki_candidates`：读取 Wiki 候选提交与全部可送审候选及其固定 head、正式基准、来源与状态。
+- `get_agent_registration`：读取主体与 Agent 登记事实，包括中央 Agent 和 Project Owner 的通知联系方式；注册表不参与鉴权。
 
 中央 Agent 读取候选时不受端侧“只能看到自己提交内容”的限制。候选正文由对应领域管理 MCP 提供，中央 Agent 不直连 SQLite、TerminusDB 或其他领域存储。
 
 ### 预审与候选写入能力
 
-- `append_mapping_prereview_log`、`append_wiki_prereview_log`：分别向对应领域治理记录追加预审报告；两个工具独立授权。
-- `create_mapping_merged_candidate`、`create_wiki_merged_candidate`：分别创建新的混合候选，并记录全部来源候选和来源作者；不修改已有候选，混合候选创建后不授予来源作者操作权。
+- `append_prereview_log`（必需领域参数：`mapping_domain_id` 或 `wiki_domain_id`）：向对应领域治理记录追加预审报告或失效判定。能力名 `prereview_log`。
+- `create_merged_candidate`（必需领域参数：`mapping_domain_id` 或 `wiki_domain_id`）：新建混合候选，记录全部来源候选和来源作者；不修改已有候选，混合候选创建后不授予来源作者操作权。能力名 `merged_candidate`。
+
+两个写工具各带必需的领域参数，能力名与读用的 `centre` 分开配置。命名与授权粒度以「注册表登记中央 Agent 与其开放面」(ai4-t2wc) 为准；此前本票写的 `append_mapping_prereview_log` 等四个分领域名字作废。
 
 中央 Agent 不写正式版本、不执行 Owner 正式化、不改变已有候选、不写草稿箱接纳状态、不发起任务、不下发任务，也没有私有审计写入通道。
 
@@ -94,3 +96,11 @@ tags: [centre-control, centre-agents, interface]
 - 工具清单需要按工具粒度收口：`append_prereview_log` 与 `create_merged_candidate` 是两个独立工具，权限可分开配置。见「预审报告的追加日志契约」(ai4-oz3s) 与「注册表登记中央 Agent 与开放面第四档」(ai4-t2wc)。
 - 「中央 Agent 自身的工具是否参与注册表校验」已有答案：进注册表但只留痕，不参与鉴权；开放面按工具面收口，不按登记记录授权。
 - 中央 Agent 只保留预审一类职能，不新增其他能力。这条本身就是本票的收口原则。
+
+**2026-10-24T15:25:00Z**
+
+收口（2026-10-24，assignee 本人操作）：
+
+- **依赖收窄**：deps 从 7 条减为 `ai4-a2ba` 与 `ai4-t2wc` 两条，其余五条（`ai4-he04`、`ai4-5z9e`、`ai4-oebi`、`ai4-8dgd`、`ai4-oz3s`）改为 `links`。原因：本票只定义接口形态、不实现，被一串实现票阻塞会导致它永远关不掉；这五张票的结论已引用进本票正文，其结论变化时回改本票即可，不需要等它们关闭。
+- **写工具命名**：正文的四个分领域名字（`append_mapping_prereview_log`、`append_wiki_prereview_log`、`create_mapping_merged_candidate`、`create_wiki_merged_candidate`）改为单数名 + 必需领域参数（`append_prereview_log`、`create_merged_candidate`），能力名为 `prereview_log` 与 `merged_candidate`，与读用的 `centre` 分开。依据「注册表登记中央 Agent 与其开放面」(ai4-t2wc) 2026-10-24 收口。`centre-agents/README.md` 的对应措辞待同步。
+- **实现位置**：摘除 `centre` 的 11 个写授权、新增两个写工具，由「收紧管理 MCP 的中央 Agent 开放面并补两个预审写工具」(ai4-5auy) 承载。
