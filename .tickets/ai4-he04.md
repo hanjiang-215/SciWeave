@@ -51,13 +51,17 @@ tags: [centre-control, centre-agents, candidate-prereview]
 - [x] 只能读到已存在的候选分支；草稿箱内容不进入预审输入
 - [x] 不写草稿的接纳或驳回状态
 - [x] 入口为领域管理 MCP 的只读候选查询工具，不直连领域 Store
-- [ ] 同一候选 head 不会被并发预审两次，或被重复预审时结论一致（依赖 `append_prereview_log` 唯一键，待开放面）
-- [ ] 预审结论写回领域治理记录并留痕，不写正式版本（依赖 `append_prereview_log`）
-- [ ] 只能通过 `create_merged_candidate` 新建混合候选分支，不改写已有候选
-- [ ] 候选 head 或 base formal revision 变化后，旧预审结论失效且有明确标记（依赖失效判定表）
+- [x] 同一候选 head 不会被并发预审两次，或被重复预审时结论一致（`append_prereview_log` 已实现唯一键幂等，见 `ai4-qnvd`）
+- [x] 预审结论写回领域治理记录并留痕，不写正式版本（`append_prereview_log`/`append_wiki_prereview_log` 已实现并接入接口层留痕）
+- [ ] 只能通过 `create_merged_candidate` 新建混合候选分支，不改写已有候选（待 `ai4-t2wc`/`ai4-rlv6` 收口后立票实现）
+- [x] 候选 head 或 base formal revision 变化后，旧预审结论失效且有明确标记（`head_moved`/`base_moved` 判定已实现）
 - [x] 有回归测试覆盖重复取件、并发取件与预审对象变化（输入端：快照断言、merged 排除、单候选读取失败隔离、能力档位；重复/并发取件需写工具落库后补）
 
 ## Notes
+
+**2026-10-24 写端收口（hanjiang）**
+
+`append_prereview_log` / `append_wiki_prereview_log` 已在两领域管理 MCP 实现并验证（`ai4-qnvd`，提交 `605ea1a`）：报告表 + 失效判定表 DDL、唯一键 `(candidate_id, candidate_head, rule_set_version)` 幂等、只追加、`head_moved`/`base_moved` 判定、`rule_set_missing` 兜底。本票「同一候选 head 不并发预审」「结论写回领域治理记录并留痕」「候选头/基准变化使结论失效」三项验收随该实现勾选。唯一剩余写端为 `create_merged_candidate`（混合候选），待 `ai4-t2wc`/`ai4-rlv6`（Frank Qi）收口后立票实现，已通过 issue `IKQ6XQ` 汇总催办。
 
 **2026-10-24 输入端闭环：两套管理 MCP 只读候选快照工具（hanjiang）**
 

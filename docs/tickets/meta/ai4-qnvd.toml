@@ -1,0 +1,3 @@
+﻿# ai4-qnvd 的索引归属与简介（人工维护）
+module = ["governance"]
+summary = "实现领域管理 MCP 预审报告追加写端 append_prereview_log"
