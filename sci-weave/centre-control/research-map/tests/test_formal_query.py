@@ -93,6 +93,41 @@ class FormalQueryTestCase(unittest.TestCase):
         self.assertEqual(result.documents, ())
         self.assertEqual(self.terminus.calls, [])
 
+    def test_get_by_revision_reads_an_activated_historical_revision(self) -> None:
+        self._seed_current_revision()
+
+        result = self.service.get_by_revision(MAPPING_DOMAIN_ID, FORMAL_REVISION_ID)
+
+        self.assertEqual(result.status, "available")
+        self.assertEqual(result.reason_code, errors.OK)
+        self.assertEqual(result.formal_revision_id, FORMAL_REVISION_ID)
+        self.assertEqual(result.commit_hash, COMMIT_HASH)
+        self.assertEqual(result.documents, GRAPH_DOCUMENTS)
+        self.assertEqual(
+            self.terminus.calls,
+            [(STORE_ID, DATABASE, BRANCH_ID, COMMIT_HASH)],
+        )
+
+    def test_get_by_revision_unknown_revision_is_not_found(self) -> None:
+        result = self.service.get_by_revision(MAPPING_DOMAIN_ID, "no-such-revision")
+
+        self.assertEqual(result.status, "no_such_revision")
+        self.assertEqual(result.reason_code, errors.REVISION_NOT_FOUND)
+        self.assertEqual(result.documents, ())
+        self.assertEqual(self.terminus.calls, [])
+
+    def test_get_by_revision_keeps_all_activated_revision_gates(self) -> None:
+        # A revision row without a succeeded formalization result must not
+        # yield content even when requested explicitly by revision id.
+        self._seed_current_revision(add_result=False)
+
+        result = self.service.get_by_revision(MAPPING_DOMAIN_ID, FORMAL_REVISION_ID)
+
+        self.assertEqual(result.status, "inconsistent")
+        self.assertEqual(result.reason_code, errors.SUCCEEDED_RESULT_MISSING)
+        self.assertEqual(result.documents, ())
+        self.assertEqual(self.terminus.calls, [])
+
     def test_pointer_to_a_missing_revision_is_inconsistent(self) -> None:
         # Simulate a damaged or externally modified governance database. Normal
         # store writes enforce this foreign key, but queries must still fail closed.
