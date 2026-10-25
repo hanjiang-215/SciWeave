@@ -6,7 +6,7 @@ links: []
 created: 2026-10-20T06:31:26Z
 type: task
 priority: 1
-assignee: Frank Qi
+assignee: hanjiang
 parent: ai4-yyy9
 tags: [wayfinder:grilling]
 ---
@@ -25,6 +25,10 @@ tags: [wayfinder:grilling]
 > 修订（2026-10-21）：删去原文「仅在显式初始化时查询并持久化快照，运行期不依赖 Mapping 查询」。改为：初始化查询并持久化快照；运行期允许只读查询；须定义只读查询不可用时的降级行为（例如沿用快照继续执行，或阻塞并上报）。
 
 ## Notes
+
+**2026-10-25 负责人转交（hanjiang 操作，经 Frank Qi 授权）**
+
+身份核对：本票 assignee 已由 Frank Qi 改为 hanjiang；当前分支 `feature/hanjiang`、`git config user.name=hanjiang`，一致。依据 Gitee issue https://gitee.com/qi-yueran/ai4science/issues/IKQ8BD 第 1 条，Frank Qi 授权 hanjiang 直接转交。转交原因：本票阻塞于 `ai4-xup8`（hanjiang 地图），且契约所需的 `list_candidates`/`list_reviewable_candidates` 只读工具已由 hanjiang 实现，转由 hanjiang 承接最顺。正文与验收标准不改写，仅变更归属并记录。
 
 **2026-10-21T13:10:19Z**
 

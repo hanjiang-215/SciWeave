@@ -6,7 +6,7 @@ links: [ai4-te1v, ai4-dhpv, ai4-he04, ai4-5z9e]
 created: 2026-10-21T15:37:05Z
 type: feature
 priority: 1
-assignee: Frank Qi
+assignee: hanjiang
 parent: ai4-fv1r
 tags: [centre-agents, governance, prereview, wayfinder:grilling]
 ---
@@ -87,6 +87,10 @@ tags: [centre-agents, governance, prereview, wayfinder:grilling]
 - [ ] 有回归测试覆盖连续 head 更新只触发一次、故障期间待审候选状态可见、正式版本发布只影响依赖该版本的候选
 
 ## Notes
+
+**2026-10-25 负责人转交（hanjiang 操作，经 Frank Qi 授权）**
+
+身份核对：本票 assignee 已由 Frank Qi 改为 hanjiang；当前分支 `feature/hanjiang`、`git config user.name=hanjiang`，一致。依据 Gitee issue https://gitee.com/qi-yueran/ai4science/issues/IKQ8BD 第 1 条，Frank Qi 授权 hanjiang 直接转交。转交原因：预审链其余子票（ai4-eex0/he04/5z9e/oebi）已由 hanjiang 收口，本票是预审链最后一张门禁票，转由 hanjiang 统一推进与关闭。正文与验收标准不改写，仅变更归属并记录。
 
 **2026-10-21T23:40:00Z**
 

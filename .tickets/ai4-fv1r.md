@@ -6,7 +6,7 @@ links: [ai4-he04, ai4-5z9e, ai4-oebi, ai4-rlv6, ai4-upsm, ai4-te1v, ai4-dhpv, ai
 created: 2026-10-21T15:36:18Z
 type: epic
 priority: 1
-assignee: Frank Qi
+assignee: hanjiang
 tags: [wayfinder:map, centre-agents, governance]
 ---
 # 中央 Agent 候选预审职能地图
@@ -70,3 +70,7 @@ tags: [wayfinder:map, centre-agents, governance]
 - **「预审报告的追加日志契约」(ai4-oz3s) 已关闭**，结论转载进 `Decisions so far`。这项原先只被视为存储形态的细节，实际定下了三件影响其他子票的事：失效是**追加判定**而非修改旧报告；两套领域库各一张表、不跨领域比较冲突；`rule_set_version` 的规则文件位置留给「中央 Agent 能力接口收口」(ai4-rlv6)。
 - **`ai4-a2ba`、`ai4-8dgd`、`ai4-t2wc` 随之解除阻塞**，进入前沿。
 - 上一轮 09:35 记录里「旧报告标 `stale`」的表述已作废，正确表述是追加 `base_moved` 判定；保留原文以便对照。
+
+**2026-10-25 地图负责人转交（hanjiang 操作，经 Frank Qi 授权）**
+
+身份核对：本票 assignee 已由 Frank Qi 改为 hanjiang；当前分支 `feature/hanjiang`、`git config user.name=hanjiang`，一致。依据 Gitee issue https://gitee.com/qi-yueran/ai4science/issues/IKQ8BD 第 1 条，Frank Qi 授权 hanjiang 直接转交本地图。转交原因：地图子票 eex0/he04/5z9e/oebi/tg3v/8dgd 已由 hanjiang 收口，a2ba/rlv6 同步转交后整张地图由 hanjiang 统一关闭。按地图规则，Decisions so far 由地图 assignee 维护，此后由 hanjiang 更新。正文与已定结论不改写，仅变更归属并记录。

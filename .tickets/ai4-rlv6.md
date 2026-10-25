@@ -6,7 +6,7 @@ links: [ai4-upsm, ai4-5auy, ai4-w73z, ai4-he04, ai4-5z9e, ai4-oebi, ai4-8dgd, ai
 created: 2026-10-21T12:16:16Z
 type: feature
 priority: 1
-assignee: Frank Qi
+assignee: hanjiang
 parent: ai4-fv1r
 tags: [centre-control, centre-agents, interface]
 ---
@@ -63,6 +63,10 @@ tags: [centre-control, centre-agents, interface]
 
 
 ## Notes
+
+**2026-10-25 负责人转交（hanjiang 操作，经 Frank Qi 授权）**
+
+身份核对：本票 assignee 已由 Frank Qi 改为 hanjiang；当前分支 `feature/hanjiang`、`git config user.name=hanjiang`，一致。依据 Gitee issue https://gitee.com/qi-yueran/ai4science/issues/IKQ8BD 第 1 条，Frank Qi 授权 hanjiang 直接转交。转交原因：本票收口的写工具 `append_prereview_log` / `create_merged_candidate` 需落在 hanjiang 已实现的领域管理 MCP 上，转交后由 hanjiang 完成预审链整体收口。正文与已收口结论不改写，仅变更归属并记录。
 
 **2026-10-21T12:48:25Z**
 
