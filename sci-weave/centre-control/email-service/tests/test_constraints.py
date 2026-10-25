@@ -206,6 +206,14 @@ def test_operator_can_read_another_callers_status_without_the_body(tmp_path: Pat
         "notification_id": NOTIFICATION_ID,
         "delivery_status": "sent",
         "attempt_count": 1,
+        "recipients": [
+            {
+                "principal_id": PRINCIPAL_ID,
+                "status": "sent",
+                "attempt_count": 1,
+                "error_summary": None,
+            }
+        ],
     }
     assert error_code(hidden) == "denied"
     assert BODY not in json.dumps(seen)
@@ -335,6 +343,14 @@ def test_failed_status_summary_omits_body_credentials_and_raw_send_error(
         "delivery_status": "permanent_failure",
         "attempt_count": 1,
         "error_summary": "permanent_sender_failure",
+        "recipients": [
+            {
+                "principal_id": PRINCIPAL_ID,
+                "status": "permanent_failure",
+                "attempt_count": 1,
+                "error_summary": "permanent_sender_failure",
+            }
+        ],
     }
     encoded = json.dumps(status)
     assert BODY not in encoded

@@ -200,6 +200,18 @@ running ├→ waiting            （Worker 提问，本轮终止；回答创建
 
 ## Notes
 
+**2026-10-25 就绪状态评估（hanjiang）**
+
+身份核对：本票 assignee 为 hanjiang，当前分支 `feature/hanjiang`、`git config user.name=hanjiang`，一致。
+
+对照两份源码现状评估本规格的实现就绪度，不擅自勾选验收：
+
+- **Centre Agent 侧**（`sci-weave/centre-control/centre-agents/`）已落地 `gateway/mcp`、`gateway/ingest`、`worker` 三个组件：SQLite 状态机与租约在 `gateway/mcp/src/gateway/store.py`，处置面 MCP v1 工具（`query_execution`/`list_pending`/`cancel_execution`，`answer_question`/`review_execution` 返回 `unimplemented`）与 `health` 已在 `app.py`；`submit_owner_command`/`accept` 不存在。2026-10-25 已复跑 `gateway/mcp` 5 项测试通过（修复了 Windows spawn 冷启动导致的 `wait_for` 超时，见 ai4-gt3m）。
+- **研究员套件侧**（`sci-weave/toolkits/researcher-agent-toolkit/deploy-task-agent/`）已落地 `runtime`（资源注册表、四类 workflow 执行器、草稿写入）、`service-template`（gateway/subscriber/worker 三壳）、`custom-mcp/stdio-service` 与 `deploy-task-agent-skills`；Agent 定义、Workflow、MCP 资源为纯配置。`libs/local-agent-libs`/`local-mcp-libs` 支持研究员扩展。
+- **未闭合的验收缺口**：`gateway/subscriber` 的真实 Redpanda 消费、`task_handoff_ready` 触发→`queued`→Worker 拉起→草稿箱写入的端到端链路、以及订阅器侧 `awaiting_workflow_binding` Inbox 与补偿扫描，均依赖 `ai4-te1v`（Frank Qi）消息队列语义收敛后的真实适配器接入。本规格的十项行为验收因此维持未勾选。
+
+结论：规格可作为实现输入已就绪；剩余行为验收由 te1v 收敛后由适配器实现承接，本票暂不关闭。
+
 **2026-10-25T06:58:36Z（转交，hanjiang）**
 
 assignee 由 Frank Qi 转交为 hanjiang。转交原因：按赛程推进安排，hanjiang 接手本票的后续推进与实现收口；原负责人 Frank Qi。转交时间 2026-10-25T06:58:36Z。
