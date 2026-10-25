@@ -6,7 +6,7 @@ links: [ai4-za77, ai4-8aa0, ai4-o2n3]
 created: 2026-10-23T02:18:54Z
 type: feature
 priority: 1
-assignee: Frank Qi
+assignee: hanjiang
 parent: ai4-z3z4
 tags: [toolkit, task-agent, multi-agent, fast-agent, skills, spec, ready-for-agent]
 ---
@@ -47,3 +47,8 @@ tags: [toolkit, task-agent, multi-agent, fast-agent, skills, spec, ready-for-age
 - [ ] 明确单 Worker、单 ExecutionRecord、单最终 draft_id 的多 Agent 运行边界。
 - [ ] 形成可交给后续实现票的目录结构、schema、示例和验证场景。
 
+## Notes
+
+**2026-10-25T07:03:11Z（转交，hanjiang）**
+
+assignee 由 Frank Qi 转交为 hanjiang。转交原因：按赛程推进安排，hanjiang 接手本票的后续推进与实现收口；原负责人 Frank Qi。转交时间 2026-10-25T07:03:11Z。

@@ -6,7 +6,7 @@ links: []
 created: 2026-10-23T16:28:07Z
 type: feature
 priority: 1
-assignee: Frank Qi
+assignee: hanjiang
 parent: ai4-ujvn
 tags: [implementation, centre-control, registery, mcp, audit, ready-for-agent]
 ---
@@ -24,6 +24,10 @@ tags: [implementation, centre-control, registery, mcp, audit, ready-for-agent]
 
 
 ## Notes
+
+**2026-10-25T06:58:36Z（转交，hanjiang）**
+
+assignee 由 Frank Qi 转交为 hanjiang。转交原因：按赛程推进安排，hanjiang 接手本票的后续推进与实现收口；原负责人 Frank Qi。转交时间 2026-10-25T06:58:36Z。
 
 **2026-10-24T01:27:21Z**
 

@@ -6,7 +6,7 @@ links: [ai4-z3z4, ai4-xejt, ai4-lrfz]
 created: 2026-10-23T12:45:00Z
 type: task
 priority: 2
-assignee: Frank Qi
+assignee: hanjiang
 tags: [centre-agents, gateway, mcp, verification]
 ---
 # Centre Agent gateway/mcp 测试在 Windows 复跑失败与看板 Gateway 来源缺口确认
@@ -48,6 +48,10 @@ uv run --locked --package sciweave-task-agent-gateway-mcp python -m unittest dis
 - [ ] 本票结案时记录裁决结论与证据，不留下未验证断言
 
 ## Notes
+
+**2026-10-25T07:03:11Z（转交，hanjiang）**
+
+assignee 由 Frank Qi 转交为 hanjiang。转交原因：按赛程推进安排，hanjiang 接手本票的后续推进与实现收口；原负责人 Frank Qi。转交时间 2026-10-25T07:03:11Z。
 
 **2026-10-23T12:45:00Z**
 

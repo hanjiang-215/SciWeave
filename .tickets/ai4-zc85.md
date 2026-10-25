@@ -6,7 +6,7 @@ links: []
 created: 2026-10-23T14:07:18Z
 type: feature
 priority: 1
-assignee: Frank Qi
+assignee: hanjiang
 parent: ai4-p5f3
 tags: [wayfinder:grilling, centre-control, coordinator, handoff, message-queue]
 ---
@@ -22,3 +22,8 @@ tags: [wayfinder:grilling, centre-control, coordinator, handoff, message-queue]
 
 - 明确 formal_revision_published/根任务触发输入和正式快照查询端口\n- 明确 PendingHandoff/HandoffDispatch 最小 schema、状态迁移和幂等键\n- 明确 task_handoff_ready、human_notification_intent、task_terminal_summary 输出条件\n- 明确无后继、条件未满足、Agent 不可用、查询失败和派发结果未知的区别\n- 明确启动恢复、补偿扫描、重试、死信和不修改正式 Map 边界\n- 形成可供 coordinator 实现票引用的接口与验证契约
 
+## Notes
+
+**2026-10-25T06:58:36Z（转交，hanjiang）**
+
+assignee 由 Frank Qi 转交为 hanjiang。转交原因：按赛程推进安排，hanjiang 接手本票的后续推进与实现收口；原负责人 Frank Qi。转交时间 2026-10-25T06:58:36Z。

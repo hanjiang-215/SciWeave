@@ -6,7 +6,7 @@ links: [ai4-yyy9, ai4-dhpv, ai4-we38, ai4-za77, ai4-fv1r, ai4-0s02, ai4-ujvn, ai
 created: 2026-10-19T07:07:36Z
 type: feature
 priority: 1
-assignee: Frank Qi
+assignee: hanjiang
 parent: ai4-yyy9
 tags: [spec, work-agent, task-agent, fast-agent, ready-for-agent]
 ---
@@ -199,6 +199,10 @@ running ├→ waiting            （Worker 提问，本轮终止；回答创建
 > 增补（2026-10-22）：上面的验收仍描述**一份**运行时的行为。放置另见「源码放置」与 [ADR-0002](../../docs/adr/0002-work-agent-two-codebases.md)。实现时 Centre Agent 与研究员套件各有一份源码，行为都要满足上列验收；套件的组成与启动方式在「建立新 Task Agent 的套件」(ai4-za77)。
 
 ## Notes
+
+**2026-10-25T06:58:36Z（转交，hanjiang）**
+
+assignee 由 Frank Qi 转交为 hanjiang。转交原因：按赛程推进安排，hanjiang 接手本票的后续推进与实现收口；原负责人 Frank Qi。转交时间 2026-10-25T06:58:36Z。
 
 **2026-10-20T07:32:36Z**
 

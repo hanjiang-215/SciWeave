@@ -6,7 +6,7 @@ links: []
 created: 2026-10-23T13:07:08Z
 type: feature
 priority: 1
-assignee: Frank Qi
+assignee: hanjiang
 parent: ai4-p5f3
 tags: [wayfinder:grilling, governance, centre-control, message-queue, mcp]
 ---
@@ -49,5 +49,9 @@ tags: [wayfinder:grilling, governance, centre-control, message-queue, mcp]
 - 形成可供 PO MCP 实现票引用的工具、权限和验证契约
 
 ## Notes
+
+**2026-10-25T07:03:11Z（转交，hanjiang）**
+
+assignee 由 Frank Qi 转交为 hanjiang。转交原因：按赛程推进安排，hanjiang 接手本票的后续推进与实现收口；原负责人 Frank Qi。转交时间 2026-10-25T07:03:11Z。
 
 **2026-10-23**：本轮确认：`request_revision` 必须指定唯一 `repair_owner_id`，可附带参与者；混合候选不可行时允许 PO 指派负责人或直接创建新混合候选；PO 当前通过最高权限 MCP 操作，暂不支持 `defer`。根任务的第一条 `task_handoff_ready` 由 PO 通过 `dispatch_root_task` 发送。正式版本没有当前后继时，系统保留待推进事实并持续检测；确认没有后继时额外发送 `task_terminal_summary` 邮件，后续新增并正式化后自动发送交接消息。后续可扩展 PO MCP 工具，但不得绕过领域治理、队列或存储边界。
