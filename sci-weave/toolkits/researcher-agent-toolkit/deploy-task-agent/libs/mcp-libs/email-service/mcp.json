@@ -1,0 +1,85 @@
+{
+  "name": "email-service",
+  "version": "1.0.0",
+  "description": "Submit one human notification intent and read its delivery status via the authenticated central email-service MCP.",
+  "transport": "streamable-http",
+  "endpoint": {
+    "url_env": "EMAIL_MCP_URL"
+  },
+  "environment": ["EMAIL_MCP_URL", "EMAIL_MCP_TOKEN"],
+  "tools": [
+    {
+      "name": "send_notification",
+      "description": "Accept one human_notification_intent for later delivery. The service resolves recipients by principal_id, sends from the configured public mailbox and returns accepted_for_delivery; success means the intent is queued, not that mail was delivered and never that any domain fact changed.",
+      "input": {
+        "type": "object",
+        "required": [
+          "notification_id",
+          "dedupe_key",
+          "notification_kind",
+          "recipients",
+          "subject",
+          "body",
+          "related",
+          "schema_version"
+        ],
+        "properties": {
+          "notification_id": {"type": "string"},
+          "dedupe_key": {"type": "string"},
+          "notification_kind": {"type": "string"},
+          "recipients": {"type": "array"},
+          "subject": {"type": "string"},
+          "body": {"type": "string"},
+          "related": {"type": "object"},
+          "schema_version": {"type": "string"}
+        }
+      },
+      "output": {"notification_id": "string", "acceptance": "string"},
+      "examples": [
+        {
+          "notification_id": "ntf-draft-1",
+          "dedupe_key": "draft-ready:candidate-9",
+          "notification_kind": "draft_ready",
+          "recipients": [{"principal_id": "person:owner"}],
+          "subject": "Draft is ready for review",
+          "body": "Please review draft candidate-9.",
+          "related": {"mapping_domain_id": "map-1", "candidate_id": "candidate-9"},
+          "schema_version": "1"
+        }
+      ],
+      "allowed": ["reporting execution and review state changes to a human", "asking a human to act through their own harness"],
+      "failures": [
+        "invalid",
+        "dedupe_conflict",
+        "idempotency_conflict",
+        "storage_unavailable",
+        "denied",
+        "contact_missing",
+        "contact_disabled",
+        "principal_not_found",
+        "address_mismatch",
+        "recipient_resolver_unavailable"
+      ]
+    },
+    {
+      "name": "get_notification_status",
+      "description": "Read delivery status for a notification the caller submitted. Ordinary callers only see their own notifications; the response carries delivery_status, attempt_count and a stable error_summary, never the body, credentials or raw sender output.",
+      "input": {
+        "type": "object",
+        "required": ["notification_id"],
+        "properties": {
+          "notification_id": {"type": "string"}
+        }
+      },
+      "output": {"notification_id": "string", "delivery_status": "string", "attempt_count": "integer", "error_summary": "string"},
+      "examples": [{"notification_id": "ntf-draft-1"}],
+      "allowed": ["confirming whether a submitted notification was delivered"],
+      "failures": ["denied", "storage_unavailable"]
+    }
+  ],
+  "notes": [
+    "recipient_resolver_unavailable is temporary: the service still runs an unbound recipient resolver, so notifications fail before persistence until a real Registry contact adapter is wired (tracked separately).",
+    "EMAIL_MCP_URL must point at the /mcp path of the email-service Streamable HTTP endpoint.",
+    "The bearer token maps to one caller_id per researcher, so delivery status stays scoped to that researcher's own notifications."
+  ]
+}
