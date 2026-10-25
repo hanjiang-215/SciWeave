@@ -1,0 +1,3 @@
+# ai4-iebi 的索引归属与简介（人工维护）
+module = "agent"
+summary = "端侧 Task Agent 以 MCP 直连中央 email-service，登记标准卡片并修正读状态审计标记"
