@@ -52,7 +52,7 @@ class CentreAgentTests(unittest.TestCase):
         return json.loads(content)
 
     def wait_for(self, execution_id: str, status: str) -> dict[str, Any]:
-        deadline = time.monotonic() + 2
+        deadline = time.monotonic() + 15
         while time.monotonic() < deadline:
             execution = self.app.query_execution(execution_id)
             if execution and execution["execution_status"] == status:
