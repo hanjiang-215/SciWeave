@@ -10,11 +10,13 @@ boundary.
 
 from __future__ import annotations
 
+import json
 import tempfile
 import threading
 import unittest
 from pathlib import Path
 from typing import Any
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from task_agent_worker.store import ExecutionStore, utc_now
 
@@ -28,6 +30,45 @@ from gateway_subscriber.worker_runner import (
     SubscriberWorkerRunner,
     WorkerRequest,
 )
+from gateway_subscriber.draft_writer import BufferMCPDraftWriter
+
+
+class FakeDraftBufferHttp:
+    """Minimal in-process /mcp stub that answers create_draft with a draft id."""
+
+    def __init__(self) -> None:
+        self.calls: list[dict[str, Any]] = []
+
+    @property
+    def server(self) -> ThreadingHTTPServer:
+        handler = self._handler
+        server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+        server.app = self  # type: ignore[attr-defined]
+        return server
+
+    class _handler(BaseHTTPRequestHandler):
+        def do_POST(self) -> None:  # noqa: N802
+            length = int(self.headers.get("Content-Length", "0"))
+            payload = json.loads(self.rfile.read(length))
+            app = self.server.app  # type: ignore[attr-defined]
+            method = payload.get("method")
+            if method == "tools/call" and payload.get("params", {}).get("name") == "create_draft":
+                arguments = payload["params"]["arguments"]
+                app.calls.append(arguments)  # type: ignore[attr-defined]
+                text = json.dumps({"draft_id": "draft-http-1", "status": "drafting"}, ensure_ascii=False)
+                body = json.dumps(
+                    {"jsonrpc": "2.0", "id": payload.get("id"), "result": {"content": [{"type": "text", "text": text}]}}
+                ).encode()
+            else:
+                body = json.dumps({"jsonrpc": "2.0", "id": payload.get("id"), "result": {}}).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *_: object) -> None:
+            return
 
 
 def task_handoff(
@@ -212,6 +253,45 @@ class SubscriberTests(unittest.TestCase):
         runner.run_once("node-1")
         self.queue.commit()
         self.assertTrue(self.queue.committed)
+
+    def test_buffer_writer_posts_create_draft_and_returns_draft_id(self) -> None:
+        buffer = FakeDraftBufferHttp()
+        server = buffer.server
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        try:
+            writer = BufferMCPDraftWriter(
+                endpoint=f"http://127.0.0.1:{server.server_port}/mcp",
+                token="test-token",
+                namespace="mapping",
+                submitter_id="agent-1",
+            )
+            self.enqueue(task_handoff("node-1", "event-1"))
+            runner = SubscriberWorkerRunner(self.store, self.service, DeterministicRuntime(), writer)
+            outcome = runner.run_once("node-1")
+            self.assertEqual(outcome["status"], "completed")
+            self.assertEqual(outcome["draft_id"], "draft-http-1")
+            self.assertEqual(len(buffer.calls), 1)
+            call = buffer.calls[0]
+            self.assertEqual(call["namespace"], "mapping")
+            self.assertEqual(call["source_execution_record_id"], outcome["execution_id"])
+            self.assertEqual(call["source_task_node_id"], "node-1")
+        finally:
+            server.shutdown()
+            server.server_close()
+
+    def test_buffer_writer_unreachable_endpoint_fails_draft(self) -> None:
+        writer = BufferMCPDraftWriter(
+            endpoint="http://127.0.0.1:1/mcp",
+            token="test-token",
+            namespace="mapping",
+            submitter_id="agent-1",
+            timeout_seconds=1.0,
+        )
+        self.enqueue(task_handoff("node-1", "event-1"))
+        runner = SubscriberWorkerRunner(self.store, self.service, DeterministicRuntime(), writer)
+        outcome = runner.run_once("node-1")
+        self.assertEqual(outcome["status"], "failed")
+        self.assertEqual(outcome["error_summary"], "draft_submission_failed")
 
 
 if __name__ == "__main__":
