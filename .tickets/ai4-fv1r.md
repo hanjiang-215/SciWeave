@@ -21,6 +21,14 @@ tags: [wayfinder:map, centre-agents, governance]
 
 领域：中央 Agent 的职责边界、预审产物与调用面。
 
+**2026-10-25 地图状态更新（hanjiang，地图 owner）**
+
+身份核对：本票 assignee 为 hanjiang，当前分支 `feature/hanjiang`、`git config user.name=hanjiang`，一致。
+
+- `ai4-rlv6`（中央 Agent 能力接口收口）2026-10-25 关闭，结论已转载进 `Decisions so far`（6 读 + 2 写工具面、三组能力名、鉴权与无私有审计通道、Gateway MCP 只返修）。
+- `ai4-a2ba`（预审门禁）规格层已收敛（纳入范围、去抖、事件载荷、单候选门禁、不用租约），但实现类验收阻塞于 `ai4-te1v`（Frank Qi），已提 issue `IKQ8HY`。
+- 地图仍 open：`ai4-a2ba` 实现验收未闭合（阻塞于 te1v）。其余预审链子票 `eex0/he04/5z9e/oebi/tg3v/8dgd/5auy` 均已关闭。
+
 讨论基线（2026-10-21 第五轮，已由用户逐条裁决）：
 
 - 中央 Agent 只保留预审一类职能，其余能力一律不加。
@@ -42,6 +50,7 @@ tags: [wayfinder:map, centre-agents, governance]
 - [中央服务留痕工具：写入方统一调用的审计接口](ai4-upsm.md)：统一发生在**接口层**而非存储层。2026-10-22 修订后，留痕只记接口层对外调用（调用者、通道、服务、工具、目标、结果、耗时），不记业务语义；中央一个审计库、路径由环境变量提供；读操作单条 fail-open，写操作两阶段 fail-closed；包位置 `sci-weave/centre-control/shared/audit-trail`。规格见 [中央留痕工具共享包实现规格](ai4-tg3v.md)，代码落地见 [留痕包迁移到 centre-control 并改造为接口层调用账本](ai4-gvan.md)。领域审计表与调用账本作用域分开、互不写入。
 - [预审报告的追加日志契约](ai4-oz3s.md)：两套领域 SQLite 各一张报告表与一张失效判定表，字段对齐但不共享；唯一键 `(candidate_id, candidate_head, rule_set_version)` 保证重审幂等；失效用**追加判定**（`head_moved` / `base_moved`）表达，报告行只读，当前有效报告由最新判定推出；冲突矩阵只在同领域内比较；规则版本无法解析时拒写。
 - [注册表登记中央 Agent 与其开放面](ai4-t2wc.md)：注册表加 `kind` 区分 `endpoint` 与 `centre`，中央类目所属主体留空，不增加规则集版本等运行时字段，登记仍不参与鉴权。开放面按**能力名**计、平铺互不包含：6 个读工具（两领域各 3 个）用 `centre`；`append_prereview_log` 用 `prereview_log`；`create_merged_candidate` 用 `merged_candidate`，两者都以必需领域参数区分领域。两领域共 11 个写工具（提交候选、预审、正式化、对账、Wiki 审核决定）全部不授予中央 Agent。Project Owner 联系人字段移出本票，归 [端侧 Agent 的注册记录与中央服务开放面](ai4-ujvn.md)。摘除既有 `centre` 授权并补两个写工具由 [收紧管理 MCP 的中央 Agent 开放面并补两个预审写工具](ai4-5auy.md) 实现。
+- [中央 Agent 能力接口收口](ai4-rlv6.md)：2026-10-25 关闭。接口形态定稿：6 读 + 2 写工具面，`centre`/`prereview_log`/`merged_candidate` 三组能力名分开；Bearer→actor 注入、服务端鉴权，中央 Agent 进注册表但只留痕不参与鉴权；无写审计私有通道；Gateway MCP 只返修不派发（任务由消息驱动）。面向实现者的说明落在 `sci-weave/centre-control/centre-agents/README.md`。剩余门禁语义由 [预审门禁、触发范围与故障处置](ai4-a2ba.md) 承载，其规格层已收敛、实现类验收阻塞于 `ai4-te1v`（issue `IKQ8HY`）。
 
 ## Not yet specified
 
