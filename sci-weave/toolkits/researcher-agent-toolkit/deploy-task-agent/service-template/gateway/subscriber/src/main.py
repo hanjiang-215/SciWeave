@@ -23,8 +23,8 @@ def required(name: str) -> str:
 
 
 def build_queue(agent_id: str):
-    bootstrap = os.environ.get("SCIWEAVE_QUEUE_BOOTSTRAP_SERVERS", "").strip()
-    group = os.environ.get("SCIWEAVE_QUEUE_GROUP_ID", "").strip()
+    bootstrap = os.environ.get("QUEUE_URL", "").strip()
+    group = os.environ.get("QUEUE_CONSUMER_GROUP", "").strip()
     if bootstrap and group:
         return KafkaQueueClient(bootstrap, group)
     from work_agent_runtime import FakeQueue
