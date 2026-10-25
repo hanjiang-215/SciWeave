@@ -332,6 +332,21 @@ def test_access_ledger_mentions_notification_but_not_body_or_credentials(email_m
     assert RESOLVED_EMAIL not in leaked
 
 
+def test_read_status_is_logged_as_attempted_not_as_a_write(email_mcp):
+    accept_draft(email_mcp)
+    wait_until_sent(email_mcp)
+    audit = sqlite3.connect(email_mcp["audit_path"])
+    audit.row_factory = sqlite3.Row
+    try:
+        calls = query_audit_calls(audit, service="email-service", tool="get_notification_status")
+    finally:
+        audit.close()
+    assert calls
+    assert {row["phase"] for row in calls} == {"attempted"}
+    # A single-phase read attempt does not claim an outcome; only writes do.
+    assert {row["result"] for row in calls} == {"unknown"}
+
+
 def test_domain_facts_stay_unchanged_and_no_handoff_tool_is_exposed(email_mcp):
     listed = list_tools(email_mcp, "gateway")
     assert {tool.name for tool in listed.tools} == {

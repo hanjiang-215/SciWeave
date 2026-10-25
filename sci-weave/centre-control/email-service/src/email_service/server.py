@@ -159,7 +159,7 @@ def create_email_server(
             "notification",
             notification_id,
             lambda: service.status(caller, notification_id),
-            write=True,
+            write=False,
         )
 
     @server.tool(description="Return authenticated component status for delivery, audit, and mailbox.")

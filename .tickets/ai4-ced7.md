@@ -1,0 +1,55 @@
+---
+id: ai4-ced7
+status: open
+deps: []
+links: [ai4-iebi, ai4-s2nb, ai4-cdia]
+created: 2026-10-25T09:20:00Z
+type: feature
+priority: 3
+assignee: Frank Qi
+parent: ai4-yyy9
+tags: [implementation, task-agent, mcp, mcp-libs, config]
+---
+# 记录 mcp-libs 标准卡片工具面漂移并延后补齐
+
+标准 MCP 卡片与服务的真实工具面已经不一致，本票登记这个事实与已接受的风险，补齐动作延后。
+
+## Design
+
+**漂移事实（2026-10-25 核对）。**
+
+| 卡片 | 卡片工具数 | 服务实际工具数 | 卡片缺 |
+| --- | ---: | ---: | --- |
+| `research-mapping` | 7 | 10 | `list_reviewable_candidates`、`append_prereview_log`、`create_merged_candidate` |
+| `research-wiki` | 8 | 11 | `list_reviewable_wiki_candidates`、`append_prereview_log`、`create_merged_candidate` |
+| `draft-buffer` | 7 | 7 | 无 |
+| `email-service` | 2 | 3 | `health`（有意不列） |
+
+三个缺失工具都是 `ai4-5auy` 之后新增的，且其中两个写工具的可用范围是中央 Agent 的能力档。
+
+**为什么漂移没有造成故障。** `work_agent_runtime.mcp_resources.load_mcp_registry()` 只读取卡片文件，没有任何 MCP 客户端，也不调用 `tools/list`；`workflow_to_fast_agent_input()` 只输出资源名字列表。卡片目前只被当作目录，未参与真实调用，所以缺工具不会让端侧调不到东西——因为它现在根本调不到任何东西。
+
+**为什么延后补齐。** 补齐需要逐条从服务端 `TOOL_DEFINITIONS` 抄录参数与描述，而运行时接入 MCP 客户端后会直接从 `tools/list` 得到完整工具面，届时手抄的清单会被替换掉。在客户端落地前手工补一次，收益只在于让静态目录更完整。
+
+**已接受的代价。** `runtime/tests/test_standard_mcp_cards.py` 里的期望清单与卡片一致，因此测试仍为绿，无法反映漂移。下一个读卡片的人会把 7 个工具当成全部。这条风险在本票关闭前一直存在。
+
+**不做。** 不写校验脚本（用户明确「先手动对齐，不用脚本」）；不改服务端能力档；不引入 MCP 客户端依赖。
+
+## Acceptance Criteria
+
+- [ ] `research-mapping/mcp.json` 与 `research-wiki/mcp.json` 的工具集合等于各自服务 `TOOL_DEFINITIONS` 的工具集合。
+- [ ] 新增条目的必填参数与描述取自服务端定义，不自行改写语义。
+- [ ] `runtime/tests/test_standard_mcp_cards.py` 的期望清单同步为四张卡片的当前工具集合。
+- [ ] runtime 全部测试通过；`git diff --check` 通过。
+
+## Notes
+
+**2026-10-25 登记与延后决定（Frank Qi）**
+
+身份核对：本票 assignee 为 Frank Qi，当前分支 `feature/frank-qi`、`git config user.name=Frank Qi`，一致。
+
+出处：2026-10-25 与用户逐条裁决。用户先确认「MCP 提供 URL 后能否查询到所有工具」，核对结果是端侧 runtime 尚未实现该能力（无 MCP 客户端、不调用 `tools/list`），随后裁决「先手动对齐，不用脚本」，最后对本票的实际补齐动作裁决为「后面再补」。
+
+因此本票当前只承载事实与风险登记，不含代码改动。补齐时机取决于 `work_agent_runtime` 接入 MCP 客户端：「Agent Kit 与端侧运行时接入」推进后，工具面可由 `tools/list` 实时获得，本票的补齐项应随之重新评估，而不是照抄。
+
+现有 `email-service` 卡片（`ai4-iebi`）已经与真实工具面一致，只缺有意排除的 `health`。

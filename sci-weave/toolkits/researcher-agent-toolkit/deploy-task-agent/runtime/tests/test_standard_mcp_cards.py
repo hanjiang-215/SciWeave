@@ -12,6 +12,9 @@ EXPECTED = {
         "create_draft", "update_draft", "submit_draft", "list_drafts",
         "read_draft", "review_draft", "mark_promoted",
     },
+    "email-service": {
+        "send_notification", "get_notification_status",
+    },
     "research-mapping": {
         "get_formal_mapping", "list_candidates", "submit_candidate",
         "preview_candidate", "record_review", "formalize_candidate",
@@ -43,6 +46,8 @@ class StandardMCPCardTests(unittest.TestCase):
         registry = load_mcp_registry(standard_mcp_libs=str(MCP_LIBS))
         catalog = registry.catalog()
         self.assertIn("DRAFT_BUFFER_MCP_URL", catalog["draft-buffer"]["environment"])
+        self.assertIn("EMAIL_MCP_URL", catalog["email-service"]["environment"])
+        self.assertIn("EMAIL_MCP_TOKEN", catalog["email-service"]["environment"])
         self.assertIn("RESEARCH_MAPPING_MCP_URL", catalog["research-mapping"]["environment"])
         self.assertIn("LLM_WIKI_MCP_URL", catalog["research-wiki"]["environment"])
 
