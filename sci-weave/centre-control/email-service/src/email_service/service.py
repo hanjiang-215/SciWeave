@@ -57,6 +57,36 @@ _FAILURE_SUMMARIES = {
 }
 
 
+def _initial_recipient_progress(recipients: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    progress: list[dict[str, Any]] = []
+    for item in recipients:
+        principal_id = item.get("principal_id")
+        if not isinstance(principal_id, str) or not principal_id:
+            continue
+        progress.append(
+            {
+                "principal_id": principal_id,
+                "email": item.get("email", ""),
+                "status": "pending",
+                "attempt_count": 0,
+                "error_summary": None,
+            }
+        )
+    return progress
+
+
+def _load_recipient_progress(row: sqlite3.Row) -> list[dict[str, Any]]:
+    raw = row["recipient_progress_json"]
+    if raw:
+        try:
+            parsed = json.loads(raw)
+            if isinstance(parsed, list):
+                return parsed
+        except json.JSONDecodeError:
+            pass
+    return _initial_recipient_progress(json.loads(row["recipients_json"]))
+
+
 class EmailDeliveryService:
     def __init__(
         self,
@@ -97,7 +127,8 @@ class EmailDeliveryService:
               claim_token TEXT,
               next_attempt_at TEXT,
               created_at TEXT NOT NULL,
-              updated_at TEXT NOT NULL
+              updated_at TEXT NOT NULL,
+              recipient_progress_json TEXT
             );
             """
         )
@@ -112,6 +143,8 @@ class EmailDeliveryService:
             self.conn.execute("ALTER TABLE notification_delivery ADD COLUMN next_attempt_at TEXT")
         if "error_summary" not in present:
             self.conn.execute("ALTER TABLE notification_delivery ADD COLUMN error_summary TEXT")
+        if "recipient_progress_json" not in present:
+            self.conn.execute("ALTER TABLE notification_delivery ADD COLUMN recipient_progress_json TEXT")
         self.conn.commit()
 
     def accept(self, caller: Caller, intent: dict[str, Any]) -> dict[str, str]:
@@ -150,8 +183,8 @@ class EmailDeliveryService:
                 INSERT INTO notification_delivery (
                   notification_id, caller_id, dedupe_key, notification_kind, subject, body,
                   related_json, schema_version, recipients_json, delivery_status, attempt_count,
-                  created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 0, ?, ?)
+                  recipient_progress_json, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 0, ?, ?, ?)
                 """,
                 (
                     notification_id,
@@ -163,6 +196,7 @@ class EmailDeliveryService:
                     json.dumps(intent["related"], ensure_ascii=False, sort_keys=True),
                     intent["schema_version"],
                     json.dumps(resolved, ensure_ascii=False),
+                    json.dumps(_initial_recipient_progress(resolved), ensure_ascii=False),
                     now,
                     now,
                 ),
@@ -241,7 +275,8 @@ class EmailDeliveryService:
         try:
             row = self.conn.execute(
                 """
-                SELECT caller_id, delivery_status, attempt_count, error_summary
+                SELECT caller_id, delivery_status, attempt_count, error_summary,
+                       recipients_json, recipient_progress_json
                 FROM notification_delivery
                 WHERE notification_id = ?
                 """,
@@ -251,10 +286,40 @@ class EmailDeliveryService:
             raise EmailServiceError("storage_unavailable") from None
         if row is None or (caller.caller_type != "operator" and row["caller_id"] != caller.caller_id):
             raise EmailServiceError("denied")
+        progress_by_id = {
+            item["principal_id"]: item
+            for item in _load_recipient_progress(row)
+            if isinstance(item, dict) and isinstance(item.get("principal_id"), str)
+        }
+        recipients: list[dict[str, Any]] = []
+        for raw in json.loads(row["recipients_json"]):
+            principal_id = raw.get("principal_id")
+            if not isinstance(principal_id, str) or not principal_id:
+                continue
+            item = progress_by_id.get(principal_id)
+            if item is None:
+                recipients.append(
+                    {
+                        "principal_id": principal_id,
+                        "status": "pending",
+                        "attempt_count": 0,
+                        "error_summary": None,
+                    }
+                )
+            else:
+                recipients.append(
+                    {
+                        "principal_id": item["principal_id"],
+                        "status": item["status"],
+                        "attempt_count": item["attempt_count"],
+                        "error_summary": item.get("error_summary"),
+                    }
+                )
         payload = {
             "notification_id": notification_id,
             "delivery_status": row["delivery_status"],
             "attempt_count": row["attempt_count"],
+            "recipients": recipients,
         }
         if row["delivery_status"] in _FAILURE_SUMMARIES:
             payload["error_summary"] = row["error_summary"] or "send_failed"
@@ -277,9 +342,27 @@ class EmailDeliveryService:
         claimed = self._claim_next(startup=startup, skip=skip)
         if claimed is None:
             return None
-        notification_id, attempt_count, claim_token, subject, body, recipients = claimed
-        try:
-            for recipient in recipients:
+        notification_id, claim_token, subject, body, recipients, progress = claimed
+        for recipient in recipients:
+            principal_id = recipient.get("principal_id")
+            item = next((p for p in progress if p.get("principal_id") == principal_id), None)
+            if item is None:
+                item = {
+                    "principal_id": principal_id,
+                    "email": recipient.get("email", ""),
+                    "status": "pending",
+                    "attempt_count": 0,
+                    "error_summary": None,
+                }
+                progress.append(item)
+            if item["status"] in ("sent", "permanent_failure"):
+                continue
+            is_final = item["attempt_count"] + 1 >= self.retry.max_attempts
+            item["attempt_count"] += 1
+            item["status"] = "sending"
+            item["error_summary"] = None
+            self._persist_recipient_progress(notification_id, claim_token, progress)
+            try:
                 self.sender.send(
                     OutboundMail(
                         from_address=self.mailbox.from_address,
@@ -293,22 +376,55 @@ class EmailDeliveryService:
                         smtp_password=self.mailbox.smtp_password,
                     )
                 )
-        except TransientSenderFailure:
-            self._settle(notification_id, claim_token, "retryable", _later(self._backoff(attempt_count)))
-        except PermanentSenderFailure:
-            self._settle(notification_id, claim_token, "permanent_failure", None)
-        except NonRetryableContentError:
-            self._settle(notification_id, claim_token, "invalid", None)
-        else:
-            self._settle(notification_id, claim_token, "sent", None)
+            except TransientSenderFailure:
+                if is_final:
+                    item["status"] = "permanent_failure"
+                    item["error_summary"] = "max_attempts_exceeded"
+                else:
+                    item["status"] = "retryable"
+                    item["error_summary"] = "transient_sender_failure"
+            except PermanentSenderFailure:
+                item["status"] = "permanent_failure"
+                item["error_summary"] = "permanent_sender_failure"
+            except NonRetryableContentError:
+                item["status"] = "permanent_failure"
+                item["error_summary"] = "non_retryable_content"
+            except EmailServiceError:
+                item["status"] = "permanent_failure"
+                item["error_summary"] = "sender_failure"
+            except Exception:
+                item["status"] = "permanent_failure"
+                item["error_summary"] = "sender_failure"
+            else:
+                item["status"] = "sent"
+                item["error_summary"] = None
+            self._persist_recipient_progress(notification_id, claim_token, progress)
+        self._settle_notification(notification_id, claim_token, progress)
         return notification_id
 
-    def _claim_next(self, *, startup: bool, skip: set[str]) -> tuple[str, int, str, str, str, list] | None:
+    def _persist_recipient_progress(
+        self, notification_id: str, claim_token: str, progress: list[dict[str, Any]]
+    ) -> None:
+        max_attempts = max((item["attempt_count"] for item in progress), default=0)
+        with self.lock:
+            self.conn.execute(
+                """
+                UPDATE notification_delivery
+                SET recipient_progress_json = ?, attempt_count = ?, updated_at = ?
+                WHERE notification_id = ? AND claim_token = ? AND delivery_status = 'sending'
+                """,
+                (json.dumps(progress, ensure_ascii=False), max_attempts, _now(), notification_id, claim_token),
+            )
+            self.conn.commit()
+
+    def _claim_next(
+        self, *, startup: bool, skip: set[str]
+    ) -> tuple[str, str, str, str, list, list] | None:
         with self.lock:
             rows = self.conn.execute(
                 """
-                SELECT notification_id, subject, body, recipients_json, delivery_status,
-                       attempt_count, next_attempt_at, claim_token, created_at, updated_at
+                SELECT notification_id, subject, body, recipients_json, recipient_progress_json,
+                       delivery_status, attempt_count, next_attempt_at, claim_token, created_at, updated_at
                 FROM notification_delivery
                 ORDER BY created_at
                 """
@@ -317,27 +433,26 @@ class EmailDeliveryService:
             for row in rows:
                 if row["notification_id"] in skip or not self._recoverable(row, now, startup=startup):
                     continue
-                attempt_count = row["attempt_count"] + 1
                 claim_token = uuid.uuid4().hex
                 cursor = self.conn.execute(
                     """
                     UPDATE notification_delivery
-                    SET delivery_status = 'sending', attempt_count = ?, claim_token = ?,
+                    SET delivery_status = 'sending', claim_token = ?,
                         next_attempt_at = NULL, updated_at = ?
                     WHERE notification_id = ? AND delivery_status = ? AND updated_at = ?
                     """,
-                    (attempt_count, claim_token, now, row["notification_id"], row["delivery_status"], row["updated_at"]),
+                    (claim_token, now, row["notification_id"], row["delivery_status"], row["updated_at"]),
                 )
                 self.conn.commit()
                 if cursor.rowcount != 1:
                     continue
                 return (
                     row["notification_id"],
-                    attempt_count,
                     claim_token,
                     row["subject"],
                     row["body"],
                     json.loads(row["recipients_json"]),
+                    _load_recipient_progress(row),
                 )
         return None
 
@@ -356,18 +471,39 @@ class EmailDeliveryService:
         due = row["next_attempt_at"]
         return due is None or due <= now
 
-    def _settle(self, notification_id: str, claim_token: str, status: str, next_attempt_at: str | None) -> None:
+    def _settle_notification(
+        self, notification_id: str, claim_token: str, progress: list[dict[str, Any]]
+    ) -> None:
+        statuses = [item["status"] for item in progress]
+        max_attempts = max((item["attempt_count"] for item in progress), default=0)
+        if all(status == "sent" for status in statuses):
+            status, error_summary, next_attempt_at = "sent", None, None
+        elif any(status in ("retryable", "pending", "sending") for status in statuses):
+            status, error_summary = "retryable", "transient_sender_failure"
+            next_attempt_at = _later(self._backoff(max_attempts))
+        else:
+            status = "permanent_failure"
+            failed = [item["error_summary"] for item in progress if item["status"] == "permanent_failure"]
+            distinct = set(failed)
+            if len(distinct) == 1 and None not in distinct:
+                error_summary = distinct.pop()
+            else:
+                error_summary = "permanent_sender_failure"
+            next_attempt_at = None
         with self.lock:
             self.conn.execute(
                 """
                 UPDATE notification_delivery
-                SET delivery_status = ?, error_summary = ?, next_attempt_at = ?, claim_token = NULL, updated_at = ?
+                SET delivery_status = ?, error_summary = ?, attempt_count = ?, next_attempt_at = ?,
+                    recipient_progress_json = ?, claim_token = NULL, updated_at = ?
                 WHERE notification_id = ? AND claim_token = ? AND delivery_status = 'sending'
                 """,
                 (
                     status,
-                    _FAILURE_SUMMARIES.get(status),
+                    error_summary,
+                    max_attempts,
                     next_attempt_at,
+                    json.dumps(progress, ensure_ascii=False),
                     _now(),
                     notification_id,
                     claim_token,

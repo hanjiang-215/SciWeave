@@ -1,6 +1,6 @@
 ---
 id: ai4-w4su
-status: open
+status: closed
 deps: [ai4-ujvn]
 links: []
 created: 2026-10-23T16:28:07Z
@@ -20,10 +20,32 @@ tags: [implementation, centre-control, registery, mcp, audit, ready-for-agent]
 
 ## Acceptance Criteria
 
-- 符合子项目规范，提供 pyproject.toml、uv.lock、.env.example、src/main.py、src/ 和 tests/\n- 认证 MCP 工具完成 Principal、Workflow Agent、Agent Instance 登记与查询；必须使用官方 Python mcp SDK/标准 FastMCP，不得以自写 JSON-RPC 兼容层替代\n- MCP 使用 Streamable HTTP，健康检查提供独立 HTTP `/health`，并验证 `tools/list`/`tools/call` 行为\n- 支持状态标记/恢复、历史保留和多实例，同一 idempotency_key 幂等，冲突返回稳定错误\n- get_principal_contact 返回当前有效联系人和稳定的缺失/禁用/不可用错误\n- Registry 不保存 executor_refs、TaskNode 集合、授权清单、凭据或主机地址\n- 所有 MCP 访问通过 shared audit-trail 留痕，登记事实与访问账本分开\n- 研究员、Project Owner、Centre 服务和 email-service 的工具级开放面有行为测试\n- health 提供安全的服务/存储状态，失败不修改正式 Map\n- 使用临时 SQLite 和 Fake audit/调用边界完成测试，不依赖真实凭据或固定端口\n- 完成 uv sync、测试、compileall、README 和验证证据回写本票 Notes
+- [x] 符合子项目规范，提供 pyproject.toml、uv.lock、.env.example、src/main.py、src/ 和 tests/
+- [x] 认证 MCP 工具完成 Principal、Workflow Agent、Agent Instance 登记与查询；必须使用官方 Python mcp SDK/标准 FastMCP，不得以自写 JSON-RPC 兼容层替代
+- [x] MCP 使用 Streamable HTTP，健康检查提供独立 HTTP `/health`，并验证 `tools/list`/`tools/call` 行为
+- [x] 支持状态标记/恢复、历史保留和多实例，同一 idempotency_key 幂等，冲突返回稳定错误
+- [x] get_principal_contact 返回当前有效联系人和稳定的缺失/禁用/不可用错误
+- [x] Registry 不保存 executor_refs、TaskNode 集合、授权清单、凭据或主机地址
+- [x] 所有 MCP 访问通过 shared audit-trail 留痕，登记事实与访问账本分开
+- [x] 研究员、Project Owner、Centre 服务和 email-service 的工具级开放面有行为测试
+- [x] health 提供安全的服务/存储状态，失败不修改正式 Map
+- [x] 使用临时 SQLite 和 Fake audit/调用边界完成测试，不依赖真实凭据或固定端口
+- [x] 完成 uv sync、测试、compileall、README 和验证证据回写本票 Notes
 
 
 ## Notes
+
+**2026-10-25T07:57:00Z（收尾验收，hanjiang）**
+
+身份核对：本票 assignee 为 hanjiang，当前分支 `feature/hanjiang`、`git config user.name=hanjiang`，一致。
+
+全部 11 条验收已勾选，本票关闭。收尾时在 Windows 复跑 `uv run --env-file .env.example pytest -q`（14 passed）与 `compileall` 通过时，修复了一处 Windows 特有的测试问题：
+
+- `tests/test_http.py::test_audit_storage_failure_makes_both_health_checks_unavailable` 原实现用 `Path.write_bytes` 覆盖 `audit.sqlite` 及其 `-wal`/`-shm` sidecar 模拟存储损坏。审计库以 WAL 模式打开，`-shm` 文件被运行中 server 的 SQLite 连接独占，Windows 上 `write_bytes` 抛 `OSError: [Errno 22] Invalid argument`，测试失败（Linux 不受影响）。
+- 改为通过同进程的第二个 SQLite 连接对同一文件 `DROP TABLE audit_call`，server 持有连接下一次 `SELECT 1 FROM audit_call` 即抛 `no such table`，`_storage_ready` 判 false，两个 health 入口（HTTP 503 + MCP `registry_unavailable`）行为断言不变，且不改正式 Map 的断言保持。
+- 实验确认仅覆盖主文件不足以触发失败：WAL 连接持缓存仍可查询；drop 表方案跨平台稳定。产品代码未改动，只改了测试的损坏模拟方式。
+
+验证命令与结果：`uv run --env-file .env.example pytest -q` → 14 passed；`uv run --env-file .env.example python -m compileall -q src tests` → 通过。
 
 **2026-10-25T06:58:36Z（转交，hanjiang）**
 

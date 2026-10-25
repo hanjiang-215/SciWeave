@@ -1,0 +1,370 @@
+from __future__ import annotations
+
+import json
+import sqlite3
+import uuid
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from typing import Any
+
+PENDING_WAITING = "waiting"
+PENDING_READY = "ready"
+PENDING_DISPATCHED_UNKNOWN = "dispatched_unknown"
+PENDING_DONE = "done"
+PENDING_SUPERSEDED = "superseded"
+PENDING_FAILED = "failed"
+
+DISPATCH_CREATED = "created"
+DISPATCH_PUBLISHED = "published"
+DISPATCH_RESULT_UNKNOWN = "result_unknown"
+DISPATCH_FAILED = "failed"
+DISPATCH_DEAD = "dead"
+
+MSG_HANDOFF_READY = "task_handoff_ready"
+MSG_HUMAN_NOTIFICATION = "human_notification_intent"
+MSG_TERMINAL_SUMMARY = "task_terminal_summary"
+
+
+def now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="microseconds").replace("+00:00", "Z")
+
+
+@dataclass(frozen=True)
+class PendingHandoff:
+    pending_handoff_id: str
+    mapping_domain_id: str
+    task_node_id: str
+    target_node_version_ref: str
+    upstream_source_refs: tuple[tuple[str, str], ...]
+    executor_agent_id: str | None
+    status: str
+    last_trigger_revision_id: str | None
+    created_at: str
+    updated_at: str
+
+
+@dataclass(frozen=True)
+class HandoffDispatch:
+    dispatch_id: str
+    pending_handoff_id: str
+    dedupe_key: str
+    message_type: str
+    target_agent_id: str | None
+    status: str
+    attempt_count: int
+    error_summary: str | None
+    created_at: str
+    updated_at: str
+
+
+class CoordinatorStore:
+    """SQLite state store for PendingHandoff, HandoffDispatch, completed facts and domain state.
+
+    This store is owned by the coordinator and physically isolated from the domain
+    SQLite/TerminusDB stores; the coordinator never opens those stores directly.
+    """
+
+    def __init__(self, connection: sqlite3.Connection) -> None:
+        self.conn = connection
+        self.conn.row_factory = sqlite3.Row
+        self.conn.execute("PRAGMA busy_timeout = 5000")
+        self.conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS pending_handoff (
+              pending_handoff_id TEXT PRIMARY KEY,
+              mapping_domain_id TEXT NOT NULL,
+              task_node_id TEXT NOT NULL,
+              target_node_version_ref TEXT NOT NULL,
+              upstream_source_refs TEXT NOT NULL,
+              executor_agent_id TEXT,
+              status TEXT NOT NULL,
+              last_trigger_revision_id TEXT,
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL,
+              UNIQUE (mapping_domain_id, task_node_id, target_node_version_ref)
+            );
+            CREATE TABLE IF NOT EXISTS handoff_dispatch (
+              dispatch_id TEXT PRIMARY KEY,
+              pending_handoff_id TEXT NOT NULL,
+              dedupe_key TEXT NOT NULL,
+              message_type TEXT NOT NULL,
+              target_agent_id TEXT,
+              status TEXT NOT NULL,
+              attempt_count INTEGER NOT NULL,
+              error_summary TEXT,
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL,
+              UNIQUE (dedupe_key)
+            );
+            CREATE TABLE IF NOT EXISTS completed_fact (
+              mapping_domain_id TEXT NOT NULL,
+              task_node_id TEXT NOT NULL,
+              version_ref TEXT NOT NULL,
+              completed_at TEXT NOT NULL,
+              PRIMARY KEY (mapping_domain_id, task_node_id, version_ref)
+            );
+            CREATE TABLE IF NOT EXISTS domain_state (
+              mapping_domain_id TEXT PRIMARY KEY,
+              latest_formal_revision_id TEXT NOT NULL,
+              updated_at TEXT NOT NULL
+            );
+            """
+        )
+        self.conn.commit()
+
+    def upsert_pending_handoff(
+        self,
+        mapping_domain_id: str,
+        task_node_id: str,
+        target_node_version_ref: str,
+        upstream_source_refs: tuple[tuple[str, str], ...],
+        executor_agent_id: str | None,
+        status: str,
+        trigger_revision_id: str | None,
+    ) -> PendingHandoff:
+        now = now_iso()
+        existing = self.get_pending_handoff(mapping_domain_id, task_node_id, target_node_version_ref)
+        if existing is not None:
+            self.conn.execute(
+                """
+                UPDATE pending_handoff
+                SET upstream_source_refs = ?, executor_agent_id = ?, status = ?,
+                    last_trigger_revision_id = ?, updated_at = ?
+                WHERE pending_handoff_id = ?
+                """,
+                (
+                    json.dumps(list(upstream_source_refs)),
+                    executor_agent_id,
+                    status,
+                    trigger_revision_id,
+                    now,
+                    existing.pending_handoff_id,
+                ),
+            )
+            self.conn.commit()
+            return self.get_pending_handoff(mapping_domain_id, task_node_id, target_node_version_ref)
+        pending_handoff_id = uuid.uuid4().hex
+        self.conn.execute(
+            """
+            INSERT INTO pending_handoff (
+              pending_handoff_id, mapping_domain_id, task_node_id, target_node_version_ref,
+              upstream_source_refs, executor_agent_id, status, last_trigger_revision_id,
+              created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                pending_handoff_id,
+                mapping_domain_id,
+                task_node_id,
+                target_node_version_ref,
+                json.dumps(list(upstream_source_refs)),
+                executor_agent_id,
+                status,
+                trigger_revision_id,
+                now,
+                now,
+            ),
+        )
+        self.conn.commit()
+        return self.get_pending_handoff(mapping_domain_id, task_node_id, target_node_version_ref)
+
+    def get_pending_handoff(
+        self, mapping_domain_id: str, task_node_id: str, target_node_version_ref: str
+    ) -> PendingHandoff | None:
+        row = self.conn.execute(
+            """
+            SELECT * FROM pending_handoff
+            WHERE mapping_domain_id = ? AND task_node_id = ? AND target_node_version_ref = ?
+            """,
+            (mapping_domain_id, task_node_id, target_node_version_ref),
+        ).fetchone()
+        return self._row_to_pending(row)
+
+    def get_pending_handoff_by_id(self, pending_handoff_id: str) -> PendingHandoff | None:
+        row = self.conn.execute(
+            "SELECT * FROM pending_handoff WHERE pending_handoff_id = ?", (pending_handoff_id,)
+        ).fetchone()
+        return self._row_to_pending(row)
+
+    def list_pending_handoffs(self, statuses: tuple[str, ...] | None = None) -> list[PendingHandoff]:
+        if statuses is None:
+            rows = self.conn.execute("SELECT * FROM pending_handoff ORDER BY created_at").fetchall()
+        else:
+            placeholders = ", ".join("?" for _ in statuses)
+            rows = self.conn.execute(
+                f"SELECT * FROM pending_handoff WHERE status IN ({placeholders}) ORDER BY created_at",
+                statuses,
+            ).fetchall()
+        return [self._row_to_pending(row) for row in rows]
+
+    def set_pending_handoff_status(
+        self,
+        mapping_domain_id: str,
+        task_node_id: str,
+        target_node_version_ref: str,
+        status: str,
+        trigger_revision_id: str | None = None,
+    ) -> PendingHandoff | None:
+        now = now_iso()
+        self.conn.execute(
+            """
+            UPDATE pending_handoff
+            SET status = ?, last_trigger_revision_id = COALESCE(?, last_trigger_revision_id), updated_at = ?
+            WHERE mapping_domain_id = ? AND task_node_id = ? AND target_node_version_ref = ?
+            """,
+            (status, trigger_revision_id, now, mapping_domain_id, task_node_id, target_node_version_ref),
+        )
+        self.conn.commit()
+        return self.get_pending_handoff(mapping_domain_id, task_node_id, target_node_version_ref)
+
+    def record_completed(self, mapping_domain_id: str, task_node_id: str, version_ref: str) -> None:
+        self.conn.execute(
+            """
+            INSERT OR IGNORE INTO completed_fact (mapping_domain_id, task_node_id, version_ref, completed_at)
+            VALUES (?, ?, ?, ?)
+            """,
+            (mapping_domain_id, task_node_id, version_ref, now_iso()),
+        )
+        self.conn.commit()
+
+    def has_completed(self, mapping_domain_id: str, task_node_id: str, version_ref: str) -> bool:
+        row = self.conn.execute(
+            "SELECT 1 FROM completed_fact WHERE mapping_domain_id = ? AND task_node_id = ? AND version_ref = ?",
+            (mapping_domain_id, task_node_id, version_ref),
+        ).fetchone()
+        return row is not None
+
+    def set_latest_revision(self, mapping_domain_id: str, formal_revision_id: str) -> None:
+        self.conn.execute(
+            """
+            INSERT INTO domain_state (mapping_domain_id, latest_formal_revision_id, updated_at)
+            VALUES (?, ?, ?)
+            ON CONFLICT (mapping_domain_id)
+            DO UPDATE SET latest_formal_revision_id = excluded.latest_formal_revision_id, updated_at = excluded.updated_at
+            """,
+            (mapping_domain_id, formal_revision_id, now_iso()),
+        )
+        self.conn.commit()
+
+    def get_latest_revision(self, mapping_domain_id: str) -> str | None:
+        row = self.conn.execute(
+            "SELECT latest_formal_revision_id FROM domain_state WHERE mapping_domain_id = ?",
+            (mapping_domain_id,),
+        ).fetchone()
+        return row["latest_formal_revision_id"] if row is not None else None
+
+    def list_domains(self) -> list[str]:
+        rows = self.conn.execute("SELECT mapping_domain_id FROM domain_state ORDER BY mapping_domain_id").fetchall()
+        return [row["mapping_domain_id"] for row in rows]
+
+    def create_dispatch(
+        self,
+        pending_handoff_id: str,
+        dedupe_key: str,
+        message_type: str,
+        target_agent_id: str | None,
+    ) -> HandoffDispatch | None:
+        """Create a dispatch record idempotently. Returns None when the dedupe_key already exists."""
+        existing = self.conn.execute(
+            "SELECT * FROM handoff_dispatch WHERE dedupe_key = ?", (dedupe_key,)
+        ).fetchone()
+        if existing is not None:
+            return self._row_to_dispatch(existing)
+        now = now_iso()
+        dispatch_id = uuid.uuid4().hex
+        try:
+            self.conn.execute(
+                """
+                INSERT INTO handoff_dispatch (
+                  dispatch_id, pending_handoff_id, dedupe_key, message_type, target_agent_id,
+                  status, attempt_count, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?)
+                """,
+                (
+                    dispatch_id,
+                    pending_handoff_id,
+                    dedupe_key,
+                    message_type,
+                    target_agent_id,
+                    DISPATCH_CREATED,
+                    now,
+                    now,
+                ),
+            )
+            self.conn.commit()
+        except sqlite3.IntegrityError:
+            self.conn.rollback()
+            existing = self.conn.execute(
+                "SELECT * FROM handoff_dispatch WHERE dedupe_key = ?", (dedupe_key,)
+            ).fetchone()
+            return self._row_to_dispatch(existing)
+        return self._row_to_dispatch(
+            self.conn.execute("SELECT * FROM handoff_dispatch WHERE dispatch_id = ?", (dispatch_id,)).fetchone()
+        )
+
+    def get_dispatch(self, dispatch_id: str) -> HandoffDispatch | None:
+        row = self.conn.execute("SELECT * FROM handoff_dispatch WHERE dispatch_id = ?", (dispatch_id,)).fetchone()
+        return self._row_to_dispatch(row)
+
+    def list_dispatches(self, statuses: tuple[str, ...] | None = None) -> list[HandoffDispatch]:
+        if statuses is None:
+            rows = self.conn.execute("SELECT * FROM handoff_dispatch ORDER BY created_at").fetchall()
+        else:
+            placeholders = ", ".join("?" for _ in statuses)
+            rows = self.conn.execute(
+                f"SELECT * FROM handoff_dispatch WHERE status IN ({placeholders}) ORDER BY created_at",
+                statuses,
+            ).fetchall()
+        return [self._row_to_dispatch(row) for row in rows]
+
+    def set_dispatch_status(
+        self, dispatch_id: str, status: str, error_summary: str | None = None, attempt_count: int | None = None
+    ) -> HandoffDispatch | None:
+        now = now_iso()
+        self.conn.execute(
+            """
+            UPDATE handoff_dispatch
+            SET status = ?, error_summary = COALESCE(?, error_summary),
+                attempt_count = COALESCE(?, attempt_count), updated_at = ?
+            WHERE dispatch_id = ?
+            """,
+            (status, error_summary, attempt_count, now, dispatch_id),
+        )
+        self.conn.commit()
+        return self.get_dispatch(dispatch_id)
+
+    @staticmethod
+    def _row_to_pending(row: sqlite3.Row | None) -> PendingHandoff | None:
+        if row is None:
+            return None
+        return PendingHandoff(
+            pending_handoff_id=row["pending_handoff_id"],
+            mapping_domain_id=row["mapping_domain_id"],
+            task_node_id=row["task_node_id"],
+            target_node_version_ref=row["target_node_version_ref"],
+            upstream_source_refs=tuple(
+                (item[0], item[1]) for item in json.loads(row["upstream_source_refs"])
+            ),
+            executor_agent_id=row["executor_agent_id"],
+            status=row["status"],
+            last_trigger_revision_id=row["last_trigger_revision_id"],
+            created_at=row["created_at"],
+            updated_at=row["updated_at"],
+        )
+
+    @staticmethod
+    def _row_to_dispatch(row: sqlite3.Row | None) -> HandoffDispatch | None:
+        if row is None:
+            return None
+        return HandoffDispatch(
+            dispatch_id=row["dispatch_id"],
+            pending_handoff_id=row["pending_handoff_id"],
+            dedupe_key=row["dedupe_key"],
+            message_type=row["message_type"],
+            target_agent_id=row["target_agent_id"],
+            status=row["status"],
+            attempt_count=row["attempt_count"],
+            error_summary=row["error_summary"],
+            created_at=row["created_at"],
+            updated_at=row["updated_at"],
+        )

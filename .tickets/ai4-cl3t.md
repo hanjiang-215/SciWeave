@@ -1,6 +1,6 @@
 ---
 id: ai4-cl3t
-status: open
+status: closed
 deps: [ai4-sxpw]
 links: [ai4-s2nb]
 created: 2026-10-23T05:18:40Z
@@ -24,17 +24,27 @@ tags: [implementation, task-agent, mcp, custom-service, uv, local-mcp-libs]
 
 ## Acceptance Criteria
 
-- [ ] deploy-task-agent/custom-mcp/ 下存在遵守目录规范的可运行自定义 MCP 服务样例/模板。
-- [ ] 自定义服务具有独立 pyproject.toml、uv.lock、src/main.py 和 tests。
-- [ ] local-mcp-libs 提供可校验的服务注册卡片和工具注册示例。
-- [ ] 注册卡片可表达 uv 启动或环境变量 URL 连接方式，但不保存真实令牌、不内嵌 Python 代码。
-- [ ] runtime 能解析注册卡片并生成 MCP 连接配置，拒绝未知服务、未知工具和不符合权限边界的配置。
-- [ ] 自定义服务可通过 uv 命令完成最小启动或协议握手验证。
-- [ ] 依赖通过自定义服务 pyproject.toml/uv.lock 声明，记录来源、用途、许可证/限制和验证命令。
-- [ ] 不修改现有 ExecutionRecord、Worker Lease 和服务模板接口；相关测试及 git diff --check 通过。
+- [x] deploy-task-agent/custom-mcp/ 下存在遵守目录规范的可运行自定义 MCP 服务样例/模板。
+- [x] 自定义服务具有独立 pyproject.toml、uv.lock、src/main.py 和 tests。
+- [x] local-mcp-libs 提供可校验的服务注册卡片和工具注册示例。
+- [x] 注册卡片可表达 uv 启动或环境变量 URL 连接方式，但不保存真实令牌、不内嵌 Python 代码。
+- [x] runtime 能解析注册卡片并生成 MCP 连接配置，拒绝未知服务、未知工具和不符合权限边界的配置。
+- [x] 自定义服务可通过 uv 命令完成最小启动或协议握手验证。
+- [x] 依赖通过自定义服务 pyproject.toml/uv.lock 声明，记录来源、用途、许可证/限制和验证命令。
+- [x] 不修改现有 ExecutionRecord、Worker Lease 和服务模板接口；相关测试及 git diff --check 通过。
 
 
 ## Notes
+
+**2026-10-25T08:10:00Z（收尾验收，hanjiang）**
+
+身份核对：本票 assignee 为 hanjiang，当前分支 `feature/hanjiang`、`git config user.name=hanjiang`，一致。
+
+全部 8 条验收已勾选，本票关闭。收尾时补充了 runtime 对注册卡片安全校验的自动化测试覆盖，此前验收第 6 条（拒绝未知服务、未知工具、越权配置）只有实现无测试：
+
+- 新增 `runtime/tests/test_mcp_service_cards.py`（11 个用例）：接受安全 stdio 卡片、拒绝未知传输（`invalid_transport`）、拒绝非 uv 可执行（`unsafe_startup`）、拒绝任意启动参数、拒绝缺 `project_dir_env`、拒绝 HTTP 卡片携带 startup、拒绝 HTTP 无 `url_env`（`invalid_endpoint`）、拒绝重复工具（`invalid_resource`）、未知服务稳定错误码（`unknown_resource`）、本地主版本不兼容（`incompatible_version`）、两本地源同名冲突（`resource_conflict`）。全部使用 `tempfile` 临时卡片，不依赖真实令牌或端口。
+- 验证：`uv run python -m unittest discover -s tests` → 29 passed（原 18 + 新增 11）；`stdio-service` 1 test 通过且 `uv run python src/main.py` 输出模板就绪；`git diff --check` 通过。
+- 未改动 runtime 生产代码、ExecutionRecord、Worker Lease 或服务模板接口；只加测试文件与配套 import。
 
 **2026-10-25T07:03:11Z（转交，hanjiang）**
 

@@ -260,6 +260,14 @@ def test_valid_notification_is_accepted_then_reports_delivery_status_only(email_
         "notification_id": NOTIFICATION_ID,
         "delivery_status": "sent",
         "attempt_count": 1,
+        "recipients": [
+            {
+                "principal_id": PRINCIPAL_ID,
+                "status": "sent",
+                "attempt_count": 1,
+                "error_summary": None,
+            }
+        ],
     }
     assert len(email_mcp["sender"].sent) == 1
     message = email_mcp["sender"].sent[0]
