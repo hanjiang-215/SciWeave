@@ -1,6 +1,6 @@
 ---
 id: ai4-rlv6
-status: open
+status: closed
 deps: [ai4-a2ba, ai4-t2wc]
 links: [ai4-upsm, ai4-5auy, ai4-w73z, ai4-he04, ai4-5z9e, ai4-oebi, ai4-8dgd, ai4-oz3s]
 created: 2026-10-21T12:16:16Z
@@ -56,13 +56,28 @@ tags: [centre-control, centre-agents, interface]
 
 ## Acceptance Criteria
 
-- 工具清单与各能力票一一对应，无重复无遗漏
-- 鉴权与调用者标识有明确来源
-- 明确中央 Agent 没有任何写审计的私有通道
-- 明确 Gateway 的 MCP 面只承担返修与处置，不承担任务下发；任务由消息驱动
+- [x] 工具清单与各能力票一一对应，无重复无遗漏
+- [x] 鉴权与调用者标识有明确来源
+- [x] 明确中央 Agent 没有任何写审计的私有通道
+- [x] 明确 Gateway 的 MCP 面只承担返修与处置，不承担任务下发；任务由消息驱动
 
 
 ## Notes
+
+**2026-10-25 收口与关闭（hanjiang）**
+
+身份核对：本票 assignee 为 hanjiang，当前分支 `feature/hanjiang`、`git config user.name=hanjiang`，一致。
+
+接口形态收口完成，验收四项全部满足，证据如下：
+
+1. **工具清单对应**：6 个读工具（Mapping/Wiki 各 `get_formal_*` + `list_candidates`/`list_reviewable_candidates`）+ 2 个写工具（`append_prereview_log`、`create_merged_candidate`），与 `ai4-5auy` 落地的实际工具面一一对应；`centre-agents/README.md` 已按本票与 `ai4-t2wc` 同步（2026-10-24）。
+2. **鉴权来源**：transport 层 Bearer token 映射 actor_id 注入、服务端按能力档（`centre`/`prereview_log`/`merged_candidate`）鉴权；中央 Agent 进注册表但只留痕、不参与鉴权（2026-10-21T23:45 已定）。
+3. **无写审计私有通道**：留痕统一走 `sciweave-audit-trail` 接口层账本，中央 Agent 无私有写入通道（Design 明确）。
+4. **Gateway MCP 只返修不派发**：任务由消息驱动，`ai4-dhpv` 已定并关闭。
+
+依赖处理：`ai4-t2wc` 已关闭；`ai4-a2ba` 规格层已于今日收敛（纳入范围、去抖、事件载荷、门禁粒度、不用租约定稿），本票所需门禁语义已满足；a2ba 剩余 4 项为**实现类**验收（事件自动发布、正式版本事件、故障可观测、回归测试），阻塞于 `ai4-te1v`（Frank Qi，已提 issue `IKQ8HY`），由对应实现票在队列语义收敛后承接，不影响本票的接口形态收口。
+
+置 `closed`。预审链剩余活跃：`ai4-a2ba`（实现验收待 te1v）、`ai4-fv1r`（地图，待 a2ba 关闭）。
 
 **2026-10-25 负责人转交（hanjiang 操作，经 Frank Qi 授权）**
 
