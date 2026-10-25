@@ -200,6 +200,18 @@ running ├→ waiting            （Worker 提问，本轮终止；回答创建
 
 ## Notes
 
+**2026-10-25 草稿箱端到端打通(hanjiang)**
+
+身份核对:本票 assignee 为 hanjiang,当前分支 `feature/hanjiang`、`git config user.name=hanjiang`,一致。
+
+在前述推进(提交 `ef2cca1`)基础上补完"草稿写入→completed(draft_id)"整链,提交 `00a362d`:
+
+- 本机端到端实测:subscriber 消费 `task_handoff_ready` → worker 运行 → `BufferMCPDraftWriter` 调真实中央草稿箱(临时 TerminusDB 库 + 临时库 `admin:root` 验证,建库 200)→ `create_draft` 返回真实 `draft_id`(`0334803b-...`)→ 执行记录转 `completed` 且保存 `draft_id`,`error_summary=None`。对应规格验收「Worker 正常结束时草稿已写入中央草稿箱且记录保存 draft_id」与「草稿写入失败记为 failed」均已具备真实与自动化双证据。
+- 新增 2 项自动化测试:进程内 `/mcp` 桩验证 `create_draft` 成功路径(断言 draft_id/namespace/execution 引用);不可达端点验证失败路径转 `failed`+`draft_submission_failed`。subscriber 测试从 9 项增至 11 项,全绿。
+- `BufferMCPDraftWriter` 端点、令牌、命名空间、提交者全部走环境变量(CLI 的 `SCIWEAVE_DRAFT_BUFFER_*`),与规格「Gateway 不持有草稿箱凭据,草稿由 Worker 侧写入」的边界一致。
+
+本票十项行为验收仍未全部勾选(置顶验收时统一处理):真实模型运行(DeepSeek/fast-agent)与 Centre Agent 预审规则未接;Task Agent 套件侧由 `ai4-za77` 承接。消息进入路径、去重、串行化、offset 边界与草稿箱写入四项已闭环。
+
 **2026-10-25 推进:subscriber 组件落地与真实 Redpanda 端到端验证(hanjiang)**
 
 身份核对:本票 assignee 为 hanjiang,当前分支 `feature/hanjiang`、`git config user.name=hanjiang`,一致。
