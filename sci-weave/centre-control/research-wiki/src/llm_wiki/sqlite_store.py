@@ -168,6 +168,93 @@ class SqliteStore:
             ).fetchall()
         return [dict(row) for row in rows]
 
+    def append_prereview_report(
+        self,
+        *,
+        report_id: str,
+        candidate_id: str,
+        candidate_head: str,
+        base_formal_revision_id: str | None,
+        rule_set_version: str,
+        checks: str,
+        verdict: str,
+        conflict_matrix: str,
+        created_at: str,
+    ) -> dict[str, object]:
+        with self.connection() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            connection.execute(
+                """
+                INSERT OR IGNORE INTO wiki_prereview_report (
+                    report_id, candidate_id, candidate_head, base_formal_revision_id,
+                    rule_set_version, checks, verdict, conflict_matrix, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (report_id, candidate_id, candidate_head, base_formal_revision_id,
+                 rule_set_version, checks, verdict, conflict_matrix, created_at),
+            )
+            row = connection.execute(
+                """
+                SELECT * FROM wiki_prereview_report
+                WHERE candidate_id = ? AND candidate_head = ? AND rule_set_version = ?
+                """,
+                (candidate_id, candidate_head, rule_set_version),
+            ).fetchone()
+            connection.commit()
+        return dict(row)
+
+    def append_prereview_decision(
+        self,
+        *,
+        decision_id: str,
+        target_report_id: str,
+        reason: str,
+        superseding_report_id: str | None,
+        decided_at: str,
+    ) -> dict[str, object]:
+        with self.connection() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            connection.execute(
+                """
+                INSERT INTO wiki_prereview_report_decision (
+                    decision_id, target_report_id, reason, superseding_report_id, decided_at
+                ) VALUES (?, ?, ?, ?, ?)
+                """,
+                (decision_id, target_report_id, reason, superseding_report_id, decided_at),
+            )
+            row = connection.execute(
+                """
+                SELECT * FROM wiki_prereview_report_decision
+                WHERE decision_id = ?
+                """,
+                (decision_id,),
+            ).fetchone()
+            connection.commit()
+        return dict(row)
+
+    def current_prereview_report(self, candidate_id: str, candidate_head: str) -> dict | None:
+        with self.connection() as connection:
+            report = connection.execute(
+                """
+                SELECT * FROM wiki_prereview_report
+                WHERE candidate_id = ? AND candidate_head = ?
+                """,
+                (candidate_id, candidate_head),
+            ).fetchone()
+            if report is None:
+                return None
+            decision = connection.execute(
+                """
+                SELECT * FROM wiki_prereview_report_decision
+                WHERE target_report_id = ?
+                ORDER BY decided_at DESC, rowid DESC LIMIT 1
+                """,
+                (report["report_id"],),
+            ).fetchone()
+            if decision is not None:
+                return None
+        return dict(report)
+
     def add_formal_revision(
         self,
         *,

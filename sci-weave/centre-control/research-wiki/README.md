@@ -20,6 +20,9 @@ src/llm_wiki/sqlite_store.py      仅插入和读取的 SQLite 存储
 src/llm_wiki/terminus_store.py    精确版本读取 seam 与失败关闭适配器
 src/llm_wiki/resource_review.py   ResourceReviewService
 src/llm_wiki/candidate_submission.py Wiki 候选提交、引用校验与幂等落库
+src/llm_wiki/candidate_reader.py  可送审候选快照读取（预审输入端）
+src/llm_wiki/prereview.py          预审报告追加日志（中心 Agent 写端）
+src/llm_wiki/merged_candidate.py   混合候选新建（中心 Agent 写端，多值作者与禁二次混合）
 src/llm_wiki/formal_domain.py     Wiki 正式快照读取结果
 src/llm_wiki/formal_query.py      WikiFormalQueryService 正式版本查询
 src/llm_wiki/review.py            Wiki 审阅与 Merge Request Buffer

@@ -60,6 +60,17 @@ def main() -> int:
             sqlite_store, terminus_store, terminus_database=config.terminusdb_database,
             is_project_owner=lambda actor, domain: "formalize" in capabilities.get(actor, ()),
         )
+        from research_mapping.prereview import MappingPrereviewLog
+
+        prereview_log = MappingPrereviewLog(
+            sqlite_store, rules_dir=config.prereview_rules_dir
+        )
+        from research_mapping.merged_candidate import MappingMergedCandidateService
+
+        merged_candidate_service = MappingMergedCandidateService(
+            sqlite_store, candidate_service,
+            service_name="mapping-management",
+        )
         management = MappingManagementService(
             formal_query=service,
             candidate_service=candidate_service,
@@ -69,6 +80,8 @@ def main() -> int:
             formalization_service=formalization_service,
             sqlite_store=sqlite_store,
             candidate_reader=candidate_reader,
+            prereview_log=prereview_log,
+            merged_candidate_service=merged_candidate_service,
         )
         return run_management_server_from_config(config, management)
     result = service.get_current(config.mapping_domain_id)

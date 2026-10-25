@@ -20,6 +20,9 @@ src/research_mapping/sqlite_store.py SQLite 治理存储：schema 引导、外�
 src/research_mapping/terminus_store.py TerminusDB 12.0.8 适配器：精确 Commit 读取、候选分支与正式快照
 src/research_mapping/candidate_submission.py 候选提交、机械校验与幂等落库
 src/research_mapping/candidate_domain.py 候选提交结果结构
+src/research_mapping/candidate_reader.py 可送审候选快照读取（预审输入端）
+src/research_mapping/prereview.py  预审报告追加日志（中心 Agent 写端）
+src/research_mapping/merged_candidate.py 混合候选新建（中心 Agent 写端，多值作者与禁二次混合）
 src/research_mapping/formal_query.py  FormalQueryService 正式版本查询
 src/research_mapping/review.py       固定候选差异预览与审核 Buffer
 src/research_mapping/formalization.py Owner 批准、正式化与恢复

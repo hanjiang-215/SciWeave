@@ -81,11 +81,29 @@ class ManagementServiceTestCase(unittest.TestCase):
             sqlite_store=self.sqlite, terminus_store=_FakeFormalTerminus(), terminus_database="db",
         )
         candidate = MappingCandidateService(self.sqlite, _FakeTerminusForManagement(), terminus_database="db")
+        from research_mapping.formalization import MappingFormalizationService
+        from research_mapping.review import MappingReviewService
+        review = MappingReviewService(self.sqlite, _FakeFormalTerminus(), terminus_database="db")
+        formalization = MappingFormalizationService(
+            self.sqlite, _FakeFormalTerminus(), terminus_database="db",
+            is_project_owner=lambda actor, domain: actor == "owner",
+        )
         audit_path = os.path.join(self.tmp.name, "audit.db")
         from audit_trail import init_audit_table, open_connection
         self.audit = open_connection(audit_path)
         self.addCleanup(self.audit.close)
         init_audit_table(self.audit)
+        rules_dir = os.path.join(self.tmp.name, "rules")
+        os.makedirs(rules_dir)
+        rule_path = os.path.join(rules_dir, "1.0.0.json")
+        with open(rule_path, "w", encoding="utf-8") as handle:
+            json.dump({"version": "1.0.0", "checks": ["权限范围", "基准版本", "冲突", "影响范围"]}, handle, ensure_ascii=False)
+        from research_mapping.prereview import MappingPrereviewLog
+        prereview_log = MappingPrereviewLog(self.sqlite, rules_dir=rules_dir)
+        from research_mapping.merged_candidate import MappingMergedCandidateService
+        merged_candidate_service = MappingMergedCandidateService(
+            self.sqlite, candidate, service_name="mapping-management",
+        )
         self.service = MappingManagementService(
             formal_query=formal,
             candidate_service=candidate,
@@ -93,9 +111,15 @@ class ManagementServiceTestCase(unittest.TestCase):
                 "reader": frozenset({"read"}),
                 "submitter": frozenset({"candidate_submit"}),
                 "centre": frozenset({"centre"}),
+                "prereviewer": frozenset({"prereview_log"}),
+                "merger": frozenset({"merged_candidate"}),
             },
             audit_connection=self.audit,
+            review_service=review,
+            formalization_service=formalization,
             sqlite_store=self.sqlite,
+            prereview_log=prereview_log,
+            merged_candidate_service=merged_candidate_service,
         )
 
     def test_list_candidates_reads_back_the_persisted_candidate_record(self):
@@ -155,6 +179,77 @@ class ManagementServiceTestCase(unittest.TestCase):
         phases = {row["phase"] for row in rows}
         self.assertEqual(phases, {"invoked", "completed"})
 
+    def test_append_prereview_log_requires_centre_capability_and_is_audited_as_write(self):
+        arguments = {
+            "candidate_id": "candidate-1", "candidate_head": "head-a",
+            "base_formal_revision_id": BASE, "rule_set_version": "1.0.0",
+            "verdict": "passed",
+            "checks": [{"name": "权限范围", "verdict": "passed"}],
+            "conflict_matrix": [],
+        }
+        denied = self.service.call_tool("append_prereview_log", arguments, actor_id="reader")
+        self.assertEqual(denied.error_code, "forbidden")
+
+        denied_centre = self.service.call_tool("append_prereview_log", arguments, actor_id="centre")
+        self.assertEqual(denied_centre.error_code, "forbidden")
+
+        outcome = self.service.call_tool("append_prereview_log", arguments, actor_id="prereviewer")
+        self.assertEqual(outcome.status, "ok")
+        self.assertIsNotNone(outcome.result["report_id"])  # type: ignore[index]
+        rows = query_audit_calls(self.audit, service="mapping-management", tool="append_prereview_log")
+        self.assertEqual(len(rows), 2)
+        self.assertEqual({row["phase"] for row in rows}, {"invoked", "completed"})
+
+    def test_append_prereview_log_decision_path(self):
+        for head in ("head-a", "head-b"):
+            self.service.call_tool(
+                "append_prereview_log",
+                {"candidate_id": "candidate-2", "candidate_head": head,
+                 "base_formal_revision_id": BASE, "rule_set_version": "1.0.0",
+                 "verdict": "passed", "checks": [{"name": "权限范围", "verdict": "passed"}], "conflict_matrix": []},
+                actor_id="prereviewer",
+            )
+        current = self.service._prereview_log.current_report("candidate-2", "head-b")
+        self.assertIsNotNone(current)
+        decision = self.service.call_tool(
+            "append_prereview_log",
+            {"candidate_id": "candidate-2", "candidate_head": "head-a",
+             "reason": "head_moved", "superseding_report_id": current["report_id"]},
+            actor_id="prereviewer",
+        )
+        self.assertEqual(decision.status, "ok")
+        self.assertIsNotNone(decision.result["decision_id"])  # type: ignore[index]
+
+    def test_centre_write_tools_are_all_forbidden(self):
+        """After ai4-5auy, centre grants only reads; every write tool is denied."""
+        calls = [
+            {"tool": "submit_candidate", "args": {"change_set": _change_set(), "idempotency_key": "key-centre-1"}},
+            {"tool": "preview_candidate", "args": {"proposal_id": "proposal-1", "base_formal_revision_id": BASE, "candidate_head": "head-a"}},
+            {"tool": "record_review", "args": {"buffer_id": "buffer-1", "decision": "approved", "reason": "r"}},
+            {"tool": "formalize_candidate", "args": {"merge_request_id": "mr-1", "operation_id": "op-1"}},
+            {"tool": "reconcile_formalization", "args": {"operation_id": "op-1"}},
+            {"tool": "append_prereview_log", "args": {"candidate_id": "c-1", "candidate_head": "h", "rule_set_version": "1.0.0", "verdict": "passed", "checks": [{"name": "权限范围", "verdict": "passed"}]}},
+            {"tool": "create_merged_candidate", "args": {"mapping_domain_id": DOMAIN, "source_proposal_ids": ["proposal-1"], "base_formal_revision_id": BASE, "change_set": _change_set(), "idempotency_key": "key-centre-merged"}},
+        ]
+        for call in calls:
+            outcome = self.service.call_tool(call["tool"], call["args"], actor_id="centre")
+            self.assertEqual(
+                outcome.error_code, "forbidden",
+                f"{call['tool']} must be forbidden for a centre-only caller",
+            )
+
+    def test_prereview_and_merged_capabilities_are_independent(self):
+        """prereview_log and merged_candidate are separate tiers; each alone is denied for the other."""
+        prereview_args = {"candidate_id": "c-1", "candidate_head": "h", "rule_set_version": "1.0.0",
+                          "verdict": "passed", "checks": [{"name": "权限范围", "verdict": "passed"}]}
+        merged_args = {"mapping_domain_id": DOMAIN, "source_proposal_ids": ["proposal-1"],
+                       "base_formal_revision_id": BASE, "change_set": _change_set(),
+                       "idempotency_key": "key-independent"}
+        denied_prereview = self.service.call_tool("append_prereview_log", prereview_args, actor_id="merger")
+        self.assertEqual(denied_prereview.error_code, "forbidden")
+        denied_merged = self.service.call_tool("create_merged_candidate", merged_args, actor_id="prereviewer")
+        self.assertEqual(denied_merged.error_code, "forbidden")
+
     def test_config_parses_tokens_and_capability_tiers(self):
         config = MappingConfig.from_environment({
             "SCIWEAVE_MAPPING_SQLITE_PATH": "data/mapping.sqlite",
@@ -170,6 +265,22 @@ class ManagementServiceTestCase(unittest.TestCase):
         })
         self.assertEqual(config.mcp_tokens, {"tok": "reader"})
         self.assertEqual(config.caller_capabilities, {"reader": frozenset({"read"})})
+        # Seven capability tiers are accepted after ai4-5auy.
+        seven_tier = MappingConfig.from_environment({
+            "SCIWEAVE_MAPPING_SQLITE_PATH": "data/mapping.sqlite",
+            "SCIWEAVE_MAPPING_DOMAIN_ID": "domain-1",
+            "SCIWEAVE_MAPPING_TERMINUSDB_URL": "http://127.0.0.1:0",
+            "SCIWEAVE_MAPPING_TERMINUSDB_DATABASE": "db",
+            "SCIWEAVE_MAPPING_TERMINUSDB_STORE": "store",
+            "SCIWEAVE_MAPPING_MCP_HOST": "127.0.0.1",
+            "SCIWEAVE_MAPPING_MCP_PORT": "0",
+            "SCIWEAVE_MAPPING_MCP_TOKENS_JSON": '{"tok":"centre"}',
+            "SCIWEAVE_MAPPING_CALLER_CAPABILITIES_JSON": '{"centre":["centre","prereview_log","merged_candidate"]}',
+        })
+        self.assertEqual(
+            seven_tier.caller_capabilities,
+            {"centre": frozenset({"centre", "prereview_log", "merged_candidate"})},
+        )
         with self.assertRaises(Exception):
             MappingConfig.from_environment({
                 "SCIWEAVE_MAPPING_SQLITE_PATH": "data/mapping.sqlite",
@@ -178,6 +289,9 @@ class ManagementServiceTestCase(unittest.TestCase):
                 "SCIWEAVE_MAPPING_TERMINUSDB_DATABASE": "db",
                 "SCIWEAVE_MAPPING_TERMINUSDB_STORE": "store",
                 "SCIWEAVE_MAPPING_MCP_HOST": "127.0.0.1",
+                "SCIWEAVE_MAPPING_MCP_PORT": "0",
+                "SCIWEAVE_MAPPING_MCP_TOKENS_JSON": '{"tok":"centre"}',
+                "SCIWEAVE_MAPPING_CALLER_CAPABILITIES_JSON": '{"centre":["centre","unknown_tier"]}',
             })
 
 
@@ -418,6 +532,8 @@ class ReviewableCandidatesToolTestCase(unittest.TestCase):
             sqlite_store=self.sqlite, terminus_store=_FakeFormalTerminus(), terminus_database="db",
         )
         candidate = MappingCandidateService(self.sqlite, _FakeTerminusForManagement(), terminus_database="db")
+        from research_mapping.merged_candidate import MappingMergedCandidateService
+        merged_service = MappingMergedCandidateService(self.sqlite, candidate, service_name="mapping-management")
         self.service = MappingManagementService(
             formal_query=formal,
             candidate_service=candidate,
@@ -426,8 +542,10 @@ class ReviewableCandidatesToolTestCase(unittest.TestCase):
                 "reader": frozenset({"read"}),
                 "submitter": frozenset({"candidate_submit"}),
                 "centre": frozenset({"centre"}),
+                "merger": frozenset({"merged_candidate"}),
             },
             sqlite_store=self.sqlite,
+            merged_candidate_service=merged_service,
         )
 
     def _insert_candidate(self, proposal_id="proposal-1", *, submission_id="submission-1",
@@ -489,6 +607,80 @@ class ReviewableCandidatesToolTestCase(unittest.TestCase):
         )
         self.assertEqual(denied.error_code, "forbidden")
         self.assertEqual(denied.result, None)
+
+    def test_centre_no_longer_grants_write_tools(self):
+        """centre is read-only after ai4-5auy; every injected write tool is forbidden."""
+        # This test case injects candidate_service only, so only submit_candidate
+        # exists as a write tool; the review/formalization tools are covered in
+        # ManagementServiceTestCase via their capability maps.
+        centre_only = [call for call in [
+            {
+                "tool": "submit_candidate",
+                "args": {"change_set": _change_set(), "idempotency_key": "key-centre-submit"},
+            },
+        ]]
+        for call in centre_only:
+            outcome = self.service.call_tool(call["tool"], call["args"], actor_id="centre")
+            self.assertEqual(
+                outcome.error_code, "forbidden",
+                f"{call['tool']} must be forbidden for a centre-only caller",
+            )
+        # The six read tools still work under centre.
+        self._insert_candidate()
+        for tool, args in [
+            ("get_formal_mapping", {"mapping_domain_id": DOMAIN}),
+            ("list_candidates", {"submission_id": "submission-1"}),
+            ("list_reviewable_candidates", {"mapping_domain_id": DOMAIN}),
+        ]:
+            outcome = self.service.call_tool(tool, args, actor_id="centre")
+            self.assertEqual(
+                outcome.status, "ok", f"{tool} must stay readable for centre",
+            )
+
+    def test_create_merged_candidate_requires_merged_candidate_capability(self):
+        self._insert_candidate(proposal_id="proposal-1", submission_id="submission-1", commit="candidate-commit")
+        self._insert_candidate(proposal_id="proposal-2", submission_id="submission-2", commit="candidate-commit-2")
+        change_set = _change_set()
+        change_set["submission_id"] = "submission-merged"
+        change_set["proposal_id"] = "proposal-merged"
+        change_set["nodes"][0]["proposal_id"] = "proposal-merged"
+        args = {
+            "mapping_domain_id": DOMAIN,
+            "source_proposal_ids": ["proposal-1", "proposal-2"],
+            "base_formal_revision_id": BASE,
+            "change_set": change_set,
+            "idempotency_key": "key-merged",
+        }
+        denied = self.service.call_tool("create_merged_candidate", args, actor_id="centre")
+        self.assertEqual(denied.error_code, "forbidden")
+        outcome = self.service.call_tool("create_merged_candidate", args, actor_id="merger")
+        self.assertEqual(outcome.status, "ok", outcome.reason_code)
+        self.assertIsNotNone(outcome.result.get("commit_hash"))  # type: ignore[union-attr]
+
+    def test_merged_candidate_rejects_nested_merge(self):
+        self._insert_candidate(proposal_id="proposal-1", submission_id="submission-1", commit="candidate-commit")
+        # A merged candidate is recognisable by its submitter prefix; mark one source as merged.
+        with self.sqlite.connection() as db:
+            db.execute(
+                "UPDATE mapping_submission SET submitter_id='merged:abc' WHERE submission_id='submission-1'"
+            )
+            db.commit()
+        change_set = _change_set()
+        change_set["submission_id"] = "submission-merged"
+        change_set["proposal_id"] = "proposal-merged"
+        change_set["nodes"][0]["proposal_id"] = "proposal-merged"
+        # Source candidate 1 is a merged candidate -> nested merge must be rejected.
+        # It must not even reach the submitter (which would also fail); the
+        # merged candidate service rejects it before persistence.
+        args = {
+            "mapping_domain_id": DOMAIN,
+            "source_proposal_ids": ["proposal-1"],
+            "base_formal_revision_id": BASE,
+            "change_set": change_set,
+            "idempotency_key": "key-nested",
+        }
+        outcome = self.service.call_tool("create_merged_candidate", args, actor_id="merger")
+        self.assertEqual(outcome.error_code, "invalid_arguments")
 
 
 if __name__ == "__main__":

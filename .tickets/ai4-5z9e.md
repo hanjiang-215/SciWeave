@@ -1,6 +1,6 @@
 ---
 id: ai4-5z9e
-status: open
+status: closed
 deps: [ai4-he04]
 links: [ai4-he04, ai4-eex0, ai4-a2ba, ai4-oz3s]
 created: 2026-10-21T12:14:41Z
@@ -42,7 +42,7 @@ tags: [centre-control, centre-agents, candidate-prereview]
 - [x] 每种失败对应确定的 Proposal 状态，且不产生新的正式版本（`stale`/`conflict` 为报告事实列，Proposal 状态由 Project Owner 处置）
 - [x] 基准变化或候选 head 变化使既有预审结论失效（追加 `base_moved`/`head_moved` 判定，见 ai4-oz3s）
 - [x] 预审不越过 Project Owner 做批准（预审通过仅表示可送审，不是批准）
-- [ ] 预审结论经留痕工具记录，重复预审同一对象结论可复现（依赖 `append_prereview_log` 写端，待 ai4-t2wc/ai4-rlv6 收口）
+- [x] 预审结论经留痕工具记录，重复预审同一对象结论可复现（`append_prereview_log` 已实现唯一键幂等与接口层留痕，见 `ai4-qnvd`；规则文件经环境变量配置）
 
 ## Notes
 
@@ -76,3 +76,15 @@ tags: [centre-control, centre-agents, candidate-prereview]
 - 保留的检查：权限范围、基准版本、冲突、影响范围。
 
 本票仍 open：入口「中央 Agent 候选预审入口与结论回写」(ai4-he04) 的领域管理 MCP 只读候选查询与 `append_prereview_log` 尚未闭环，检查表的重排生效依赖它。验收勾选待 he04 收口后复验。
+
+**2026-10-24 验收闭合并关闭（hanjiang）**
+
+`ai4-he04` 输入端（`list_reviewable_candidates`）与写端（`append_prereview_log`，`ai4-qnvd`）均已实现并验证，检查表重排的依赖已满足。五项验收全部勾选：
+
+- 检查表四项（权限范围、基准版本、冲突、影响范围）输入/判定/失败码明确；
+- `stale`/`conflict` 为报告事实列，Proposal 状态由 Project Owner 处置，不产生新正式版本；
+- `base_moved`/`head_moved` 判定实现，结论失效可复现；
+- 预审不越过 Project Owner；
+- `append_prereview_log` 唯一键幂等 + 接口层留痕，重复审同一对象返回首次结论。
+
+本票规格与实现边界均满足，状态置 `closed`。中央 Agent 的规则文件位置最终由 `ai4-rlv6` 收口，收口后仅需配置 `SCIWEAVE_MAPPING/WIKI_PREREVIEW_RULES_DIR`，不影响本票验收。

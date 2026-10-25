@@ -108,6 +108,17 @@ def main(argv: list[str] | None = None) -> int:
             resource_review_service=service,
             owner_authorization_verifier=_OwnerVerifier(),
         )
+        from llm_wiki.prereview import WikiPrereviewLog
+
+        prereview_log = WikiPrereviewLog(
+            sqlite_store, rules_dir=config.prereview_rules_dir
+        )
+        from llm_wiki.merged_candidate import WikiMergedCandidateService
+
+        merged_candidate_service = WikiMergedCandidateService(
+            sqlite_store, candidate_service,
+            service_name="wiki-management",
+        )
         management = WikiManagementService(
             formal_query=formal_query,
             candidate_service=candidate_service,
@@ -117,6 +128,8 @@ def main(argv: list[str] | None = None) -> int:
             formalization_service=formalization_service,
             sqlite_store=sqlite_store,
             candidate_reader=candidate_reader,
+            prereview_log=prereview_log,
+            merged_candidate_service=merged_candidate_service,
         )
         return run_wiki_management_server_from_config(config, management)
     if len(arguments) > 1:

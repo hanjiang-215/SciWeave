@@ -105,6 +105,18 @@ class WikiManagementServiceTestCase(unittest.TestCase):
         self.audit = open_connection(audit_path)
         self.addCleanup(self.audit.close)
         init_audit_table(self.audit)
+        rules_dir = str(Path(self.tmp.name) / "rules")
+        Path(rules_dir).mkdir()
+        (Path(rules_dir) / "1.0.0.json").write_text(
+            json.dumps({"version": "1.0.0", "checks": ["权限范围", "基准版本", "冲突", "影响范围"]}, ensure_ascii=False),
+            encoding="utf-8",
+        )
+        from llm_wiki.prereview import WikiPrereviewLog
+        prereview_log = WikiPrereviewLog(self.sqlite, rules_dir=rules_dir)
+        from llm_wiki.merged_candidate import WikiMergedCandidateService
+        merged_candidate_service = WikiMergedCandidateService(
+            self.sqlite, candidate, service_name="wiki-management",
+        )
         self.service = WikiManagementService(
             formal_query=formal,
             candidate_service=candidate,
@@ -112,9 +124,13 @@ class WikiManagementServiceTestCase(unittest.TestCase):
                 "reader": frozenset({"read"}),
                 "submitter": frozenset({"candidate_submit"}),
                 "centre": frozenset({"centre"}),
+                "prereviewer": frozenset({"prereview_log"}),
+                "merger": frozenset({"merged_candidate"}),
             },
             audit_connection=self.audit,
             sqlite_store=self.sqlite,
+            prereview_log=prereview_log,
+            merged_candidate_service=merged_candidate_service,
         )
 
     def test_list_wiki_candidates_reads_back_persisted_submissions(self):
@@ -166,6 +182,79 @@ class WikiManagementServiceTestCase(unittest.TestCase):
         phases = {row["phase"] for row in rows}
         self.assertEqual(phases, {"invoked", "completed"})
 
+    def test_centre_has_no_write_capability_on_any_wiki_tool(self):
+        """After ai4-5auy, centre grants only reads on the Wiki management MCP."""
+        centre_calls = [
+            {"tool": "submit_wiki_candidate", "args": {"document_change": _change(), "idempotency_key": "key-centre-1"}},
+            {"tool": "create_wiki_merge_request", "args": {"proposal_id": "proposal-1", "merge_request_id": "mr-1"}},
+            {"tool": "decide_wiki_review", "args": {"merge_request_id": "mr-1", "decision": "approved", "reason": "r", "selected_solution_id": "sol-1"}},
+            {"tool": "formalize_wiki", "args": {"merge_request_id": "mr-1", "operation_id": "op-1"}},
+            {"tool": "reconcile_wiki_formalization", "args": {"operation_id": "op-1"}},
+            {"tool": "append_prereview_log", "args": {"candidate_id": "c-1", "candidate_head": "h", "rule_set_version": "1.0.0", "verdict": "passed", "checks": [{"name": "权限范围", "verdict": "passed"}]}},
+            {"tool": "create_merged_candidate", "args": {"wiki_domain_id": DOMAIN, "source_proposal_ids": ["proposal-1"], "base_formal_revision_id": BASE, "document_change": _change(), "idempotency_key": "key-centre-merged"}},
+        ]
+        for call in centre_calls:
+            outcome = self.service.call_tool(call["tool"], call["args"], actor_id="centre")
+            if outcome.error_code == "unknown_tool":
+                continue  # tool not injected in this test case; covered elsewhere
+            self.assertEqual(
+                outcome.error_code, "forbidden",
+                f"{call['tool']} must be forbidden for a centre-only caller",
+            )
+
+    def test_prereview_and_merged_capabilities_are_independent(self):
+        """prereview_log and merged_candidate are separate tiers; each alone is denied for the other."""
+        prereview_args = {"candidate_id": "c-1", "candidate_head": "h", "rule_set_version": "1.0.0",
+                          "verdict": "passed", "checks": [{"name": "权限范围", "verdict": "passed"}]}
+        merged_args = {"wiki_domain_id": DOMAIN, "source_proposal_ids": ["proposal-1"],
+                       "base_formal_revision_id": BASE, "document_change": _change(),
+                       "idempotency_key": "key-independent"}
+        # merger without prereview_log is denied for append_prereview_log
+        denied_prereview = self.service.call_tool("append_prereview_log", prereview_args, actor_id="merger")
+        self.assertEqual(denied_prereview.error_code, "forbidden")
+        # prereviewer without merged_candidate is denied for create_merged_candidate
+        denied_merged = self.service.call_tool("create_merged_candidate", merged_args, actor_id="prereviewer")
+        self.assertEqual(denied_merged.error_code, "forbidden")
+
+    def test_append_prereview_log_requires_prereview_capability_and_is_audited_as_write(self):
+        arguments = {
+            "candidate_id": "candidate-1", "candidate_head": "head-a",
+            "base_formal_revision_id": BASE, "rule_set_version": "1.0.0",
+            "verdict": "passed",
+            "checks": [{"name": "权限范围", "verdict": "passed"}],
+            "conflict_matrix": [],
+        }
+        denied = self.service.call_tool("append_prereview_log", arguments, actor_id="reader")
+        self.assertEqual(denied.error_code, "forbidden")
+        denied_centre = self.service.call_tool("append_prereview_log", arguments, actor_id="centre")
+        self.assertEqual(denied_centre.error_code, "forbidden")
+        outcome = self.service.call_tool("append_prereview_log", arguments, actor_id="prereviewer")
+        self.assertEqual(outcome.status, "ok")
+        self.assertIsNotNone(outcome.result["report_id"])  # type: ignore[index]
+        rows = query_audit_calls(self.audit, service="wiki-management", tool="append_prereview_log")
+        self.assertEqual(len(rows), 2)
+        self.assertEqual({row["phase"] for row in rows}, {"invoked", "completed"})
+
+    def test_append_prereview_log_decision_path(self):
+        for head in ("head-a", "head-b"):
+            self.service.call_tool(
+                "append_prereview_log",
+                {"candidate_id": "candidate-2", "candidate_head": head,
+                 "base_formal_revision_id": BASE, "rule_set_version": "1.0.0",
+                 "verdict": "passed", "checks": [{"name": "权限范围", "verdict": "passed"}], "conflict_matrix": []},
+                actor_id="prereviewer",
+            )
+        current = self.service._prereview_log.current_report("candidate-2", "head-b")
+        self.assertIsNotNone(current)
+        decision = self.service.call_tool(
+            "append_prereview_log",
+            {"candidate_id": "candidate-2", "candidate_head": "head-a",
+             "reason": "head_moved", "superseding_report_id": current["report_id"]},
+            actor_id="prereviewer",
+        )
+        self.assertEqual(decision.status, "ok")
+        self.assertIsNotNone(decision.result["decision_id"])  # type: ignore[index]
+
     def test_config_parses_tokens_and_capability_tiers(self):
         config = WikiConfig.from_environment({
             "SCIWEAVE_WIKI_SQLITE_PATH": "data/wiki.sqlite",
@@ -181,6 +270,21 @@ class WikiManagementServiceTestCase(unittest.TestCase):
         })
         self.assertEqual(config.mcp_tokens, {"tok": "reader"})
         self.assertEqual(config.caller_capabilities, {"reader": frozenset({"read"})})
+        seven_tier = WikiConfig.from_environment({
+            "SCIWEAVE_WIKI_SQLITE_PATH": "data/wiki.sqlite",
+            "SCIWEAVE_WIKI_DOMAIN_ID": "domain-1",
+            "SCIWEAVE_WIKI_TERMINUSDB_URL": "http://127.0.0.1:0",
+            "SCIWEAVE_WIKI_TERMINUSDB_DATABASE": "db",
+            "SCIWEAVE_WIKI_TERMINUSDB_STORE": "store",
+            "SCIWEAVE_WIKI_MCP_HOST": "127.0.0.1",
+            "SCIWEAVE_WIKI_MCP_PORT": "0",
+            "SCIWEAVE_WIKI_MCP_TOKENS_JSON": '{"tok":"centre"}',
+            "SCIWEAVE_WIKI_CALLER_CAPABILITIES_JSON": '{"centre":["centre","prereview_log","merged_candidate"]}',
+        })
+        self.assertEqual(
+            seven_tier.caller_capabilities,
+            {"centre": frozenset({"centre", "prereview_log", "merged_candidate"})},
+        )
         with self.assertRaises(Exception):
             WikiConfig.from_environment({
                 "SCIWEAVE_WIKI_SQLITE_PATH": "data/wiki.sqlite",
@@ -189,6 +293,9 @@ class WikiManagementServiceTestCase(unittest.TestCase):
                 "SCIWEAVE_WIKI_TERMINUSDB_DATABASE": "db",
                 "SCIWEAVE_WIKI_TERMINUSDB_STORE": "store",
                 "SCIWEAVE_WIKI_MCP_HOST": "127.0.0.1",
+                "SCIWEAVE_WIKI_MCP_PORT": "0",
+                "SCIWEAVE_WIKI_MCP_TOKENS_JSON": '{"tok":"centre"}',
+                "SCIWEAVE_WIKI_CALLER_CAPABILITIES_JSON": '{"centre":["centre","unknown_tier"]}',
             })
 
 
@@ -275,9 +382,17 @@ class WikiManagementMcpTransportTestCase(unittest.TestCase):
 class _FakeWikiTerminus:
     """Minimal Wiki snapshot store used when only formal wiring is needed."""
 
+    def __init__(self):
+        self._saved_documents = None
+
+    def create_candidate_snapshot(self, domain_id, base_commit_ref, canonical_snapshot, idempotency_key):
+        import json
+        self._saved_documents = json.loads(canonical_snapshot)
+        return {"status": "confirmed", "store_id": "wiki-store", "branch_id": "candidate-branch", "commit_hash": "candidate-commit"}
+
     def read_exact_snapshot(self, store_id, database, branch_id, commit_hash):
         import llm_wiki.canonical as canonical
-        docs = ({"@type": "WikiRevision", "wiki_revision_id": "revision-formal-1",
+        docs = self._saved_documents if commit_hash == "candidate-commit" else ({"@type": "WikiRevision", "wiki_revision_id": "revision-formal-1",
                  "wiki_domain_id": DOMAIN, "lifecycle_state": "formal"},)
         return WikiSnapshotRead.confirmed(
             store_id=store_id, database=database, branch_id=branch_id, commit_hash=commit_hash,
@@ -336,6 +451,10 @@ class ReviewableWikiCandidatesToolTestCase(unittest.TestCase):
             sqlite_store=self.sqlite, terminus_store=_FakeWikiTerminus(),
             resource_review_service=FakeReviews(), terminus_database="wiki-db",
         )
+        from llm_wiki.merged_candidate import WikiMergedCandidateService
+        merged_candidate_service = WikiMergedCandidateService(
+            self.sqlite, candidate, service_name="wiki-management",
+        )
         self.service = WikiManagementService(
             formal_query=formal,
             candidate_service=candidate,
@@ -344,8 +463,10 @@ class ReviewableWikiCandidatesToolTestCase(unittest.TestCase):
                 "reader": frozenset({"read"}),
                 "submitter": frozenset({"candidate_submit"}),
                 "centre": frozenset({"centre"}),
+                "merger": frozenset({"merged_candidate"}),
             },
             sqlite_store=self.sqlite,
+            merged_candidate_service=merged_candidate_service,
         )
 
     def _insert_candidate(self, proposal_id="proposal-1", *, submission_id="submission-1",
@@ -407,6 +528,51 @@ class ReviewableWikiCandidatesToolTestCase(unittest.TestCase):
         )
         self.assertEqual(denied.error_code, "forbidden")
         self.assertEqual(denied.result, None)
+
+    def test_centre_no_longer_grants_wiki_write_tools(self):
+        """centre is read-only after ai4-5auy; submit is forbidden for centre-only callers."""
+        self._insert_candidate()
+        outcome = self.service.call_tool(
+            "submit_wiki_candidate",
+            {"document_change": _change(), "idempotency_key": "key-centre-wiki"},
+            actor_id="centre",
+        )
+        self.assertEqual(outcome.error_code, "forbidden")
+
+    def test_create_wiki_merged_candidate_requires_merged_candidate_capability(self):
+        self._insert_candidate(proposal_id="proposal-1", submission_id="submission-1", commit="candidate-commit")
+        self._insert_candidate(proposal_id="proposal-2", submission_id="submission-2", commit="candidate-commit-2")
+        document_change = _change(submission_id="submission-merged", proposal_id="proposal-merged")
+        args = {
+            "wiki_domain_id": DOMAIN,
+            "source_proposal_ids": ["proposal-1", "proposal-2"],
+            "base_formal_revision_id": BASE,
+            "document_change": document_change,
+            "idempotency_key": "key-wiki-merged",
+        }
+        denied = self.service.call_tool("create_merged_candidate", args, actor_id="centre")
+        self.assertEqual(denied.error_code, "forbidden")
+        outcome = self.service.call_tool("create_merged_candidate", args, actor_id="merger")
+        self.assertEqual(outcome.status, "ok", outcome.reason_code)
+        self.assertIsNotNone(outcome.result.get("commit_hash"))  # type: ignore[union-attr]
+
+    def test_wiki_merged_candidate_rejects_nested_merge(self):
+        self._insert_candidate(proposal_id="proposal-1", submission_id="submission-1", commit="candidate-commit")
+        with self.sqlite.connection() as db:
+            db.execute(
+                "UPDATE wiki_buffer_submission SET submitter_id='merged:abc' WHERE submission_id='submission-1'"
+            )
+            db.commit()
+        document_change = _change(submission_id="submission-merged", proposal_id="proposal-merged")
+        args = {
+            "wiki_domain_id": DOMAIN,
+            "source_proposal_ids": ["proposal-1"],
+            "base_formal_revision_id": BASE,
+            "document_change": document_change,
+            "idempotency_key": "key-wiki-nested",
+        }
+        outcome = self.service.call_tool("create_merged_candidate", args, actor_id="merger")
+        self.assertEqual(outcome.error_code, "invalid_arguments")
 
 
 if __name__ == "__main__":

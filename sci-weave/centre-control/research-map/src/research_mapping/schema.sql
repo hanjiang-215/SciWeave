@@ -205,3 +205,30 @@ CREATE TABLE IF NOT EXISTS mapping_current_formal_revision (
     FOREIGN KEY (current_formal_revision_id)
         REFERENCES formal_mapping_revision (formal_revision_id)
 );
+
+-- Centre Agent prereview report log (ai4-oz3s): append-only, unique per
+-- (candidate_id, candidate_head, rule_set_version). SQLite never edits a
+-- report row; invalidation is expressed by appended decision rows.
+CREATE TABLE IF NOT EXISTS mapping_prereview_report (
+    report_id               TEXT PRIMARY KEY,
+    candidate_id            TEXT NOT NULL,
+    candidate_head          TEXT NOT NULL,
+    base_formal_revision_id TEXT,
+    rule_set_version        TEXT NOT NULL,
+    checks                  TEXT NOT NULL,
+    verdict                 TEXT NOT NULL CHECK (verdict IN ('passed', 'failed')),
+    conflict_matrix         TEXT NOT NULL,
+    created_at              TEXT NOT NULL,
+    UNIQUE (candidate_id, candidate_head, rule_set_version)
+);
+
+CREATE TABLE IF NOT EXISTS mapping_prereview_report_decision (
+    decision_id           TEXT PRIMARY KEY,
+    target_report_id      TEXT NOT NULL,
+    reason                TEXT NOT NULL CHECK (reason IN ('head_moved', 'base_moved')),
+    superseding_report_id TEXT,
+    decided_at            TEXT NOT NULL,
+    CHECK (reason <> 'head_moved' OR superseding_report_id IS NOT NULL),
+    FOREIGN KEY (target_report_id) REFERENCES mapping_prereview_report (report_id),
+    FOREIGN KEY (superseding_report_id) REFERENCES mapping_prereview_report (report_id)
+);
