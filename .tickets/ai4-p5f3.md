@@ -6,7 +6,7 @@ links: []
 created: 2026-10-23T11:28:01Z
 type: feature
 priority: 1
-assignee: Frank Qi
+assignee: hanjiang
 parent: ai4-te1v
 tags: [wayfinder:grilling, centre-control, message-queue, handoff]
 ---
@@ -67,6 +67,10 @@ tags: [wayfinder:grilling, centre-control, message-queue, handoff]
 - [handoff coordinator 依赖重算与派发恢复规格](ai4-zc85)：先定义协调服务的输入端口、等待/派发状态和恢复契约，再实现服务。
 
 ## Notes
+
+**2026-10-25 转交（hanjiang）**
+
+身份核对：本票 assignee 已由 Frank Qi 改为 hanjiang；当前分支 `feature/hanjiang`、`git config user.name=hanjiang`，一致。转交原因：Frank Qi 暂时无法继续推进项目，经其本人授权，由 hanjiang 接手本票后续推进与收口。原负责人 Frank Qi，转交时间 2026-10-25T12:41:00Z。转交只变更归属并记录，不改写正文与验收标准。
 
 **2026-10-23**：本轮进一步收敛候选和通知边界：取消 `defer`；PO 的候选决策只能是 `formalize`、`request_revision` 或 `reject`。返修必须指定唯一 `repair_owner_id`，由负责人自己的 Task Agent 执行；Centre Agent 只预审，不返修。混合候选不可行时，PO 可以指派负责人组织返修或通过高权限 MCP 创建新混合候选。无后续 TaskNode 时发送 `task_terminal_summary` 通知 PO，PO 通过 MCP 创建后续候选，不直接操作队列。相关 PO 工具边界另见「PO 候选裁决、返修指派与根任务分派 MCP」。
 

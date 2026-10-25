@@ -6,7 +6,7 @@ links: [ai4-cl3t]
 created: 2026-10-23T07:12:26Z
 type: feature
 priority: 1
-assignee: Frank Qi
+assignee: hanjiang
 parent: ai4-o2n3
 tags: [implementation, task-agent, runtime, config, agent-libs, mcp-libs, workflow-libs]
 ---
@@ -42,3 +42,7 @@ tags: [implementation, task-agent, runtime, config, agent-libs, mcp-libs, workfl
 **2026-10-23T07:28:39Z**
 
 2026-10-23 修订：根据实现审查补充不存在资源目录和标准/本地重复 MCP 资源的稳定处理，避免静默覆盖；runtime 16 tests、compileall、git diff --check 仍通过。
+
+**2026-10-25 转交（hanjiang）**
+
+身份核对：本票 assignee 已由 Frank Qi 改为 hanjiang；当前分支 `feature/hanjiang`、`git config user.name=hanjiang`，一致。转交原因：Frank Qi 暂时无法继续推进项目，经其本人授权，由 hanjiang 接手本票后续推进与收口。原负责人 Frank Qi，转交时间 2026-10-25T12:41:00Z。转交只变更归属与记录，不改写正文与验收标准。

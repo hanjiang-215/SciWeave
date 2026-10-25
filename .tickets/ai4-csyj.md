@@ -6,7 +6,7 @@ links: [ai4-dhpv]
 created: 2026-10-19T01:14:45Z
 type: epic
 priority: 1
-assignee: Frank Qi
+assignee: hanjiang
 parent: ai4-kpvp
 tags: [wayfinder:grilling]
 ---
@@ -22,6 +22,10 @@ tags: [wayfinder:grilling]
 形成可交给后续规划的 Task Handoff Message 流程规格：明确发布前置条件（正式版本已发布）、消息结构（含触发的正式版本标识）、沿依赖边的路由与多接收者处理、投递状态、重复与失败恢复、接收确认和下游任务解除阻塞规则。
 
 ## Notes
+
+**2026-10-25 转交（hanjiang）**
+
+身份核对：本票 assignee 已由 Frank Qi 改为 hanjiang；当前分支 `feature/hanjiang`、`git config user.name=hanjiang`，一致。转交原因：Frank Qi 暂时无法继续推进项目，经其本人授权，由 hanjiang 接手本票后续推进与收口。原负责人 Frank Qi，转交时间 2026-10-25T12:41:00Z。转交只变更归属并记录，不改写正文与验收标准。
 
 **2026-10-19T05:47:44Z**
 

@@ -6,7 +6,7 @@ links: [ai4-we38, ai4-ujvn, ai4-v19u, ai4-cdia, ai4-8aa0, ai4-o2n3]
 created: 2026-10-21T22:43:00Z
 type: feature
 priority: 1
-assignee: Frank Qi
+assignee: hanjiang
 tags: [toolkit, task-agent, researcher]
 ---
 # 建立新 Task Agent 的套件
@@ -69,6 +69,10 @@ tags: [toolkit, task-agent, researcher]
 - [ ] 与 `centre-agents` 无 path 依赖。两个 gateway 进程用用户级自启动常驻；hooks 只在打开 harness 时检查并补启动
 
 ## Notes
+
+**2026-10-25 转交（hanjiang）**
+
+身份核对：本票 assignee 已由 Frank Qi 改为 hanjiang；当前分支 `feature/hanjiang`、`git config user.name=hanjiang`，一致。转交原因：Frank Qi 暂时无法继续推进项目，经其本人授权，由 hanjiang 接手本票后续推进与收口。原负责人 Frank Qi，转交时间 2026-10-25T12:41:00Z。转交只变更归属并记录，不改写正文与验收标准。
 
 **2026-10-21T22:43:00Z**
 

@@ -6,7 +6,7 @@ links: [ai4-iebi, ai4-s2nb, ai4-cdia]
 created: 2026-10-25T09:20:00Z
 type: feature
 priority: 3
-assignee: Frank Qi
+assignee: hanjiang
 parent: ai4-yyy9
 tags: [implementation, task-agent, mcp, mcp-libs, config]
 ---
@@ -43,6 +43,10 @@ tags: [implementation, task-agent, mcp, mcp-libs, config]
 - [ ] runtime 全部测试通过；`git diff --check` 通过。
 
 ## Notes
+
+**2026-10-25 转交（hanjiang）**
+
+身份核对：本票 assignee 已由 Frank Qi 改为 hanjiang；当前分支 `feature/hanjiang`、`git config user.name=hanjiang`，一致。转交原因：Frank Qi 暂时无法继续推进项目，经其本人授权，由 hanjiang 接手本票后续推进与收口。原负责人 Frank Qi，转交时间 2026-10-25T12:41:00Z。转交只变更归属并记录，不改写正文与验收标准。
 
 **2026-10-25 登记与延后决定（Frank Qi）**
 

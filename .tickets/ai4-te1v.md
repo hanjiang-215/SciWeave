@@ -6,7 +6,7 @@ links: []
 created: 2026-10-18T15:18:52Z
 type: epic
 priority: 1
-assignee: Frank Qi
+assignee: hanjiang
 parent: ai4-xup8
 tags: [wayfinder:grilling]
 ---
@@ -38,6 +38,10 @@ tags: [wayfinder:grilling]
 - PO 的候选裁决和根任务第一条消息均通过最高权限领域 MCP 完成；根任务使用幂等 `dispatch_root_task`，候选不支持 `defer`，返修必须指定负责人。
 
 ## Notes
+
+**2026-10-25 转交（hanjiang）**
+
+身份核对：本票 assignee 已由 Frank Qi 改为 hanjiang；当前分支 `feature/hanjiang`、`git config user.name=hanjiang`，一致。转交原因：Frank Qi 暂时无法继续推进项目，经其本人授权，由 hanjiang 接手本票后续推进与收口。原负责人 Frank Qi，转交时间 2026-10-25T12:41:00Z。转交只变更归属并记录，不改写正文与验收标准。
 
 **2026-10-18T15:38:23Z**
 
