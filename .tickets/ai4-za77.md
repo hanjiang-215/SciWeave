@@ -70,6 +70,19 @@ tags: [toolkit, task-agent, researcher]
 
 ## Notes
 
+**2026-10-25 套件队列消费打通(hanjiang)**
+
+身份核对:本票 assignee 为 hanjiang,当前分支 `feature/hanjiang`、`git config user.name=hanjiang`,一致。
+
+按修订后的三条验收推进套件侧的真实可用性,提交 `69e1d1b`、`d561d1a`(feature/hanjiang):
+
+- **libs 侧**:`runtime/src/work_agent_runtime/queue.py` 新增 `KafkaQueueClient`(kafka-python),`FakeQueue` 从 `runtime.py` 统一迁入 `queue.py`(公开 API 不变);runtime 依赖新增 `kafka-python>=3.0.11,<4`,组级 uv.lock 已锁。
+- **服务模板**:`service-template/gateway/subscriber` 从「FakeQueue 占位 + 打印一行」改为可运行消费者——`QUEUE_URL` + `QUEUE_CONSUMER_GROUP` 齐全时连真实中央队列,否则退回假队列;消息交给 runtime 驱动 Worker 后才提交 offset。
+- **验证**:runtime 31 项测试全绿(新增 2 项 queue 测试)、compileall 通过;真实 Redpanda 上生产 `task_handoff_ready` 到 `sciweave.task-handoff.researcher-1`,模板经 kafka-python 消费后产出 `completed` + 非空 `draft_id`。
+- **使用说明**:`README.md` 增加「队列消费启动(subscriber)」一节;`verify-task-agent/references/e2e-checklist.md` 增加真实 Redpanda 最小验证脚本;`.env.example` 已含 `QUEUE_URL`/`QUEUE_CONSUMER_GROUP` 等变量。
+
+验收状态:第二条(libs 含状态机/Worker Lease/拉起子进程 + 三进程壳调用 libs)与「使用说明能让研究员建出能连队列、执行、写草稿的 agent」已具备可验证路径;但草稿写入当前仍走 FakeDraftBox,真实草稿箱 MCP 接入与「与 centre-agents 无 path 依赖」的最终复核留待套件整体验收,故不擅自勾选,本票保持 open。
+
 **2026-10-25 转交（hanjiang）**
 
 身份核对：本票 assignee 已由 Frank Qi 改为 hanjiang；当前分支 `feature/hanjiang`、`git config user.name=hanjiang`，一致。转交原因：Frank Qi 暂时无法继续推进项目，经其本人授权，由 hanjiang 接手本票后续推进与收口。原负责人 Frank Qi，转交时间 2026-10-25T12:41:00Z。转交只变更归属并记录，不改写正文与验收标准。
