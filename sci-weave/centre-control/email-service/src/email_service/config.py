@@ -27,6 +27,7 @@ class RetrySettings:
     max_seconds: float
     poll_seconds: float
     sending_timeout_seconds: float
+    max_attempts: int
 
 
 @dataclass(frozen=True)
@@ -102,6 +103,7 @@ class EmailServiceConfig:
                 max_seconds=_seconds("SCIWEAVE_EMAIL_RETRY_MAX_SECONDS"),
                 poll_seconds=_seconds("SCIWEAVE_EMAIL_DISPATCH_POLL_SECONDS"),
                 sending_timeout_seconds=_seconds("SCIWEAVE_EMAIL_SENDING_TIMEOUT_SECONDS"),
+                max_attempts=_max_attempts(),
             ),
             kind_allowlist=_kind_allowlist(),
         )
@@ -160,4 +162,14 @@ def _multiplier(name: str) -> float:
     value = _seconds(name)
     if value < 1:
         raise ValueError(f"{name} must be at least 1")
+    return value
+
+
+def _max_attempts() -> int:
+    raw = os.environ.get("SCIWEAVE_EMAIL_MAX_ATTEMPTS", "3").strip()
+    if not raw.isdigit():
+        raise ValueError("SCIWEAVE_EMAIL_MAX_ATTEMPTS must be a positive integer")
+    value = int(raw)
+    if value < 1:
+        raise ValueError("SCIWEAVE_EMAIL_MAX_ATTEMPTS must be a positive integer")
     return value

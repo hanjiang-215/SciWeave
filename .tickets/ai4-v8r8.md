@@ -1,6 +1,6 @@
 ---
 id: ai4-v8r8
-status: open
+status: closed
 deps: []
 links: []
 created: 2026-10-24T14:17:45Z
@@ -43,22 +43,37 @@ tags: [centre-control, email-service, notification, delivery]
 
 ## Acceptance criteria
 
-- [ ] 同一通知的多个收件人中，前一个已送达、后一个暂时失败时，重试只补发未送达的收件人。已送达的收件人不会收到第二封。
-- [ ] 逐收件人的送达进度持久化在 `notification_delivery.recipient_progress_json`，进程重启后仍按该进度续跑，不重新发送已送达的收件人。
-- [ ] 老记录缺少收件人进度时按 `recipients_json` 视为全部未送达，续跑行为与当前版本一致。
-- [ ] 发送端口抛出未分类异常时，通知离开 `sending` 并进入 `permanent_failure`，`error_summary` 为 `sender_failure`。
-- [ ] 单条通知因发送端口异常失败，不终止后台投递循环；同一轮里其他可投递的通知仍会被处理。
-- [ ] 收件人连续 3 次 `TransientSenderFailure` 后转 `permanent_failure`，`error_summary` 为 `max_attempts_exceeded`，且不再自动重试。
-- [ ] `SCIWEAVE_EMAIL_MAX_ATTEMPTS` 未配置时默认 3；非正整数被拒绝，与现有重试参数校验方式一致。
-- [ ] 通知级状态按「全部 `sent` 才 `sent`，仍有可重试则 `retryable`，否则 `permanent_failure`」聚合；通知级 `attempt_count` 是各收件人尝试次数的最大值。
-- [ ] `get_notification_status` 返回 `recipients` 数组，含 `principal_id`、`status`、`attempt_count`、`error_summary`，且响应不含邮箱地址、正文、凭据和原始发送错误。
-- [ ] 上述行为通过认证后的 MCP `send_notification` 和 `get_notification_status` 验证，使用 Fake sender，不依赖真实 SMTP。
+- [x] 同一通知的多个收件人中，前一个已送达、后一个暂时失败时，重试只补发未送达的收件人。已送达的收件人不会收到第二封。
+- [x] 逐收件人的送达进度持久化在 `notification_delivery.recipient_progress_json`，进程重启后仍按该进度续跑，不重新发送已送达的收件人。
+- [x] 老记录缺少收件人进度时按 `recipients_json` 视为全部未送达，续跑行为与当前版本一致。
+- [x] 发送端口抛出未分类异常时，通知离开 `sending` 并进入 `permanent_failure`，`error_summary` 为 `sender_failure`。
+- [x] 单条通知因发送端口异常失败，不终止后台投递循环；同一轮里其他可投递的通知仍会被处理。
+- [x] 收件人连续 3 次 `TransientSenderFailure` 后转 `permanent_failure`，`error_summary` 为 `max_attempts_exceeded`，且不再自动重试。
+- [x] `SCIWEAVE_EMAIL_MAX_ATTEMPTS` 未配置时默认 3；非正整数被拒绝，与现有重试参数校验方式一致。
+- [x] 通知级状态按「全部 `sent` 才 `sent`，仍有可重试则 `retryable`，否则 `permanent_failure`」聚合；通知级 `attempt_count` 是各收件人尝试次数的最大值。
+- [x] `get_notification_status` 返回 `recipients` 数组，含 `principal_id`、`status`、`attempt_count`、`error_summary`，且响应不含邮箱地址、正文、凭据和原始发送错误。
+- [x] 上述行为通过认证后的 MCP `send_notification` 和 `get_notification_status` 验证，使用 Fake sender，不依赖真实 SMTP。
 
 ## Blocked by
 
 无。可以直接开工。
 
 ## Notes
+
+**2026-10-25 实现完成（hanjiang）**
+
+身份核对：本票 assignee 为 hanjiang，当前分支 `feature/hanjiang`、`git config user.name=hanjiang`，一致。
+
+实现与验证（`sci-weave/centre-control/email-service`）：
+
+- 收件人进度列 `notification_delivery.recipient_progress_json`：新库建表即带该列，老库由 `_ensure_retry_columns` 自动 `ALTER TABLE ADD COLUMN` 迁移；老记录该列为空时按 `recipients_json` 解析为全部未送达，与既有行为一致。
+- `_deliver_one` 改为逐收件人发送：每次发送前把收件人置 `sending` 并写回进度，成功后转 `sent`，失败按异常类型转 `retryable`/`permanent_failure`；已 `sent` 或已 `permanent_failure` 的收件人跳过，重试只补发未送达的收件人。
+- 未分类异常（含 `UnboundMailSender` 抛的 `EmailServiceError("sender_unavailable")`）统一记 `permanent_failure` + `error_summary="sender_failure"`；单条失败不终止投递循环，同一轮其他通知继续处理。
+- 重试上限按收件人计数：`SCIWEAVE_EMAIL_MAX_ATTEMPTS`（默认 3）由 `config.py` 的 `_max_attempts()` 读取并校验非正整数；第 3 次仍失败转 `permanent_failure` + `max_attempts_exceeded`。
+- 通知级状态聚合：全部 `sent` 才 `sent`，仍有 `retryable/pending/sending` 则 `retryable`，否则 `permanent_failure`；通知级 `attempt_count` 为各收件人尝试次数最大值；`error_summary` 透传收件人一致的原因（`max_attempts_exceeded`/`non_retryable_content`/`sender_failure`），否则 `permanent_sender_failure`。
+- `get_notification_status` 新增 `recipients` 数组（`principal_id`/`status`/`attempt_count`/`error_summary`），不返回邮箱地址、正文、凭据和原始发送错误；既有查询权限不变。
+
+验证：在 email-service 执行 `uv run --locked --env-file .env.example pytest -q`，58 passed；`uv run --locked --env-file .env.example python -m compileall -q src tests` 与 `git diff --check` 通过。新增测试覆盖：部分送达后重试只补发未送达收件人、未分类异常永久失败且循环继续、超限转 `max_attempts_exceeded`、非法 `SCIWEAVE_EMAIL_MAX_ATTEMPTS` 拒绝、旧库无进度列续跑。依赖无新增（复用既有 `sqlite3`/`mcp` SDK），`.env.example` 补 `SCIWEAVE_EMAIL_MAX_ATTEMPTS=3` 示例。
 
 **2026-10-25T06:58:36Z（转交，hanjiang）**
 

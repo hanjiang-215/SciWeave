@@ -133,6 +133,14 @@ def test_unconfigured_notification_kind_is_queryable_and_not_sent(invalid_mcp):
         "delivery_status": "invalid",
         "attempt_count": 0,
         "error_summary": "invalid",
+        "recipients": [
+            {
+                "principal_id": PRINCIPAL_ID,
+                "status": "pending",
+                "attempt_count": 0,
+                "error_summary": None,
+            }
+        ],
     }
     time.sleep(0.3)
     assert _status(invalid_mcp, notification_id)["delivery_status"] == "invalid"
@@ -179,6 +187,14 @@ def test_omitted_required_field_is_queryable_invalid_and_not_sent(invalid_mcp):
         "delivery_status": "invalid",
         "attempt_count": 0,
         "error_summary": "invalid",
+        "recipients": [
+            {
+                "principal_id": PRINCIPAL_ID,
+                "status": "pending",
+                "attempt_count": 0,
+                "error_summary": None,
+            }
+        ],
     }
 
 
@@ -285,6 +301,14 @@ def test_unusable_contact_is_permanent_and_not_sent(invalid_mcp, failure, code):
         "delivery_status": "permanent_failure",
         "attempt_count": 0,
         "error_summary": code,
+        "recipients": [
+            {
+                "principal_id": PRINCIPAL_ID,
+                "status": "pending",
+                "attempt_count": 0,
+                "error_summary": None,
+            }
+        ],
     }
     time.sleep(0.3)
     assert _status(invalid_mcp, notification_id)["delivery_status"] == "permanent_failure"
@@ -346,6 +370,14 @@ def test_caller_sender_overrides_are_rejected_and_mailbox_stays_configured(inval
         "notification_id": accepted_id,
         "delivery_status": "sent",
         "attempt_count": 1,
+        "recipients": [
+            {
+                "principal_id": PRINCIPAL_ID,
+                "status": "sent",
+                "attempt_count": 1,
+                "error_summary": None,
+            }
+        ],
     }
     assert len(invalid_mcp["sender"].sent) == 1
     message = invalid_mcp["sender"].sent[0]
