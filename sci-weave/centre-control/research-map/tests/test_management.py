@@ -11,6 +11,7 @@ import urllib.request
 
 from audit_trail import query_audit_calls
 
+from research_mapping import errors
 from research_mapping.candidate_reader import MappingCandidateReader
 from research_mapping.candidate_submission import MappingCandidateService
 from research_mapping.config import MappingConfig
@@ -146,6 +147,36 @@ class ManagementServiceTestCase(unittest.TestCase):
             "get_formal_mapping", {"mapping_domain_id": DOMAIN}, actor_id="submitter",
         )
         self.assertEqual(denied.error_code, "forbidden")
+
+    def test_formal_read_at_revision_reads_an_activated_historical_snapshot(self):
+        outcome = self.service.call_tool(
+            "get_formal_mapping_at_revision",
+            {"mapping_domain_id": DOMAIN, "formal_revision_id": BASE},
+            actor_id="reader",
+        )
+        self.assertEqual(outcome.status, "ok")
+        self.assertEqual(outcome.result["status"], "available")  # type: ignore[index]
+        self.assertEqual(outcome.result["formal_revision_id"], BASE)  # type: ignore[index]
+        denied = self.service.call_tool(
+            "get_formal_mapping_at_revision",
+            {"mapping_domain_id": DOMAIN, "formal_revision_id": BASE},
+            actor_id="submitter",
+        )
+        self.assertEqual(denied.error_code, "forbidden")
+
+    def test_formal_read_at_revision_unknown_or_bad_arguments(self):
+        unknown = self.service.call_tool(
+            "get_formal_mapping_at_revision",
+            {"mapping_domain_id": DOMAIN, "formal_revision_id": "no-such-revision"},
+            actor_id="reader",
+        )
+        self.assertEqual(unknown.status, "ok")
+        self.assertEqual(unknown.result["status"], "no_such_revision")  # type: ignore[index]
+        self.assertEqual(unknown.result["reason_code"], errors.REVISION_NOT_FOUND)  # type: ignore[index]
+        missing_arg = self.service.call_tool(
+            "get_formal_mapping_at_revision", {"mapping_domain_id": DOMAIN}, actor_id="reader",
+        )
+        self.assertEqual(missing_arg.error_code, "invalid_arguments")
 
     def test_candidate_submit_requires_candidate_submit_capability(self):
         outcome = self.service.call_tool(

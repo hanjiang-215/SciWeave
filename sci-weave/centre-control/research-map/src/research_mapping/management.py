@@ -115,6 +115,7 @@ class MappingManagementService:
     def _handlers(self) -> dict[str, Any]:
         handlers: dict[str, Any] = {
             "get_formal_mapping": self._get_formal_mapping,
+            "get_formal_mapping_at_revision": self._get_formal_mapping_at_revision,
             "list_candidates": self._list_candidates,
             "submit_candidate": self._submit_candidate,
         }
@@ -281,6 +282,12 @@ class MappingManagementService:
         result = self._formal_query.get_current(domain_id)
         return _formal_query_result(result)
 
+    def _get_formal_mapping_at_revision(self, arguments: dict[str, Any], actor_id: str) -> dict[str, Any]:
+        domain_id = _required(arguments, "mapping_domain_id")
+        revision_id = _required(arguments, "formal_revision_id")
+        result = self._formal_query.get_by_revision(domain_id, revision_id)
+        return _formal_query_result(result)
+
     def _list_candidates(self, arguments: dict[str, Any], actor_id: str) -> dict[str, Any]:
         submission_id = _required(arguments, "submission_id")
         if self._sqlite is None:
@@ -377,6 +384,7 @@ _WRITE_TOOLS = frozenset({
 
 _TOOL_CAPABILITIES = {
     "get_formal_mapping": _READ_CAPABILITIES,
+    "get_formal_mapping_at_revision": _READ_CAPABILITIES,
     "list_candidates": _READ_CAPABILITIES,
     "list_reviewable_candidates": _READ_CAPABILITIES,
     "submit_candidate": _CANDIDATE_SUBMIT_CAPABILITIES,
@@ -396,6 +404,19 @@ TOOL_DEFINITIONS = [
             "type": "object",
             "required": ["mapping_domain_id"],
             "properties": {"mapping_domain_id": {"type": "string"}},
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "get_formal_mapping_at_revision",
+        "description": "Read the exact formal Research Mapping snapshot pinned by a specific formal_revision_id (historical activated revision), using the same consistency gates as the current pointer read. Requires the read or centre capability.",
+        "inputSchema": {
+            "type": "object",
+            "required": ["mapping_domain_id", "formal_revision_id"],
+            "properties": {
+                "mapping_domain_id": {"type": "string"},
+                "formal_revision_id": {"type": "string"},
+            },
             "additionalProperties": False,
         },
     },
@@ -608,6 +629,7 @@ def _classify(error: Exception) -> str:
 def _target_type(tool: str) -> str:
     return {
         "get_formal_mapping": "MappingDomain",
+        "get_formal_mapping_at_revision": "MappingFormalRevision",
         "list_candidates": "MappingSubmission",
         "list_reviewable_candidates": "MappingDomain",
         "submit_candidate": "MappingSubmission",
@@ -623,6 +645,8 @@ def _target_type(tool: str) -> str:
 def _target_id(arguments: dict[str, Any], tool: str) -> str | None:
     if tool == "get_formal_mapping":
         return _text(arguments.get("mapping_domain_id"))
+    if tool == "get_formal_mapping_at_revision":
+        return _text(arguments.get("formal_revision_id"))
     if tool == "list_candidates":
         return _text(arguments.get("submission_id"))
     if tool == "list_reviewable_candidates":

@@ -6,7 +6,7 @@ links: []
 created: 2026-10-23T11:59:41Z
 type: feature
 priority: 1
-assignee: Frank Qi
+assignee: hanjiang
 parent: ai4-te1v
 tags: [wayfinder:grilling, message-queue, task-agent, agent, handoff]
 ---
@@ -54,5 +54,9 @@ tags: [wayfinder:grilling, message-queue, task-agent, agent, handoff]
 - 形成可供 Task Agent subscriber 实现票引用的验证场景
 
 ## Notes
+
+**2026-10-25T07:03:11Z（转交，hanjiang）**
+
+assignee 由 Frank Qi 转交为 hanjiang。转交原因：按赛程推进安排，hanjiang 接手本票的后续推进与实现收口；原负责人 Frank Qi。转交时间 2026-10-25T07:03:11Z。
 
 **2026-10-23**：本轮确认：Workflow 注册完成且具备接收任务条件时创建 `sciweave.task-handoff.<agent_id>`；注销不删除 topic 或注册记录，只标记注销/不可用；离线保留 topic 和消息。consumer group 由 `mapping_domain_id + agent_id` 派生，同一 Agent 多实例共享。Workflow 卡片缺失、版本不兼容、加载或启动失败时保留 Inbox 消息，生成可观察配置错误和人工通知，不修改正式 Map。

@@ -6,7 +6,7 @@ links: [ai4-te1v, ai4-dhpv, ai4-he04, ai4-5z9e]
 created: 2026-10-21T15:37:05Z
 type: feature
 priority: 1
-assignee: Frank Qi
+assignee: hanjiang
 parent: ai4-fv1r
 tags: [centre-agents, governance, prereview, wayfinder:grilling]
 ---
@@ -76,17 +76,36 @@ tags: [centre-agents, governance, prereview, wayfinder:grilling]
 
 ## Acceptance Criteria
 
-- [ ] 纳入范围可被机械判定，且明确不按基准版本排除
+- [x] 纳入范围可被机械判定，且明确不按基准版本排除
 - [ ] 事件由领域 MCP 自动发布，不依赖人工发送
 - [ ] 正式版本发布也发事件；受影响候选的报告转 `stale` 并触发重算
-- [ ] 有去抖规则，且预审输入是同一时点的全量快照
-- [ ] 事件载荷只带目标标识，不携带候选正文
-- [ ] 门禁粒度为单候选，明确不做整链冻结
+- [x] 有去抖规则，且预审输入是同一时点的全量快照
+- [x] 事件载荷只带目标标识，不携带候选正文
+- [x] 门禁粒度为单候选，明确不做整链冻结
 - [ ] 故障时阻塞且可观测：PO 能看出候选卡在缺报告，而不是无响应
-- [ ] 明确不用分发租约，重放靠报告唯一键幂等
+- [x] 明确不用分发租约，重放靠报告唯一键幂等
 - [ ] 有回归测试覆盖连续 head 更新只触发一次、故障期间待审候选状态可见、正式版本发布只影响依赖该版本的候选
 
 ## Notes
+
+**2026-10-25 规格层收口（hanjiang）**
+
+身份核对：本票 assignee 为 hanjiang，当前分支 `feature/hanjiang`、`git config user.name=hanjiang`，一致。
+
+规格五层全部定稿并勾选：纳入范围（三条机械判定、不按基准排除）、去抖（同 candidate_id 短窗口一条 + 全量快照审）、事件载荷只带目标标识、门禁粒度为单候选、不用分发租约（重放靠 `(candidate_id, candidate_head, rule_set_version)` 唯一键幂等，已在 `ai4-oz3s` 落库并有 `test_prereview.py` 覆盖 head_moved/base_moved 追加判定）。
+
+剩余 4 项未勾选为**实现类**，全部依赖消息队列语义 `ai4-te1v`（Frank Qi，open）：
+
+- 候选创建/候选头更新时由领域 MCP 自动发布事件；
+- 正式版本发布事件 + 受影响候选报告转失效并触发重算；
+- 中央服务不可用时的预审队列可查/待审候选状态可见；
+- 覆盖这三种场景的回归测试。
+
+按约定，本票实现部分的触发源、去抖载体和可观测队列都落在 `ai4-te1v` 收敛后的消息/预审触发实现里，因此暂不关闭；已通过 issue 知会 Frank Qi（见下）。
+
+**2026-10-25 负责人转交（hanjiang 操作，经 Frank Qi 授权）**
+
+身份核对：本票 assignee 已由 Frank Qi 改为 hanjiang；当前分支 `feature/hanjiang`、`git config user.name=hanjiang`，一致。依据 Gitee issue https://gitee.com/qi-yueran/ai4science/issues/IKQ8BD 第 1 条，Frank Qi 授权 hanjiang 直接转交。转交原因：预审链其余子票（ai4-eex0/he04/5z9e/oebi）已由 hanjiang 收口，本票是预审链最后一张门禁票，转由 hanjiang 统一推进与关闭。正文与验收标准不改写，仅变更归属并记录。
 
 **2026-10-21T23:40:00Z**
 

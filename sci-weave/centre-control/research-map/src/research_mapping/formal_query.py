@@ -53,8 +53,47 @@ class FormalQueryService:
                 errors.POINTER_DOMAIN_MISMATCH,
             )
 
+        return self._resolve_revision(mapping_domain_id, revision)
+
+    def get_by_revision(
+        self, mapping_domain_id: str, formal_revision_id: str
+    ) -> FormalQueryResult:
+        """Read the exact formal snapshot pinned by a specific revision id.
+
+        The handoff coordinator uses this to read the dependency graph of a
+        *historical* activated revision (for example the base revision of a
+        pending handoff), without depending on which revision is currently
+        current. The same consistency gates as ``get_current`` apply: only a
+        matching revision row, succeeded formalization result, exact snapshot
+        identity and (when recorded) matching content digest produce content.
+        """
+        revision = self._sqlite.get_formal_revision(formal_revision_id)
+        if revision is None:
+            return self._result(
+                mapping_domain_id,
+                "no_such_revision",
+                errors.REVISION_NOT_FOUND,
+            )
+        if revision.mapping_domain_id != mapping_domain_id:
+            return self._result(
+                mapping_domain_id,
+                "inconsistent",
+                errors.POINTER_DOMAIN_MISMATCH,
+            )
+
+        return self._resolve_revision(mapping_domain_id, revision)
+
+    def _resolve_revision(
+        self, mapping_domain_id: str, revision: FormalMappingRevision
+    ) -> FormalQueryResult:
+        """Verify and materialize one activated revision into content.
+
+        Shared by ``get_current`` and ``get_by_revision`` so both entry
+        points apply the exact same formalisation and snapshot gates.
+        """
+
         formalization = self._sqlite.get_succeeded_formalization_result(
-            mapping_domain_id, revision_id
+            mapping_domain_id, revision.formal_revision_id
         )
         if formalization is None:
             return self._result(

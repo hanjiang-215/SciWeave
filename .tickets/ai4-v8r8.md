@@ -6,7 +6,7 @@ links: []
 created: 2026-10-24T14:17:45Z
 type: bug
 priority: 1
-assignee: Frank Qi
+assignee: hanjiang
 parent: ai4-f985
 tags: [centre-control, email-service, notification, delivery]
 ---
@@ -59,6 +59,10 @@ tags: [centre-control, email-service, notification, delivery]
 无。可以直接开工。
 
 ## Notes
+
+**2026-10-25T06:58:36Z（转交，hanjiang）**
+
+assignee 由 Frank Qi 转交为 hanjiang。转交原因：按赛程推进安排，hanjiang 接手本票的后续推进与实现收口；原负责人 Frank Qi。转交时间 2026-10-25T06:58:36Z。
 
 **2026-10-24T14:17:45Z**
 

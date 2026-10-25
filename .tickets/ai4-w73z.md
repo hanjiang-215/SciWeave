@@ -101,6 +101,12 @@ tags: [mcp, mapping, wiki, audit, centre-control, implementation, ready-for-agen
 
 `ai4-t2wc` 已关闭，`ai4-5auy`（提交 `1dada55`）落地中央 Agent 开放面：`centre` 收敛为只读三组读工具，`append_prereview_log`/`create_merged_candidate` 分属 `prereview_log`/`merged_candidate` 独立档，11 个写工具摘除 `centre` 授权——与 `ujvn` 三档 + `t2wc` 第四档的规定一致。不能通过 `centre` 凭据调用任何写工具，也不能用普通候选写入绕过正式化门禁（service 层按能力表服务端拒绝）。本票验收第 4 项勾选，全部十项满足，状态置 `closed`。
 
+**2026-10-25 误回退清理记录（hanjiang）**
+
+身份核对：本票 assignee 为 hanjiang，当前分支 `feature/hanjiang`、`git config user.name=hanjiang`，一致。
+
+2026-10-25 发现本票文档与 `research-map`/`research-wiki` 实现曾出现**误回退**（本票 `status` 被改回 `open`，删除了上列 2026-10-25 三条验收收口 Notes；实现侧删除了 `1dada55`/`984bd6c` 的约 942 行交付）。经 `git reflog` 核查无 checkout/reset --hard/rm 记录，判定为工作区文件层直接改写而非 git 历史操作，已由 hanjiang 以 `git stash`（mistake stash）暂存隔离后 `git stash drop` 清除。HEAD 保持 `495a612`，本票状态仍为 `closed`，十项验收不变。对应实现票 `ai4-5auy` 同步记录了清理说明。
+
 ## Design
 
 ## 对外接口边界\n\n- 分别为 Research Mapping 和 LLM-Wiki 提供独立的管理 MCP；工具通过应用服务调用，不直连领域存储。\n- 至少覆盖正式内容只读查询、候选查询/读取、候选提交、候选审阅所需入口、Owner 正式化/恢复入口，以及健康检查或启动失败状态。\n- 工具输入输出使用稳定、可序列化的 DTO/JSON；返回稳定错误码，区分参数拒绝、无权访问、基准过期、存储明确失败和结果未知。\n- 通过环境变量配置监听地址、端口、领域存储地址、凭据和 SCIWEAVE_AUDIT_SQLITE_PATH；源码、测试和文档不得写死部署路径、端口或凭据。\n\n## 权限分层\n\n服务端按调用方能力面执行权限，不以客户端自报角色或登记记录替代鉴权。至少明确并测试以下档位：\n\n1. **只读**：读取当前正式 Mapping/Wiki、候选摘要或候选固定头时，只能读取调用方被授权范围；中央 Agent 可按既定开放面读取全部候选和正式版本，端侧 Agent 不自动获得全部数据。\n2. **只写候选**：研究员/端侧 Agent 只能提交自己的草稿或候选变更，并受领域校验、精确正式基准、幂等键和候选隔离约束；不得直接修改正式版本、代替 Owner 审核或推进正式化。\n3. **候选审阅**：明确谁可以创建/读取审阅材料、记录预审结论和提交候选审核决定；预审结论不得等同于 Project Owner 的正式发布批准。\n4. **候选转正式**：只有 Project Owner 或已验证的 Owner 权限可以执行正式化/恢复；必须保留候选头、正式基准、批准决定和 operation identity 校验，不能通过普通写候选工具绕过正式化门禁。\n5. **中央 Agent**：按既有开放面允许读取两套领域的候选与正式版本、追加预审日志、必要时创建混合候选；不得写正式版本、修改已有候选、写草稿接纳状态或代替 Owner 正式发布。\n\n需要把每个工具归入能力档位，并对未授权调用返回稳定 denied 错误；不能仅依赖提示词隐藏工具。两个领域的对象、存储、候选和正式化权限保持隔离。\n\n## 共享留痕接入\n\n- 使用 `sciweave-audit-trail` 的 `open_connection`、`init_audit_table`、`record_attempted`、`call_scope`/`begin_call`/`finish_call`。\n- 服务启动时打开审计 SQLite 并初始化表；初始化失败不得启动对外服务。\n- 读工具结束后记录 `attempted`，留痕失败按共享包约定 fail-open；写工具执行前记录 `invoked`，留痕失败时阻止业务执行，成功或失败后记录 `completed`。\n- 记录 `caller_id`、`channel_id`、`caller_type`、服务名、工具名、目标对象标识、参数摘要、结果和错误码；不得写入正文、凭据或完整入参。\n- 留痕发生在 MCP/HTTP 对外接口层，领域应用服务内部不重复调用共享包。\n\n## 依赖与范围\n\n- 复用现有 Research Mapping 与 LLM-Wiki 应用服务，不重写领域治理逻辑。\n- 复用 `ai4-gvan` 已实现的共享留痕包；如需调整共享包接口，先说明原因并更新对应实现票，不复制实现。\n- 与 `ai4-ujvn` 的调用方开放面和 `ai4-t2wc` 的中央 Agent 开放面保持一致；若发现冲突，先在本票 Notes 记录并提出修订，不自行覆盖既有决策。\n- 本票不实现 Web 看板前端、不实现端侧 Agent runtime、不把领域 MCP 改造成 Gateway MCP。
