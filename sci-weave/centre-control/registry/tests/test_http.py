@@ -675,11 +675,16 @@ def test_successful_read_is_recorded_in_the_audit_ledger(registry_mcp):
 
 
 def test_audit_storage_failure_makes_both_health_checks_unavailable(registry_mcp):
-    registry_mcp["audit_path"].write_bytes(b"not a database")
-    for suffix in ("-wal", "-shm"):
-        sidecar = registry_mcp["audit_path"].with_name(registry_mcp["audit_path"].name + suffix)
-        if sidecar.exists():
-            sidecar.write_bytes(b"not a database")
+    # Drop the ledger table through a second connection to the same file instead
+    # of overwriting the database bytes: the WAL -shm sidecar is held open by the
+    # running server and cannot be overwritten on Windows, while a schema drop is
+    # visible to the server's held connection on the next query (no such table).
+    vandal = sqlite3.connect(registry_mcp["audit_path"])
+    try:
+        vandal.execute("DROP TABLE audit_call")
+        vandal.commit()
+    finally:
+        vandal.close()
     probe = httpx.get(registry_mcp["health_url"])
     assert probe.status_code == 503
     assert probe.json() == {"status": "unavailable", "service": "registry", "storage": "unavailable"}
