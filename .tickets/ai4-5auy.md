@@ -181,3 +181,11 @@ _CAPABILITY_ORDER = (
 - `compileall`、`git diff --check` 通过；无新增依赖。
 
 边界：`ai4-rlv6`（Frank Qi）的工具清单需把 `append_mapping_prereview_log` 等四个分领域名改为单数名 + 领域参数，由该票负责人按本票完成后的实际工具面同步；`ai4-w73z` 的「中央 Agent 五类能力边界」描述按本票要求在 w73z 内修正。
+
+**2026-10-25 误回退清理记录（hanjiang）**
+
+身份核对：本票 assignee 为 hanjiang，当前分支 `feature/hanjiang`、`git config user.name=hanjiang`，一致。
+
+2026-10-25 发现工作区曾出现对本票交付（提交 `1dada55`/`984bd6c`）的**误回退**：`research-map`/`research-wiki` 的 `management.py`、`sqlite_store.py`、`main.py`、`test_management.py` 被改写回旧版（合计删除约 942 行，`prereview_log`/`merged_candidate` 档位、`append_prereview_log`/`create_merged_candidate` 实现被移除），`ai4-w73z` 票文档被改回 `open`。
+
+经 `git reflog` 核查无 checkout/reset --hard/rm 记录，判定该回退发生在工作区文件层的直接改写而非 git 历史操作，已由 hanjiang 以 `git stash`（标记 mistake stash）暂存隔离，随后 `git stash drop` 清除。HEAD 始终保持在正确提交 `495a612`，本票交付成果未受损，无需重做。相关清理说明同步记录于 `ai4-w73z`。
