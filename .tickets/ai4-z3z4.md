@@ -200,6 +200,19 @@ running ├→ waiting            （Worker 提问，本轮终止；回答创建
 
 ## Notes
 
+**2026-10-25 推进:subscriber 组件落地与真实 Redpanda 端到端验证(hanjiang)**
+
+身份核对:本票 assignee 为 hanjiang,当前分支 `feature/hanjiang`、`git config user.name=hanjiang`,一致。
+
+按 te1v 九层消息契约把 Centre Agent 侧的消息进入路径补成真实现,提交 `ef2cca1`(feature/hanjiang)。本票的行为验收尚未全部勾选,本次只回写已落地的证据与剩余缺口:
+
+- **共享持久化边界**从 `gateway/mcp/src/gateway/store.py` 迁移至 `worker/src/task_agent_worker/store.py`:schema 增加 `trigger`/`trigger_ref`/`business_key`/`draft_id` 列,状态机 CHECK 补全 `needs_revision`/`rejected`/`human_takeover`,保留 owner-command 路径兼容既有 mcp 测试。
+- **新增 `gateway/subscriber` 组件**(workspace 第四个成员):`SubscriberService.handle_message` 把入站消息持久化为 `queued` 执行记录(`trigger='queue'`,`trigger_ref` 记消息标识),business key(目标节点+目标版本+正式版本)唯一约束挡重复投递;`SubscriberWorkerRunner` 原子领取该目标 Worker Lease 后运行一轮,草稿写入成功才记 `completed`+`draft_id`,写入失败记 `failed`+`draft_submission_failed`;offset 由调用方在整轮完结后提交。
+- **三组件回归全绿**:`gateway/mcp` 5 项、`worker` 4 项、`gateway/subscriber` 9 项(消息到达建 queued、重复去重、同目标租约串行、跨目标并发、租约占用时拒绝第二 Worker、草稿成功/失败、offset 边界)。
+- **真实链路验证**:本机启 `sci-weave/service/redpanda/compose.yaml`,用 kafka-python 生产 `task_handoff_ready` 消息到 `sciweave.task-handoff.demo-agent-1`,subscriber 经 `KafkaQueueClient`(consumer group + earliest)消费,产出 `queued` 记录然后 worker 运行至 `completed`,审计链 `message_received → execution_queued → worker_lease_acquired → worker_completed` 完整。
+- **新增依赖**:`kafka-python>=3.0.11,<4`(subscriber 子项目 pyproject,组级 uv.lock 已锁;只用于真实 Redpanda 适配,测试与演示走 FakeQueueClient 不依赖 broker)。
+- **剩余缺口**:Centre Agent 处置面 `answer_question`/`review_execution` 仍返回 `unimplemented`(规格内如此);subscriber 与真实草稿箱的 `draft_id` 回填已具备,但以 passthrough runtime 验证,未接真实模型或真实预审规则;Task Agent(研究员套件侧)的 subscriber 仍以 FakeQueue 模板存在。行为验收的标准条目(状态机迁移经审计、不存在 submit_owner_command、重复投递不产生第二轮等)待本票整体验收时逐条勾选。
+
 **2026-10-25 就绪状态评估（hanjiang）**
 
 身份核对：本票 assignee 为 hanjiang，当前分支 `feature/hanjiang`、`git config user.name=hanjiang`，一致。
