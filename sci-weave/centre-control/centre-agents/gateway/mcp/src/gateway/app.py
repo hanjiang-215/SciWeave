@@ -266,6 +266,49 @@ class GatewayApplication:
         """Centre Agent disposition tools are intentionally not implemented in this ticket."""
         raise NotImplementedError
 
+    def dashboard_sources(self) -> dict[str, Any]:
+        """Read-only dashboard gateway/queue source fragment.
+
+        The shape follows ``dashboard_api.aggregator`` expectations:
+        ``observedAt``/``sourceStatus`` plus the ``executions`` and ``services``
+        collections.  Only aggregated, non-sensitive facts are exposed; the
+        caller (dashboard-api) sanitizes fields again on its side.
+        """
+        status = "fresh"
+        try:
+            rows = self.store.list_executions(limit=50)
+            _ = self.store.list_recent_audit_events(limit=10)
+        except sqlite3.Error:
+            status = "unavailable"
+            rows = []
+        executions = [
+            {
+                "id": row["execution_id"],
+                "executionId": row["execution_id"],
+                "taskId": row["task_node_id"],
+                "status": row["status"],
+                "trigger": row["trigger"],
+                "triggerRef": row["trigger_ref"],
+                "updatedAt": row["updated_at"],
+                "summary": row["result_summary"],
+                "failure": row["error_summary"],
+            }
+            for row in rows
+        ]
+        services = [
+            {"id": "mcp", "label": "处置面 MCP", "status": "ready", "role": "gateway"},
+            {"id": "storage", "label": "执行存储", "status": "ready" if self.store.health() else "unavailable", "role": "gateway"},
+            {"id": "worker_runtime", "label": "Worker 运行时", "status": "ready" if self.test_runtime_enabled else "not_configured", "role": "worker"},
+            {"id": "subscriber", "label": "消息监听", "status": "not_configured", "role": "listener"},
+        ]
+        return {
+            "observedAt": utc_now(),
+            "sourceStatus": status,
+            "executions": executions,
+            "services": services,
+            "events": [],
+        }
+
     def health(self) -> dict[str, Any]:
         storage = "ready" if self.store.health() else "unavailable"
         return {
@@ -325,6 +368,15 @@ def make_handler(app: GatewayApplication):
             return body
 
         def do_GET(self) -> None:
+            if self.path == "/sources":
+                if not self._authorized():
+                    self._send(HTTPStatus.UNAUTHORIZED, {"error": "unauthorized"})
+                    return
+                try:
+                    self._send(HTTPStatus.OK, app.dashboard_sources())
+                except sqlite3.Error:
+                    self._send(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "unavailable"})
+                return
             if self.path != "/health":
                 self._send(HTTPStatus.NOT_FOUND, {"error": "not_found"})
                 return

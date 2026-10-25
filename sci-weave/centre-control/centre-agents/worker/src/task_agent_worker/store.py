@@ -188,3 +188,28 @@ class ExecutionStore:
                 "SELECT * FROM execution_records WHERE business_key = ?",
                 (business_key,),
             ).fetchone()
+
+    def list_executions(self, *, limit: int = 200) -> list[dict[str, object]]:
+        """Read-only execution summary for the dashboard source fragment."""
+        with self.lock:
+            rows = self.connection.execute(
+                """SELECT execution_id, task_node_id, session_id, status,
+                          trigger, trigger_ref, business_key, draft_id,
+                          result_summary, error_summary, pending_question,
+                          created_at, started_at, finished_at, updated_at
+                   FROM execution_records
+                   ORDER BY created_at DESC, execution_id DESC LIMIT ?""",
+                (limit,),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def list_recent_audit_events(self, *, limit: int = 100) -> list[dict[str, object]]:
+        """Read-only recent audit events for the dashboard events collection."""
+        with self.lock:
+            rows = self.connection.execute(
+                """SELECT event_type, task_node_id, execution_id, details, created_at
+                   FROM audit_events
+                   ORDER BY event_id DESC LIMIT ?""",
+                (limit,),
+            ).fetchall()
+        return [dict(row) for row in rows]
