@@ -1,0 +1,2 @@
+module = "agent"
+summary = "确认 Registry MCP 联系人查询契约冻结状态及 email-service 联调前置"
