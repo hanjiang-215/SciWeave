@@ -11,8 +11,10 @@ from .ports import (
     NoSuchRevisionError,
     NotificationIntent,
     NotificationPublisherPort,
+    PrincipalDirectoryPort,
     SnapshotInconsistentError,
     SnapshotUnavailableError,
+    UnverifiablePrincipalDirectory,
 )
 from .store import (
     DISPATCH_DEAD,
@@ -53,12 +55,17 @@ class CoordinatorService:
         publisher: HandoffPublisherPort,
         notifications: NotificationPublisherPort,
         agents: AgentAvailabilityPort,
+        principals: PrincipalDirectoryPort | None = None,
     ) -> None:
         self.store = store
         self.snapshot_port = snapshot_port
         self.publisher = publisher
         self.notifications = notifications
         self.agents = agents
+        # Defaults to "cannot verify", not "not found": pre-send validation
+        # stays a no-op until a Registry adapter is wired, and an absent
+        # adapter must never be mistaken for a principal that does not exist.
+        self.principals = principals or UnverifiablePrincipalDirectory()
 
     def on_formal_revision_published(self, mapping_domain_id: str, formal_revision_id: str) -> None:
         """Recompute every node in the published revision. Idempotent per trigger revision."""
