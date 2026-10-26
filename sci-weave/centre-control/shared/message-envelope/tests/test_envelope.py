@@ -4,6 +4,7 @@ import pytest
 
 from message_envelope import (
     PayloadError,
+    MESSAGE_TYPES,
     SchemaVersionError,
     UnknownMessageTypeError,
     SCHEMA_VERSION,
@@ -221,3 +222,56 @@ def test_validate_rejects_a_missing_timestamp(field):
     # covers the same guard on a hand-built envelope that skipped decode.
     with pytest.raises(EnvelopeFormatError):
         encode(sample(**{field: ""}))
+
+
+def test_message_catalogue_is_exactly_the_five_redpanda_types():
+    # human_notification_intent and task_terminal_summary travel over MCP,
+    # not Redpanda. Pinning the set keeps that boundary from drifting.
+    assert MESSAGE_TYPES == {
+        "task_handoff_ready",
+        "task_completed",
+        "formal_revision_published",
+        "candidate_created",
+        "candidate_head_updated",
+    }
+
+
+def test_payload_error_is_not_an_envelope_format_error():
+    # Collapsing these two would still satisfy every pytest.raises above,
+    # because a subclass passes an isinstance check. The four-way split is
+    # only real if the classes stay siblings.
+    assert not issubclass(PayloadError, EnvelopeFormatError)
+    assert not issubclass(EnvelopeFormatError, PayloadError)
+
+
+def test_encode_refuses_what_decode_would_reject():
+    # A producer that hands us a bool or a float schema version would get
+    # bytes back and only find out when its consumer rejects them.
+    for bad in (True, 1.0, "1"):
+        with pytest.raises(EnvelopeFormatError):
+            encode(sample(schema_version=bad))
+
+
+def test_encode_refuses_a_non_string_instance_id():
+    with pytest.raises(EnvelopeFormatError):
+        encode(sample(producer=Producer(service="coordinator", instance_id=2)))
+
+
+def test_encode_refuses_a_non_string_target_agent_id():
+    with pytest.raises(EnvelopeFormatError):
+        encode(sample(routing=Routing(partition_key="task:T1", target_agent_id=3)))
+
+
+def test_validate_reports_missing_producer_and_routing_as_format_errors():
+    # Untrusted input can leave these None; an AttributeError escaping the
+    # validator tells the caller nothing about what was wrong.
+    for override in ({"producer": None}, {"routing": None}):
+        with pytest.raises(EnvelopeFormatError):
+            encode(sample(**override))
+
+
+def test_decode_rejects_a_str_argument():
+    # Callers hand us bytes from a client, but a str that slipped through
+    # (e.g. from a JSON fixture) should read as a format error.
+    with pytest.raises(EnvelopeFormatError):
+        decode('{"message_id": "m"}')

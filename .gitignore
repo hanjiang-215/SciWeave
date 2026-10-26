@@ -23,6 +23,9 @@ __pycache__/
 *.py[cod]
 **/build/
 **/dist/
+.coverage
+.coverage.*
+htmlcov/
 
 # fast-agent 运行时产物（会话与锁，可再生成）
 .fast-agent/sessions/

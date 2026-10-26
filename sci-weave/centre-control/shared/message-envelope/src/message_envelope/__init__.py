@@ -143,6 +143,8 @@ def encode(envelope: Envelope) -> bytes:
 
 def decode(data: bytes) -> Envelope:
     """Deserialize UTF-8 JSON bytes into a validated envelope."""
+    if not isinstance(data, (bytes, bytearray)):
+        raise EnvelopeFormatError(f"body must be bytes, not {type(data).__name__}")
     try:
         body = json.loads(data.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
@@ -181,6 +183,11 @@ def validate(envelope: Envelope) -> None:
         if not isinstance(value, str) or not value:
             raise EnvelopeFormatError(f"{name} must be a non-empty string")
 
+    # A non-integer is malformed, not a version we simply do not speak;
+    # `True` is an int subclass and would otherwise pass as version 1.
+    if not isinstance(envelope.schema_version, int) or isinstance(envelope.schema_version, bool):
+        raise EnvelopeFormatError("schema_version must be an integer")
+
     if envelope.schema_version != SCHEMA_VERSION:
         raise SchemaVersionError(envelope.schema_version)
 
@@ -193,11 +200,28 @@ def validate(envelope: Envelope) -> None:
     ):
         _require_timestamp(name, value)
 
+    # Without this, a None producer or routing escapes as a bare
+    # AttributeError, which tells the caller nothing about what was wrong.
+    if not isinstance(envelope.producer, Producer):
+        raise EnvelopeFormatError("producer must be a Producer")
+    if not isinstance(envelope.routing, Routing):
+        raise EnvelopeFormatError("routing must be a Routing")
+
     if not isinstance(envelope.producer.service, str) or not envelope.producer.service:
         raise EnvelopeFormatError("producer.service must be a non-empty string")
 
+    if envelope.producer.instance_id is not None and not isinstance(
+        envelope.producer.instance_id, str
+    ):
+        raise EnvelopeFormatError("producer.instance_id must be a string when present")
+
     if not isinstance(envelope.routing.partition_key, str) or not envelope.routing.partition_key:
         raise EnvelopeFormatError("routing.partition_key must be a non-empty string")
+
+    if envelope.routing.target_agent_id is not None and not isinstance(
+        envelope.routing.target_agent_id, str
+    ):
+        raise EnvelopeFormatError("routing.target_agent_id must be a string when present")
 
     if not isinstance(envelope.payload, dict):
         raise PayloadError("payload must be a JSON object")
