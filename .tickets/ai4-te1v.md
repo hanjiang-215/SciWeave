@@ -111,6 +111,24 @@ sci-weave/centre-control/shared/message-envelope/
 
 客户端选型：Python 侧统一使用 `confluent-kafka`（Apache 2.0，同时覆盖 producer、consumer 与 admin）。版本约束、许可证记录、锁文件与验证命令由各自引入该依赖的实现票单独登记，并按 `docs/DEPENDENCIES.md` 要求写入 `pyproject.toml` 与 `uv.lock`。
 
+### topic 生命周期与创建权
+
+`topic` 的创建权归**发布方**，不归订阅方。
+
+- `sciweave.dependency-notice` 与 `sciweave.governance-events` 由中央基础设施初始化创建，属于固定 topic，创建一次后不再变更。
+- `sciweave.task-handoff.<agent_id>` 由 handoff coordinator 在发布前按需幂等创建（存在即跳过），不由 Agent 侧创建。
+- Task Agent subscriber 只订阅，不创建 topic。订阅时 topic 不存在，属于可观察配置错误，重试等待，不自行创建。
+
+理由：发布方先于订阅方存在的场景必然出现——coordinator 在 Agent 注册、上线之前就可能需要发布交接。若由 Agent 侧建 topic，此时发布方要么失败，要么落到 broker 的 `auto.create.topics.enable` 自动创建路径上，分区数与副本数不受我们控制。
+
+由此产生的约束：
+
+- 本地验证环境的 Redpanda 必须关闭 `auto.create.topics.enable`，让「topic 不存在」暴露为明确错误而不是静默创建。
+- topic 创建参数（分区数、副本数、保留期）从环境变量读取，默认值在实现票中登记；代码不硬编码。
+- 单节点本地 Compose 只能使用副本数 `1`；生产副本配置仍未定，不在本票范围。
+
+> 与 `ai4-nfty` 的关系：该票写「Agent 注册完成且具备接收任务条件时创建 topic」。本节不推翻其意图（Agent 注册后该 topic 应当存在），只补充创建动作的实际执行方是发布方。`ai4-nfty` 已由 hanjiang 关闭，本节作为本票的补充裁决记录，不回改其正文。
+
 ### dependency_kind 的首版处理口径
 
 `dependency_kind` 取值由 `ai4-r3so` 与 `ai4-t5zl` 定义，本票只规定消息侧如何处置：
@@ -227,7 +245,7 @@ backoff_strategy   = exponential（1s, 2s, 4s, 8s, 16s，封顶 60s）
 
 ## Next implementation boundary
 
-本票完成消息语义收敛后，后续实现不得直接假定具体 Python Redpanda 客户端。实现票必须单独记录客户端选型、版本约束、许可证、锁文件和验证命令。
+本票已定死客户端选型（`confluent-kafka`）与信封协议，但本票不含实现代码。实现票必须单独记录版本约束、许可证、锁文件和验证命令，并按 `docs/DEPENDENCIES.md` 写入各自子项目的 `pyproject.toml` 与 `uv.lock`。
 
 已有规格与实现票继续承担各自边界：
 
