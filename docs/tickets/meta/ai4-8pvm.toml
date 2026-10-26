@@ -1,0 +1,2 @@
+module = ["agent"]
+summary = "实现统一信封的数据结构、JSON 编解码与四类错误区分"

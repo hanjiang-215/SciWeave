@@ -1,0 +1,2 @@
+module = ["agent", "mapping"]
+summary = "人工通知收件人改为 principal_id，四场景三类型"

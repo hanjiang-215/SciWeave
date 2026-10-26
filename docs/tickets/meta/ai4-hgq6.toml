@@ -1,0 +1,2 @@
+module = ["agent", "mapping"]
+summary = "根任务不自动派发并实现 PO 显式幂等分派"

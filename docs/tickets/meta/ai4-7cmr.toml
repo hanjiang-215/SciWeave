@@ -1,0 +1,2 @@
+module = ["agent", "mapping"]
+summary = "修复协调器重复派发与 done 状态回退"

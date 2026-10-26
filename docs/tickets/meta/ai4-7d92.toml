@@ -1,0 +1,2 @@
+module = ["agent", "mapping"]
+summary = "落地 dead 终态与重试上限，默认次数改为 5"
