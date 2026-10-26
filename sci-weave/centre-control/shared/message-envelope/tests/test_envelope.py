@@ -159,3 +159,16 @@ def test_missing_payload_key_is_a_format_error():
 
 def test_explicit_empty_payload_is_accepted():
     assert decode(raw_body(payload={})).payload == {}
+
+
+def test_routing_target_agent_id_survives_a_round_trip():
+    # task_handoff_ready must name the agent it is routed to; if the
+    # serialiser drops this, the handoff silently lands nowhere.
+    original = sample(
+        message_type="task_handoff_ready",
+        routing=Routing(partition_key="task:T1", target_agent_id="agent-7"),
+    )
+
+    restored = decode(encode(original))
+
+    assert restored.routing.target_agent_id == "agent-7"
