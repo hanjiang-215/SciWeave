@@ -1,0 +1,3 @@
+# ai4-2raq 的索引归属与简介（人工维护）
+module = ["mapping", "governance"]
+summary = "在正式快照查询返回中暴露 published_by，供通知确定项目负责人收件人"
