@@ -51,6 +51,17 @@ class CentreAgentTests(unittest.TestCase):
         content = payload["result"]["content"][0]["text"]
         return json.loads(content)
 
+    def call_raw(self, name: str, arguments: dict[str, Any] | None = None) -> dict[str, Any]:
+        body = json.dumps({
+            "jsonrpc": "2.0", "id": "test", "method": "tools/call",
+            "params": {"name": name, "arguments": arguments or {}},
+        }).encode()
+        request = urllib.request.Request(self.base + "/mcp", data=body, method="POST")
+        request.add_header("Authorization", "Bearer test-token")
+        request.add_header("Content-Type", "application/json")
+        with urllib.request.urlopen(request) as response:
+            return json.loads(response.read())
+
     def wait_for(self, execution_id: str, status: str) -> dict[str, Any]:
         deadline = time.monotonic() + 15
         while time.monotonic() < deadline:
@@ -100,10 +111,29 @@ class CentreAgentTests(unittest.TestCase):
         self.assertNotIn("submit_owner_command", names)
         self.assertNotIn("accept", names)
 
-    def test_disposition_tools_return_unimplemented(self) -> None:
+    def test_disposition_tools_require_their_arguments(self) -> None:
         for name in ("answer_question", "review_execution"):
-            result = self.call(name, {"execution_id": "missing"})
-            self.assertEqual(result["error"]["code"], "unimplemented")
+            payload = self.call_raw(name, {"execution_id": "missing"})
+            self.assertEqual(payload["error"]["code"], -32602)
+
+    def test_answering_an_unknown_execution_is_not_found(self) -> None:
+        result = self.call(
+            "answer_question",
+            {"execution_id": "missing", "answer": "v3", "idempotency_key": "key-1"},
+        )
+        self.assertEqual(result["error"]["code"], "not_found")
+
+    def test_reviewing_an_unknown_execution_is_not_found(self) -> None:
+        result = self.call(
+            "review_execution",
+            {
+                "execution_id": "missing",
+                "decision": "reject",
+                "reason": "no evidence",
+                "idempotency_key": "key-2",
+            },
+        )
+        self.assertEqual(result["error"]["code"], "not_found")
 
     def test_dashboard_sources_requires_auth_and_returns_fragment(self) -> None:
         unauthenticated = urllib.request.Request(self.base + "/sources", method="GET")

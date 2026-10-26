@@ -14,7 +14,7 @@ from typing import Any
 
 from task_agent_worker.config import WorkerSettings
 from task_agent_worker.runtime import FastAgentDeepSeekRuntime, FastAgentPassthroughRuntime
-from task_agent_worker.store import ExecutionStore, utc_now
+from task_agent_worker.store import DispositionError, ExecutionStore, utc_now
 
 from .runtime import RuntimeAdapter, RuntimeOutcome, RuntimeRequest, TestRuntimeAdapter
 
@@ -283,9 +283,19 @@ class GatewayApplication:
             rows = self.store.connection.execute(query, arguments).fetchall()
         return [dict(row) for row in rows]
 
-    def centre_disposition(self, *_: object) -> None:
-        """Centre Agent disposition tools are intentionally not implemented in this ticket."""
-        raise NotImplementedError
+    def answer_question(
+        self, execution_id: str, answer: str, *, idempotency_key: str
+    ) -> dict[str, Any]:
+        """Record an owner answer and queue the resumed execution."""
+        return self.store.answer_question(execution_id, answer, idempotency_key=idempotency_key)
+
+    def review_execution(
+        self, execution_id: str, decision: str, reason: str, *, idempotency_key: str
+    ) -> dict[str, Any]:
+        """Dispose a finished execution: revise, reject or hand it to a human."""
+        return self.store.record_review(
+            execution_id, decision, reason, idempotency_key=idempotency_key
+        )
 
     def dashboard_sources(self) -> dict[str, Any]:
         """Read-only dashboard gateway/queue source fragment.
@@ -454,8 +464,25 @@ def make_handler(app: GatewayApplication):
             if not isinstance(name, str) or not isinstance(arguments, dict):
                 return self._protocol_error(request_id, -32602, "invalid params")
             try:
-                if name in {"answer_question", "review_execution"}:
-                    return self._tool_error(request_id, "unimplemented", "Centre Agent disposition is not implemented")
+                if name == "answer_question":
+                    return self._tool_result(
+                        request_id,
+                        app.answer_question(
+                            self._required_string(arguments, "execution_id"),
+                            self._required_string(arguments, "answer"),
+                            idempotency_key=self._required_string(arguments, "idempotency_key"),
+                        ),
+                    )
+                if name == "review_execution":
+                    return self._tool_result(
+                        request_id,
+                        app.review_execution(
+                            self._required_string(arguments, "execution_id"),
+                            self._required_string(arguments, "decision"),
+                            self._required_string(arguments, "reason"),
+                            idempotency_key=self._required_string(arguments, "idempotency_key"),
+                        ),
+                    )
                 if name == "query_execution":
                     result = app.query_execution(self._required_string(arguments, "execution_id"))
                     if result is None:
@@ -476,6 +503,12 @@ def make_handler(app: GatewayApplication):
                 return self._protocol_error(request_id, -32602, "unknown tool")
             except ValueError:
                 return self._protocol_error(request_id, -32602, "invalid params")
+            except DispositionError as error:
+                if error.code == "not_found":
+                    return self._tool_error(request_id, "not_found", "execution was not found")
+                return self._tool_error(
+                    request_id, "invalid_state", "execution cannot be reviewed in its current state"
+                )
             except LookupError:
                 return self._tool_error(request_id, "not_found", "execution was not found")
             except RuntimeError as error:
@@ -500,8 +533,8 @@ def make_handler(app: GatewayApplication):
                 {"name": "query_execution", "description": "Query one Centre Agent execution."},
                 {"name": "cancel_execution", "description": "Request cancellation of an execution."},
                 {"name": "list_pending", "description": "List Centre Agent executions."},
-                {"name": "answer_question", "description": "Answer a Worker question (not implemented)."},
-                {"name": "review_execution", "description": "Dispose an execution (not implemented)."},
+                {"name": "answer_question", "description": "Answer a Worker question; queues a resumed execution that points at the original."},
+                {"name": "review_execution", "description": "Dispose a finished execution: request_revision, reject or request_human_takeover."},
                 {"name": "health", "description": "Read authenticated Centre Agent health."},
             ]
 
