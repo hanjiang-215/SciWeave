@@ -141,3 +141,61 @@ class DraftBufferServiceTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SubmitInterruptionTests(unittest.TestCase):
+    """ai4-6qht: a crash between the frozen snapshot and the operation row."""
+
+    def setUp(self):
+        self.store = MemoryStore()
+        self.service = DraftBufferService(self.store, {"wiki": frozenset({"reviewer-wiki"})})
+        self.draft = self.service.create_draft(
+            "wiki", "wiki_document", "Evidence", {"body": "draft"}, "researcher", "create-key"
+        )
+        self._real_write = self.store.write
+
+    def _fail_the_final_write_once(self):
+        calls = {"n": 0}
+
+        def flaky(documents, operation, idempotency_key):
+            calls["n"] += 1
+            if calls["n"] == 2:  # the operation-row write fails
+                raise RuntimeError("store unavailable")
+            return self._real_write(documents, operation, idempotency_key)
+
+        self.store.write = flaky
+
+    def test_retry_after_a_failed_final_write_completes_the_submit(self):
+        self._fail_the_final_write_once()
+        with self.assertRaises(RuntimeError):
+            self.service.submit_draft(self.draft["draft_id"], "submit-key", "researcher")
+
+        self.store.write = self._real_write
+        result = self.service.submit_draft(self.draft["draft_id"], "submit-key", "researcher")
+
+        self.assertEqual(result["status"], "submitted")
+        self.assertTrue(result["snapshot_commit"])
+        operations = [item for item in self.store.read_all() if item.get("@type") == "Operation"]
+        self.assertEqual([item["idempotency_key"] for item in operations], ["create-key", "submit-key"])
+
+    def test_the_resumed_snapshot_can_be_reviewed(self):
+        self._fail_the_final_write_once()
+        with self.assertRaises(RuntimeError):
+            self.service.submit_draft(self.draft["draft_id"], "submit-key", "researcher")
+        self.store.write = self._real_write
+        self.service.submit_draft(self.draft["draft_id"], "submit-key", "researcher")
+
+        reviewed = self.service.review_draft(
+            self.draft["draft_id"], "accept", "looks good", "review-key", "reviewer-wiki"
+        )
+
+        self.assertEqual(reviewed["status"], "accepted")
+
+    def test_a_draft_that_was_never_submitted_still_rejects_resubmission_after_review(self):
+        self.service.submit_draft(self.draft["draft_id"], "submit-key", "researcher")
+        self.service.review_draft(
+            self.draft["draft_id"], "accept", "ok", "review-key", "reviewer-wiki"
+        )
+
+        with self.assertRaises(BufferError):
+            self.service.submit_draft(self.draft["draft_id"], "submit-key-2", "researcher")
