@@ -105,6 +105,29 @@ class CentreAgentTests(unittest.TestCase):
             result = self.call(name, {"execution_id": "missing"})
             self.assertEqual(result["error"]["code"], "unimplemented")
 
+    def test_dashboard_sources_requires_auth_and_returns_fragment(self) -> None:
+        unauthenticated = urllib.request.Request(self.base + "/sources", method="GET")
+        try:
+            urllib.request.urlopen(unauthenticated)
+            self.fail("unauthenticated /sources must be rejected")
+        except urllib.error.HTTPError as error:
+            self.assertEqual(error.code, 401)
+
+        self.queue.deliver("candidate-1", "candidate_created", "event-1")
+        request = urllib.request.Request(self.base + "/sources", method="GET")
+        request.add_header("Authorization", "Bearer test-token")
+        with urllib.request.urlopen(request) as response:
+            fragment = json.loads(response.read())
+        self.assertEqual(fragment["sourceStatus"], "fresh")
+        self.assertTrue(fragment["observedAt"])
+        self.assertIn("executions", fragment)
+        self.assertIn("services", fragment)
+        execution = fragment["executions"][0]
+        for key in ("id", "executionId", "taskId", "status", "trigger", "triggerRef", "updatedAt"):
+            self.assertIn(key, execution)
+        self.assertEqual(execution["taskId"], "candidate-1")
+        self.assertEqual(execution["trigger"], "owner_command")
+
 
 if __name__ == "__main__":
     unittest.main()

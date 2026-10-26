@@ -57,7 +57,7 @@ def _multiplier(name: str) -> float:
 
 
 def _max_attempts() -> int:
-    raw = os.environ.get("SCIWEAVE_COORDINATOR_MAX_ATTEMPTS", "3").strip()
+    raw = os.environ.get("SCIWEAVE_COORDINATOR_MAX_ATTEMPTS", "5").strip()
     if not raw.isdigit():
         raise ValueError("SCIWEAVE_COORDINATOR_MAX_ATTEMPTS must be a positive integer")
     value = int(raw)

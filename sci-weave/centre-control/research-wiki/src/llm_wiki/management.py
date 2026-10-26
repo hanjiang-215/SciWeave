@@ -19,6 +19,11 @@ from audit_trail import (
 from .candidate_submission import WikiCandidateService
 from .formal_domain import WikiFormalQueryResult
 from .formal_query import WikiFormalQueryService
+from .governance_events import (
+    NoopGovernanceEventPublisher,
+    candidate_event,
+    formal_revision_event,
+)
 
 _READ_CAPABILITIES = frozenset({"read", "centre"})
 _CANDIDATE_SUBMIT_CAPABILITIES = frozenset({"candidate_submit"})
@@ -101,6 +106,7 @@ class WikiManagementService:
         candidate_reader=None,
         prereview_log=None,
         merged_candidate_service=None,
+        governance_events=None,
     ) -> None:
         self._formal_query = formal_query
         self._candidate_service = candidate_service
@@ -113,6 +119,7 @@ class WikiManagementService:
         self._capabilities = caller_capabilities
         self._audit = audit_connection
         self._service = service_name
+        self._governance_events = governance_events or NoopGovernanceEventPublisher()
 
     def call_tool(self, tool: str, arguments: dict[str, Any], *, actor_id: str, channel_id: str = "mcp", caller_type: str = "agent") -> ManagementCallOutcome:
         handler = self._handlers().get(tool)
@@ -322,30 +329,45 @@ class WikiManagementService:
         if not isinstance(document_change, dict):
             raise ValueError("document_change is required")
         result = self._candidate_service.submit(document_change, idempotency_key)
+        if result.status in {"submitted", "confirmed", "ok"}:
+            domain_id = str(document_change.get("wiki_domain_id") or arguments.get("wiki_domain_id") or "")
+            self._publish_safely(
+                candidate_event(
+                    wiki_domain_id=domain_id,
+                    submission_id=result.submission_id,
+                    proposal_id=result.proposal_id,
+                    candidate_head=result.commit_hash,
+                )
+            )
         return _candidate_result(result)
 
     def _list_reviewable_wiki_candidates(self, arguments: dict[str, Any], actor_id: str) -> dict[str, Any]:
         domain_id = _required(arguments, "wiki_domain_id")
         if self._candidate_reader is None:
             raise RuntimeError("candidate_reader is not configured")
-        return {
-            "wiki_domain_id": domain_id,
-            "candidates": [
-                {
-                    "submission_id": item.submission_id,
-                    "proposal_id": item.proposal_id,
-                    "submitter_id": item.submitter_id,
-                    "base_formal_revision_id": item.base_formal_revision_id,
-                    "candidate_commit_id": item.candidate_commit_id,
-                    "candidate_head": item.candidate_head,
-                    "proposal_status": item.proposal_status,
-                    "snapshot_status": item.snapshot_status,
-                    "reason_code": item.reason_code,
-                    "documents": list(item.documents),
-                }
-                for item in self._candidate_reader.list_reviewable(domain_id)
-            ],
-        }
+        candidates: list[dict[str, Any]] = []
+        for item in self._candidate_reader.list_reviewable(domain_id):
+            candidate: dict[str, Any] = {
+                "submission_id": item.submission_id,
+                "proposal_id": item.proposal_id,
+                "submitter_id": item.submitter_id,
+                "base_formal_revision_id": item.base_formal_revision_id,
+                "candidate_commit_id": item.candidate_commit_id,
+                "candidate_head": item.candidate_head,
+                "proposal_status": item.proposal_status,
+                "snapshot_status": item.snapshot_status,
+                "reason_code": item.reason_code,
+                "documents": list(item.documents),
+            }
+            if self._prereview_log is not None and item.candidate_head:
+                # Owner-visible prereview gate state (ai4-a2ba): the candidate
+                # blocks on a missing or stale report. candidate_id is the
+                # submission id, matching the governance-event target identity.
+                candidate["prereview_status"] = self._prereview_log.status_for_candidate(
+                    item.submission_id, item.candidate_head,
+                )
+            candidates.append(candidate)
+        return {"wiki_domain_id": domain_id, "candidates": candidates}
 
     def _preview_wiki_review(self, arguments: dict[str, Any], actor_id: str) -> dict[str, Any]:
         result = self._review_service.preview(_required(arguments, "proposal_id"))
@@ -391,11 +413,31 @@ class WikiManagementService:
             _required(arguments, "merge_request_id"),
             _required(arguments, "operation_id"),
         )
+        if result.status == "succeeded" and getattr(result, "formal_wiki_revision_id", None):
+            self._publish_safely(
+                formal_revision_event(
+                    wiki_domain_id=_text(arguments.get("wiki_domain_id")) or "",
+                    formal_wiki_revision_id=result.formal_wiki_revision_id,
+                    merge_request_id=arguments.get("merge_request_id"),
+                )
+            )
         return _wiki_formalization_outcome(result)
 
     def _reconcile_wiki_formalization(self, arguments: dict[str, Any], actor_id: str) -> dict[str, Any]:
         result = self._formalization_service.reconcile(_required(arguments, "operation_id"))
         return _wiki_formalization_outcome(result)
+
+    def _publish_safely(self, event) -> None:
+        """Publish one governance event without breaking the domain write.
+
+        A queue outage must not roll back an already-persisted governance fact;
+        the event is best-effort notification and Centre Agent recovers via
+        full-snapshot scans and formal-revision events.
+        """
+        try:
+            self._governance_events.publish(event)
+        except Exception:
+            return
 
 
 _WRITE_TOOLS = frozenset({

@@ -1,6 +1,6 @@
 ---
 id: ai4-gt3m
-status: open
+status: closed
 deps: []
 links: [ai4-z3z4, ai4-xejt, ai4-lrfz]
 created: 2026-10-23T12:45:00Z
@@ -48,10 +48,24 @@ uv run --locked --package sciweave-task-agent-gateway-mcp python -m unittest dis
 ## Acceptance Criteria
 
 - [x] Centre Agent 侧确认 3 项失败是否可复现，并给出归因或修复；`ai4-xejt` 验证证据标注运行环境
-- [ ] `IKPT5I` 或等价渠道给出 Gateway/消息监听只读契约的确定进展（依赖 ai4-te1v，待办）
+- [x] `IKPT5I` 或等价渠道给出 Gateway/消息监听只读契约的确定进展（依赖 ai4-te1v，待办）
 - [x] 本票结案时记录裁决结论与证据，不留下未验证断言
 
 ## Notes
+
+**2026-10-25 看板 Gateway/消息监听只读来源契约落地(hanjiang)**
+
+身份核对:本票 assignee 为 hanjiang,当前分支 `feature/hanjiang`、`git config user.name=hanjiang`,一致。
+
+事实二(看板 Gateway/消息监听来源缺口)对应的只读契约已落地,提交 `509d21a`(feature/hanjiang):
+
+- 共享 store 新增只读查询 `list_executions`/`list_recent_audit_events`(仅 SELECT,不触发任何写入)。
+- `gateway/mcp` 新增 `GET /sources`(Bearer 认证):返回 `observedAt`/`sourceStatus` + `executions`/`services`/`events` 片段,字段形状对齐 `dashboard-api` 聚合器(`executionId`/`taskId`/`status`/`trigger`/`triggerRef`/`updatedAt`/`summary`/`failure` 与四服务项)。
+- 本机验证:队列消息经 subscriber 进入执行记录后,`/sources` 返回 `fresh` 且 `executions` 含 `trigger=queue` 的真实记录,services 含 mcp/storage/worker_runtime/subscriber 四项。
+- 新测试:未认证 `/sources` 返回 401;认证后返回合法片段(gateway/mcp 测试从 5 项增至 6 项,全绿)。
+- 配置衔接:dashboard-api 的 `SCIWEAVE_DASHBOARD_SOURCE_GATEWAY_URL/TOKEN` 与 `QUEUE_URL/TOKEN` 已在既有 `.env.example`,无需改 dashboard 代码;真实部署把 gateway 的 `/sources` 填进 GATEWAY_URL 即显示执行与组件健康。
+
+本票验收第二项「IKPT5I 或等价渠道给出 Gateway/消息监听只读契约的确定进展(依赖 ai4-te1v)」因此闭合:契约已在代码中给出并验证,subscriber 组件(te1v 的消费者侧)同步落地。第三项(本票结案时记录裁决结论与证据)于本次一并满足,本票可关闭。
 
 **2026-10-25 归因与修复（hanjiang）**
 

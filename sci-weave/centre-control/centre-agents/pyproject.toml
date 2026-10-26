@@ -1,2 +1,2 @@
 [tool.uv.workspace]
-members = ["gateway/mcp", "gateway/ingest", "worker"]
+members = ["gateway/mcp", "gateway/ingest", "gateway/subscriber", "worker"]

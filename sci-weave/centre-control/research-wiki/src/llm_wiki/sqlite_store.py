@@ -255,6 +255,48 @@ class SqliteStore:
                 return None
         return dict(report)
 
+    def prereview_status(self, candidate_id: str, candidate_head: str) -> dict[str, object]:
+        """Return the observable prereview state of one candidate head.
+
+        Distinguishes ``missing_report`` (no report row yet, the candidate is
+        blocked waiting for prereview) from ``report_current`` (a report is the
+        latest conclusion) and ``report_stale`` (the latest appended decision
+        invalidates it with a machine-readable ``reason``). Reading is a pure
+        projection of the append-only log; nothing is written here.
+        """
+        with self.connection() as connection:
+            report = connection.execute(
+                """
+                SELECT * FROM wiki_prereview_report
+                WHERE candidate_id = ? AND candidate_head = ?
+                """,
+                (candidate_id, candidate_head),
+            ).fetchone()
+            if report is None:
+                return {"status": "missing_report", "candidate_id": candidate_id, "candidate_head": candidate_head}
+            decision = connection.execute(
+                """
+                SELECT * FROM wiki_prereview_report_decision
+                WHERE target_report_id = ?
+                ORDER BY decided_at DESC, rowid DESC LIMIT 1
+                """,
+                (report["report_id"],),
+            ).fetchone()
+            base = {
+                "status": "report_current",
+                "candidate_id": candidate_id,
+                "candidate_head": candidate_head,
+                "report_id": str(report["report_id"]),
+                "verdict": str(report["verdict"]),
+                "rule_set_version": str(report["rule_set_version"]),
+                "base_formal_revision_id": report["base_formal_revision_id"],
+                "created_at": str(report["created_at"]),
+            }
+            if decision is not None:
+                base["status"] = "report_stale"
+                base["reason"] = str(decision["reason"])
+            return base
+
     def add_formal_revision(
         self,
         *,

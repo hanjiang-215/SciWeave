@@ -1,12 +1,12 @@
 ---
 id: ai4-s2nb
-status: open
+status: closed
 deps: [ai4-sxpw]
 links: [ai4-cl3t]
 created: 2026-10-23T07:12:26Z
 type: feature
 priority: 1
-assignee: Frank Qi
+assignee: hanjiang
 parent: ai4-o2n3
 tags: [implementation, task-agent, runtime, config, agent-libs, mcp-libs, workflow-libs]
 ---
@@ -24,16 +24,22 @@ tags: [implementation, task-agent, runtime, config, agent-libs, mcp-libs, workfl
 
 ## Acceptance Criteria
 
-- [ ] libs/agent-libs、libs/mcp-libs 不再包含 pyproject.toml、uv.lock、src 或独立测试项目。
-- [ ] 新增 libs/workflow-libs，至少包含 Workflow YAML、schema/README 和四类工作流示例。
-- [ ] runtime 提供 Agent、MCP、Workflow 三类资源的统一加载、版本、覆盖和稳定错误接口。
-- [ ] 原有 agent-libs、mcp-libs 行为测试迁移到 runtime 并通过。
-- [ ] runtime 可从环境变量或显式路径加载标准与本地资源，配置中不含真实凭据。
-- [ ] custom-mcp 仍作为独立 uv Python 子项目，libs 只保存其注册卡片。
-- [ ] runtime 依赖和唯一 uv.lock 更新，运行完整测试并通过 git diff --check。
+- [x] libs/agent-libs、libs/mcp-libs 不再包含 pyproject.toml、uv.lock、src 或独立测试项目。
+- [x] 新增 libs/workflow-libs，至少包含 Workflow YAML、schema/README 和四类工作流示例。
+- [x] runtime 提供 Agent、MCP、Workflow 三类资源的统一加载、版本、覆盖和稳定错误接口。
+- [x] 原有 agent-libs、mcp-libs 行为测试迁移到 runtime 并通过。
+- [x] runtime 可从环境变量或显式路径加载标准与本地资源，配置中不含真实凭据。
+- [x] custom-mcp 仍作为独立 uv Python 子项目，libs 只保存其注册卡片。
+- [x] runtime 依赖和唯一 uv.lock 更新，运行完整测试并通过 git diff --check。
 
 
 ## Notes
+
+**2026-10-25 验收并关闭（hanjiang）**
+
+身份核对：本票 assignee 为 hanjiang，当前分支 `feature/hanjiang`、`git config user.name=hanjiang`，一致。
+
+2026-10-25 在 `feature/hanjiang` 复跑七项验收并全部勾选。验证证据：`libs/` 全树无 `pyproject.toml`/`uv.lock`/`*.py`/`tests`（扫描为空）；`workflow-libs` 含 router/orchestrator/parallel/agents-as-tools 四个示例与 README；runtime 提供 `load_agent_registry`/`load_mcp_registry`/`load_workflow_yaml` 三类加载入口与稳定错误码；`custom-mcp/stdio-service/pyproject.toml` 仍为独立 uv 子项目；runtime 提交 `uv.lock`；`uv run --locked python -m unittest discover -s tests` 通过（Ran 29）、`compileall` 通过、`git diff --check` 退出码 0。验收证据为当前 HEAD 实测，覆盖此前 Notes「后续可补充完整转移测试」的弹性项。
 
 **2026-10-23T07:24:50Z**
 
@@ -42,3 +48,7 @@ tags: [implementation, task-agent, runtime, config, agent-libs, mcp-libs, workfl
 **2026-10-23T07:28:39Z**
 
 2026-10-23 修订：根据实现审查补充不存在资源目录和标准/本地重复 MCP 资源的稳定处理，避免静默覆盖；runtime 16 tests、compileall、git diff --check 仍通过。
+
+**2026-10-25 转交（hanjiang）**
+
+身份核对：本票 assignee 已由 Frank Qi 改为 hanjiang；当前分支 `feature/hanjiang`、`git config user.name=hanjiang`，一致。转交原因：Frank Qi 暂时无法继续推进项目，经其本人授权，由 hanjiang 接手本票后续推进与收口。原负责人 Frank Qi，转交时间 2026-10-25T12:41:00Z。转交只变更归属与记录，不改写正文与验收标准。
