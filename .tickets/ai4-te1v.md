@@ -1,6 +1,6 @@
 ---
 id: ai4-te1v
-status: open
+status: closed
 deps: []
 links: []
 created: 2026-10-18T15:18:52Z
@@ -35,6 +35,8 @@ tags: [wayfinder:grilling]
 - [x] 明确 `HandoffDispatch` 的重试上限与退避参数。
 - [x] 明确 `task_completed` 的发布时点与返修后是否重发的规则。
 - [x] 明确人工通知的收件人角色由 `notification_kind` 决定，且每条通知只有一个收件人。
+- [x] 明确消息序列化为 JSON（UTF-8），不使用 Avro、Protobuf 或 Schema Registry。
+- [x] 明确 `schema_version` 为整数精确匹配，采用容忍式读取并禁止改动已有字段语义。
 
 ## Current design boundary
 
@@ -66,7 +68,7 @@ tags: [wayfinder:grilling]
 
 - `message_id`：一次发布消息的唯一标识。
 - `message_type`：消息类型。
-- `schema_version`：消息 schema 主版本，首版为 `1`。
+- `schema_version`：消息 schema 版本，首版为整数 `1`；按「序列化与 schema 版本兼容」一节判定，不做次版本号。
 - `dedupe_key`：业务幂等键，重试发布时保持不变。
 - `occurred_at`、`published_at`：事件发生和发布的时间。
 - `producer`：生产服务及可选实例标识。
@@ -99,10 +101,26 @@ tags: [wayfinder:grilling]
 
 ### 失败与恢复
 
-- 未知消息类型、不支持的主版本、错误目标 Agent 或正式版本校验失败，写入可观察 Inbox 错误状态，不静默丢弃。
-- 依赖暂时不可用、连接超时等可恢复故障进入可重试状态并采用退避；消息格式错误、未知主版本、错误目标 Agent 或正式版本校验失败进入可观察的永久 Inbox 状态，不静默丢弃。
+- 未知消息类型、不支持的 `schema_version`、错误目标 Agent 或正式版本校验失败，写入可观察 Inbox 错误状态，不静默丢弃。
+- 依赖暂时不可用、连接超时等可恢复故障进入可重试状态并采用退避；消息格式错误、未知 `schema_version`、错误目标 Agent 或正式版本校验失败进入可观察的永久 Inbox 状态，不静默丢弃。
 - offset 提交失败允许消息重放；`dedupe_key` 防止重复业务执行。
 - `result_unknown`、可重试失败和未绑定 Workflow 的消息由启动扫描恢复；已过期队列消息由正式 Mapping 和本地事实补偿发现。
+
+### 序列化与 schema 版本兼容
+
+消息体使用 **JSON（UTF-8）**，不引入 Avro 或 Protobuf，也不使用 Redpanda 自带的 Schema Registry。`shared/message-envelope/` 因此是纯 Python 数据结构加校验，不持有外部连接。
+
+首版 `schema_version = 1`，是**整数精确匹配**，不存在次版本号。先前的「主版本」措辞作废——那种说法会让人以为存在 `1.x`。
+
+兼容策略采用**容忍式读取**：
+
+- `schema_version` 相等的消息一律可消费，消费方**必须忽略 payload 中的未知字段**。
+- 新增字段必须是**可选**的，并在协议包中声明文档化默认值。新增必填字段等效于破坏兼容。
+- 已有字段名**不得改变用途**。同名不同义比新增字段危险得多，容忍式读取完全挡不住这种情况，只能靠这条禁令。
+- 只有删除字段、改变字段语义或改变必填性，才升 `schema_version`。
+- 升至 `2` 是一次破坏性迁移，不是配置切换：新旧版本需要并存窗口或同步升级，由当时的消费方数量决定。
+
+判定标准只有一条：`schema_version` 不等即视为不支持，写入可观察 Inbox 错误状态，不静默丢弃。
 
 ### 消息信封归属与依赖边界
 
@@ -414,3 +432,33 @@ recipients                     → 传 mapping_domain_id，非 principal_id
 适配器范围取最小投影：只产出 `DependencyEdgeDoc` 现有字段，把嵌套的 `source_node_version_ref` / `target_node_version_ref` 拍平；`dependency_kind`、`activation_condition`、`required_outputs`、`blocks_until` 暂不投影，代码留显式注释指向后续票，不得静默丢弃。节点投影 `task_node_id`、`version_id`、`executor_refs`、`task_owner_id`。
 
 其余三个适配器继续等待：Registry 侧等 `ai4-1kls`（open），消息发布侧等信封包，通知侧等本轮的收件人规则（已定，但依赖快照适配器提供 `task_owner_id`）。
+
+**2026-10-26 第五轮收敛：序列化与信封包归属（Frank Qi）**
+
+本轮补掉三个会让「接信封包的人被迫自己拍板协议」的缺口：
+
+- 序列化定为 **JSON（UTF-8）**，不引 Avro、Protobuf，也不使用 Redpanda 自带的 Schema Registry。首版只有三类消息、两个生产者，消费方全是自家 Python 服务；Avro 的紧凑与强演进在这个规模换不回它的负担——多一个序列化依赖、多一套注册逻辑、开发机上多一个必须活着的服务。代价明确：将来换 Avro 是破坏性迁移，不是配置切换。
+- `schema_version` 是**整数精确匹配**，不存在次版本。「主版本」这个措辞作废，它会让人以为有 `1.x`。
+- 兼容策略取**容忍式读取**：同版本一律可消费、消费方必须忽略未知字段、新增字段必须可选且声明文档化默认值、已有字段名不得改用途、只有删字段/改语义/改必填性才升版本。两条红线是「新字段必须可选」和「字段名不得改用途」——后者尤其重要，容忍式读取完全挡不住同名不同义。
+- 信封包 `shared/message-envelope/` 至今没有承接票。`sci-weave/centre-control/shared/` 下只有 `audit-trail`，而全仓库只有三张票提到过这个路径。由新票 [实现消息信封纯协议包](ai4-3zxu.md) 承接，不并入任何使用方的适配器票：它是中央多项目共用包，让第一个使用方替所有使用方定义协议是错的。
+
+## Resolution
+
+本票作为协议决策分支关闭。19 条验收全部勾选，五轮收敛覆盖：首批消息类型与 topic、统一信封与载荷、消费者组与偏移语义、重试上限与退避、去重、状态词表、根任务派发、executor_refs 多值选择、topic 生命周期、人工通知收件人、序列化与版本兼容。
+
+协议层面的未决项为零。以下工作已全部拆为独立票，不在本票承接：
+
+- [修复 handoff coordinator 派发幂等与执行者选择缺陷](ai4-10ja.md)：七个已复现的实现缺陷。
+- [handoff coordinator 快照适配器接入 research-map 正式快照](ai4-edrp.md)：首个真实适配器。
+- [实现消息信封纯协议包](ai4-3zxu.md)：`shared/message-envelope/`。
+- [get_formal_mapping_at_revision 返回 published_by](ai4-2raq.md)：收件人规则的数据前提。
+
+本票的 Decisions so far 需由 `ai4-xup8` 地图 owner 转载索引，见下方待办。
+
+## 待地图 owner 转载
+
+`ai4-xup8` 的 Decisions so far 只由该地图 assignee（hanjiang）更新。以下是建议转载的一行：
+
+```markdown
+- [消息队列协作模型分支](ai4-te1v.md)：三类物理 topic（`dependency-notice`、`task-handoff.<agent_id>`、`governance-events`）+ 统一信封；`confluent-kafka` 客户端、JSON 序列化、`schema_version` 整数精确匹配与容忍式读取；首版无 `notification-intent` topic，人工通知走 email-service MCP。
+```

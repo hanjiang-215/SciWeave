@@ -91,9 +91,13 @@ sciweave.governance-events
 }
 ```
 
-`schema_version` 是主版本，首版为 `1`。`dedupe_key` 是业务幂等键，重试发布时保持不变。消费方遇到未知 `message_type`、不支持的主版本、错误目标 Agent 或正式版本校验失败时，必须写入可观察的错误状态，不得静默丢弃。
+消息体使用 JSON（UTF-8），不引入 Avro 或 Protobuf，也不使用 Redpanda 自带的 Schema Registry。
 
-信封的 schema、序列化、校验与构造逻辑落在中央多项目共用的纯协议包 `sci-weave/centre-control/shared/message-envelope/`，不携带 Kafka 客户端。
+`schema_version` 是整数精确匹配，首版为 `1`，不存在次版本号。`dedupe_key` 是业务幂等键，重试发布时保持不变。消费方遇到未知 `message_type`、`schema_version` 不等、错误目标 Agent 或正式版本校验失败时，必须写入可观察的错误状态，不得静默丢弃。
+
+兼容策略采用容忍式读取：`schema_version` 相等的消息一律可消费，消费方必须忽略 payload 中的未知字段；新增字段必须是可选的并带文档化默认值；已有字段名不得改变用途；只有删除字段、改变字段语义或改变必填性才升版本。升至 `2` 是破坏性迁移，需要新旧并存窗口或同步升级。
+
+信封的 schema、序列化、校验与构造逻辑落在中央多项目共用的纯协议包 `sci-weave/centre-control/shared/message-envelope/`，不携带 Kafka 客户端。该包由 [实现消息信封纯协议包](../../.tickets/ai4-3zxu.md) 承接。
 
 详细的目标类型、可扩展订阅和启动恢复流程见 [`message-delivery-recovery.md`](message-delivery-recovery.md)。
 

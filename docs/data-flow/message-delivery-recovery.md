@@ -139,7 +139,7 @@ email-service 记录发送成功、失败和重试状态。邮件投递成功不
 
 `routing.target_agent_id` 表达目标 Agent，但不作为权限来源。正式 `executor_refs` 决定 TaskNode 执行关系；Centre Workflow 的订阅配置决定它订阅哪些治理事件；Registry 只提供身份和实例登记事实。
 
-信封的 schema、序列化、校验与构造逻辑落在 `sci-weave/centre-control/shared/message-envelope/`，是纯协议包，不携带 Kafka 客户端。
+信封的 schema、序列化、校验与构造逻辑落在 `sci-weave/centre-control/shared/message-envelope/`，是纯协议包，不携带 Kafka 客户端。消息体为 JSON（UTF-8），`schema_version` 整数精确匹配，兼容策略见 [`message-queue.md`](message-queue.md)「统一消息信封」。
 
 Inbox 中未找到 Workflow 卡片、版本不兼容、加载失败或进程启动失败时，消息保持在 Inbox，不启动下一轮 Worker，不修改正式 Map；记录配置错误并通过 email-service MCP 提交 `human_notification_intent`，待 binding 或卡片修复后重新扫描。
 
