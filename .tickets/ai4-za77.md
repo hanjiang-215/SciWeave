@@ -1,7 +1,7 @@
 ---
 id: ai4-za77
 status: open
-deps: [ai4-z3z4]
+deps: [ai4-z3z4, ai4-te1v]
 links: [ai4-we38, ai4-ujvn, ai4-v19u, ai4-cdia, ai4-8aa0, ai4-o2n3]
 created: 2026-10-21T22:43:00Z
 type: feature
@@ -62,11 +62,16 @@ tags: [toolkit, task-agent, researcher]
 - [ ] 明确 `.env.example` 需要哪些变量（队列地址与消费者组、数据库位置、持久目录、领域 MCP 地址、草稿箱地址）
 - [ ] 使用说明能让研究员在无额外帮助的情况下建出一个能连上中央队列、执行任务并把结果写成草稿的 agent
 
-> 修订（2026-10-22）：上列四部分验收改为下面三条，旧条目不删除。
+> 当前实现边界（2026-10-26）：本票承载研究员套件收口，不重新设计消息协议。真实消息链路必须引用 `ai4-te1v` 的最终协议：`sciweave.task-handoff.<agent_id>`、`target_node_id` 分区键、统一消息信封、至少一次投递、业务幂等和完成后提交 offset。
 
-- [ ] 套件包含 skill、服务模板、libs。skill 教 Personal Agent 按样例改 Agent 定义并装进定义槽，不教改 Gateway
-- [ ] libs 含状态机、Worker Lease、拉起子进程，并预置 fast-agent 卡片样例。服务模板是三进程壳，调用 libs 启动，不把 Gateway 再实现一遍
-- [ ] 与 `centre-agents` 无 path 依赖。两个 gateway 进程用用户级自启动常驻；hooks 只在打开 harness 时检查并补启动
+- [ ] 套件包含 `deploy-task-agent-skills`、服务模板、资源 libs、Agent 定义和自定义 MCP 模板；Personal Agent 只修改 Agent 定义、Workflow 声明和资源配置，不修改 runtime、Gateway、Worker Lease 或服务模板。
+- [ ] runtime 提供状态记录、Worker Lease、Inbox/幂等和单 Worker 多 Agent Workflow；服务模板只负责装配和启动 `gateway/mcp`、`gateway/subscriber`、`worker`，不复制运行时逻辑。
+- [ ] `gateway/subscriber` 使用真实消息客户端接收 `task_handoff_ready`，校验 `target_agent_id` 与正式执行关系；消息先写入 Inbox，缺少 Workflow binding 时保持 `awaiting_workflow_binding`，binding 建立后再转为 `queued ExecutionRecord`。
+- [ ] subscriber 使用 `sciweave.task-workflow.<mapping_domain_id>.<agent_id>` consumer group，业务处理完成后提交 offset；重复消息按 `dedupe_key` 幂等，服务重启可恢复未提交消息和 Inbox。
+- [ ] 服务模板通过环境变量配置队列地址、Agent 身份、consumer group、数据库路径、持久目录和 MCP 地址；systemd 与启动脚本不硬编码部署目录、端口或令牌。
+- [ ] 套件与 `centre-agents` 无 path 依赖；两个 gateway 进程使用用户级常驻服务，hooks 只在打开 harness 时检查并补启动。
+- [ ] 使用临时或本地 Redpanda、Fake Agent、Fake Draft Box 和临时 SQLite 覆盖成功、重复投递、离线恢复、缺少 binding、目标不匹配、schema 不兼容、超时和草稿写入失败；不提交真实凭据。
+- [ ] 完成套件安装、测试、compileall、消息适配集成测试和 `git diff --check`，并将验证命令和结果回写本票。
 
 ## Notes
 
@@ -98,3 +103,7 @@ tags: [toolkit, task-agent, researcher]
 - libs：运行时（状态机、Worker Lease、拉起子进程）加上预置的 fast-agent 卡片样例。
 
 与 centre-agents 禁止 path 依赖。行为对齐「最小 Work Agent 实现规格」。两个 gateway 进程用研究员机器上的用户级自启动常驻；hooks 只在打开 harness 时检查并补启动。
+
+**2026-10-26 消息协议同步（Frank Qi）**
+
+本票依赖 `ai4-te1v` 的消息语义收敛。套件实现不得自行定义 topic、consumer group、payload 或 offset 语义；真实 subscriber 必须使用 `ai4-te1v` 定义的 Agent topic、统一消息信封、`target_node_id` 分区键、`dedupe_key` 幂等和完成后提交 offset。当前工作优先补齐启动脚本、环境配置、真实 subscriber、Inbox 和临时 Redpanda 端到端验证；不修改 email-service 或中央领域服务实现。
