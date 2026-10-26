@@ -140,6 +140,15 @@ class NotificationPublisherPort(Protocol):
         """Submit the notification intent. Raises PublisherUnavailableError on transient failure."""
 
 
+class NotificationTransportUnavailable(RuntimeError):
+    """The notification transport is not configured, so nothing was sent.
+
+    Distinct from a delivery failure: retrying cannot help until the endpoint
+    is configured, and marking the dispatch ``published`` would lose the
+    notification for good. Callers record it as ``failed`` with this reason.
+    """
+
+
 class AgentState(StrEnum):
     """What the Registry knows about one executor ref (ai4-te1v, ai4-xkbd).
 

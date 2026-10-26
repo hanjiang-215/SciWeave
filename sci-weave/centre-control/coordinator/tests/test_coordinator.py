@@ -1216,3 +1216,38 @@ def test_retry_republishes_the_kind_the_row_was_created_for():
     # from state that may have moved on.
     assert [i.notification_kind for i in notifications.published] == ["dependency_condition_hold"]
     connection.close()
+
+def test_unconfigured_notification_transport_keeps_the_dispatch_retryable():
+    """ai4-3gvf: a notification nobody could send must not look delivered.
+
+    The degraded publisher raises instead of returning quietly; the dispatch
+    stays ``failed`` with a configuration reason, so configuring the email
+    endpoint later still lets the owner hear about the task.
+    """
+    from coordinator.ports import NotificationTransportUnavailable
+
+    class _UnconfiguredPublisher:
+        def publish(self, intent):
+            raise NotificationTransportUnavailable("email MCP not configured")
+
+    connection = sqlite3.connect(":memory:")
+    snapshot_port = FakeSnapshotPort()
+    snapshot = FormalSnapshot(
+        mapping_domain_id="map-1",
+        formal_revision_id="rev-1",
+        nodes=(node("T1", "v1", (), task_owner_id="owner-1"),),
+        latest_published_by="owner-1",
+    )
+    snapshot_port.set("map-1", "rev-1", snapshot)
+    service = _two_node_service(
+        connection, snapshot_port, FakeHandoffPublisher(), _UnconfiguredPublisher(),
+        FakeAgentAvailability(set()),
+    )
+    service.dispatch_root_task("map-1", "T1", "v1", trigger_revision_id="rev-1")
+
+    notifications = [
+        d for d in service.store.list_dispatches() if d.message_type == MSG_HUMAN_NOTIFICATION
+    ]
+    assert [d.status for d in notifications] == [DISPATCH_FAILED]
+    assert notifications[0].error_summary.startswith("notification_transport_unconfigured")
+    connection.close()

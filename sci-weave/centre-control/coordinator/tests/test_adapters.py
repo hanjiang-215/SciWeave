@@ -303,3 +303,59 @@ def test_email_publisher_submits_intent() -> None:
         assert args["notification_kind"] == "agent_unavailable"
         assert args["recipients"] == [{"principal_id": "principal-1"}]
         assert args["schema_version"] == "1"
+
+# ------------------------------------------------ governance event routing (ai4-3gvf)
+
+class _RecordingService:
+    """Minimal CoordinatorServiceLike stand-in that records routed calls."""
+
+    def __init__(self) -> None:
+        self.formal_revisions: list[tuple[str, str]] = []
+        self.completions: list[tuple[str, str, str]] = []
+
+    def on_formal_revision_published(self, mapping_domain_id: str, formal_revision_id: str) -> None:
+        self.formal_revisions.append((mapping_domain_id, formal_revision_id))
+
+    def on_task_completed(self, mapping_domain_id: str, task_node_id: str, version_ref: str) -> None:
+        self.completions.append((mapping_domain_id, task_node_id, version_ref))
+
+
+def test_task_completed_event_releases_downstream():
+    """A finished node must reach the coordinator; a revision edit is not the only trigger."""
+    from coordinator.adapter_events import GovernanceEventConsumer
+
+    service = _RecordingService()
+    consumer = GovernanceEventConsumer(service)
+
+    event = consumer.handle(
+        {
+            "event_type": "task_completed",
+            "mapping_domain_id": "iris",
+            "dedupe_key": "iris:T1:v1:task_completed",
+            "payload": {"task_node_id": "T1", "node_version_ref": "v1"},
+        }
+    )
+
+    assert service.completions == [("iris", "T1", "v1")]
+    assert event is not None and event.event_type == "task_completed"
+
+
+def test_task_completed_without_a_version_is_ignored():
+    """A completion without the exact node version cannot release anything."""
+    from coordinator.adapter_events import GovernanceEventConsumer
+
+    service = _RecordingService()
+    consumer = GovernanceEventConsumer(service)
+
+    assert consumer.handle({"event_type": "task_completed", "mapping_domain_id": "iris", "payload": {"task_node_id": "T1"}}) is None
+    assert service.completions == []
+
+
+def test_unknown_event_types_are_ignored():
+    from coordinator.adapter_events import GovernanceEventConsumer
+
+    service = _RecordingService()
+    consumer = GovernanceEventConsumer(service)
+
+    assert consumer.handle({"event_type": "candidate_created", "mapping_domain_id": "iris"}) is None
+    assert service.formal_revisions == [] and service.completions == []

@@ -5,14 +5,18 @@ import os
 import sqlite3
 import time
 
-from .adapter_email import EmailMcpNotificationPublisher
-from .adapter_events import GovernanceEventConsumer, KafkaGovernanceEventConsumer
-from .adapter_publisher import KafkaHandoffPublisher
-from .adapter_registry import RegistryMcpAvailabilityPort
-from .adapter_snapshot import ResearchMapMcpSnapshotPort
-from .config import CoordinatorConfig
-from .service import CoordinatorService
-from .store import CoordinatorStore
+# Absolute imports: this file is the process entry point (`uv run python
+# src/main.py`), not part of the installed `coordinator` package, so relative
+# imports would make it unrunnable.
+from coordinator.adapter_email import EmailMcpNotificationPublisher
+from coordinator.adapter_events import GovernanceEventConsumer, KafkaGovernanceEventConsumer
+from coordinator.adapter_publisher import KafkaHandoffPublisher
+from coordinator.adapter_registry import RegistryMcpAvailabilityPort
+from coordinator.adapter_snapshot import ResearchMapMcpSnapshotPort
+from coordinator.config import CoordinatorConfig
+from coordinator.ports import NotificationTransportUnavailable
+from coordinator.service import CoordinatorService
+from coordinator.store import CoordinatorStore
 
 logger = logging.getLogger("coordinator")
 
@@ -116,15 +120,23 @@ class CoordinatorRuntime:
     def on_event_batch(self) -> int:
         """Consume one governance-events batch and trigger recomputations.
 
-        Returns the number of formal_revision_published events routed. Offsets
-        are committed after the batch is fully handled, so a crash replays and
-        the store's idempotent pending-handoff keys block double-dispatch.
+        Returns the number of events routed. The batch position is committed
+        once the batch has been walked, even if an event could not be handled:
+        a poison event must not pin the partition and stall every later event,
+        and the trace left behind is what an operator acts on.
         """
+        envelopes = self.events.poll(timeout_ms=100)
+        if not envelopes:
+            return 0
         handled = 0
-        for envelope in self.events.poll(timeout_ms=100):
-            if self.event_router.handle(envelope) is not None:
-                handled += 1
-        if handled:
+        try:
+            for envelope in envelopes:
+                try:
+                    if self.event_router.handle(envelope) is not None:
+                        handled += 1
+                except Exception:
+                    logger.exception("governance event could not be handled; continuing with the batch")
+        finally:
             self.events.commit()
         return handled
 
@@ -133,10 +145,7 @@ class CoordinatorRuntime:
 
     def poll_once(self) -> None:
         self.on_event_batch()
-        for dispatch in self.service.store.list_dispatches(
-            statuses=("result_unknown", "failed")
-        ):
-            self.service._retry_dispatch(dispatch.dispatch_id)  # noqa: SLF001 - visibility deliberately fine
+        self.service.retry_pending_dispatches()
 
     def serve_forever(self) -> None:
         """Blocking loop: startup scan, then consume governance events and
@@ -151,15 +160,19 @@ class CoordinatorRuntime:
 
 
 class _NoopNotificationPublisher:
-    """Degraded notification path: keep waiting facts, publish nothing.
+    """Degraded notification path: record the fact, deliver nothing.
 
-    Used when email-service MCP is not configured. Human notification intents
-    stay observable through the PendingHandoff waiting state; configuring the
-    email endpoint switches to real delivery without code changes.
+    Used when email-service MCP is not configured. It raises instead of
+    returning quietly: a silent return would let the coordinator mark the
+    dispatch ``published`` and the owner would never be told, not even after
+    the endpoint is configured and the process restarts.
     """
 
     def publish(self, intent) -> None:  # type: ignore[no-untyped-def]
-        logger.info("notification intent suppressed (email MCP not configured): %s", intent.notification_kind)
+        raise NotificationTransportUnavailable(
+            f"email MCP not configured; {intent.notification_kind} intent for "
+            f"{intent.related.get('task_node_id')} was not sent"
+        )
 
 
 def main() -> None:

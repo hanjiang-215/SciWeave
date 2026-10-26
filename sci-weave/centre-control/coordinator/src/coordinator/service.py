@@ -12,6 +12,7 @@ from .ports import (
     NoSuchRevisionError,
     NotificationIntent,
     NotificationPublisherPort,
+    NotificationTransportUnavailable,
     PrincipalDirectoryPort,
     PrincipalState,
     SnapshotInconsistentError,
@@ -151,10 +152,22 @@ class CoordinatorService:
                 continue
             self.store.clear_snapshot_failure(mapping_domain_id, latest)
             self._evaluate_snapshot(snapshot, trigger_revision_id=latest)
+        self.retry_pending_dispatches()
+
+    def retry_pending_dispatches(self) -> int:
+        """Retry every dispatch whose outcome is not final; return how many were tried.
+
+        Public because the runtime polls this on an interval: a non-terminal
+        dispatch is a promise the coordinator has not kept yet, and leaving the
+        loop to reach into a private method makes the retry policy invisible.
+        """
+        retried = 0
         for dispatch in self.store.list_dispatches(
             statuses=(DISPATCH_RESULT_UNKNOWN, DISPATCH_FAILED)
         ):
             self._retry_dispatch(dispatch.dispatch_id)
+            retried += 1
+        return retried
 
     def _handle_unreadable_snapshot(
         self, mapping_domain_id: str, formal_revision_id: str, exc: Exception
@@ -645,6 +658,17 @@ class CoordinatorService:
                     },
                 )
             )
+        except NotificationTransportUnavailable as exc:
+            # Not a delivery failure: nothing was attempted because the email
+            # endpoint is not configured. Keep the dispatch retryable instead
+            # of calling it published, or the owner would never be told.
+            self.store.set_dispatch_status(
+                dispatch.dispatch_id,
+                DISPATCH_FAILED,
+                f"notification_transport_unconfigured: {exc}",
+                attempt_count=1,
+            )
+            return False
         except Exception as exc:
             self.store.set_dispatch_status(
                 dispatch.dispatch_id, DISPATCH_RESULT_UNKNOWN, error_summary=str(exc), attempt_count=1
@@ -932,6 +956,14 @@ class CoordinatorService:
                     },
                 )
             )
+        except NotificationTransportUnavailable as exc:
+            self.store.set_dispatch_status(
+                dispatch.dispatch_id,
+                DISPATCH_FAILED,
+                f"notification_transport_unconfigured: {exc}",
+                attempt_count=attempt_count,
+            )
+            return
         except Exception as exc:
             self.store.set_dispatch_status(
                 dispatch.dispatch_id, DISPATCH_RESULT_UNKNOWN, error_summary=str(exc), attempt_count=attempt_count

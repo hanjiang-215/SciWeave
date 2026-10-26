@@ -25,10 +25,13 @@ from .service import CoordinatorService
 
 _GOVERNANCE_TOPIC = "sciweave.governance-events"
 _FORMAL_REVISION_PUBLISHED = "formal_revision_published"
+_TASK_COMPLETED = "task_completed"
 
 
 class CoordinatorServiceLike(Protocol):
     def on_formal_revision_published(self, mapping_domain_id: str, formal_revision_id: str) -> None: ...
+
+    def on_task_completed(self, mapping_domain_id: str, task_node_id: str, version_ref: str) -> None: ...
 
 
 @dataclass(frozen=True)
@@ -47,9 +50,11 @@ class GovernanceEventConsumer:
 
     def handle(self, envelope: dict) -> GovernanceEvent | None:
         event_type = str(envelope.get("event_type") or "")
+        payload = envelope.get("payload") or {}
+        if event_type == _TASK_COMPLETED:
+            return self._handle_task_completed(envelope, payload)
         if event_type != _FORMAL_REVISION_PUBLISHED:
             return None
-        payload = envelope.get("payload") or {}
         formal_revision_id = str(payload.get("formal_revision_id") or envelope.get("formal_revision_id") or "")
         mapping_domain_id = str(envelope.get("mapping_domain_id") or payload.get("mapping_domain_id") or "")
         if not formal_revision_id or not mapping_domain_id:
@@ -61,6 +66,35 @@ class GovernanceEventConsumer:
             dedupe_key=str(envelope.get("dedupe_key") or f"{mapping_domain_id}:{formal_revision_id}"),
         )
         self.service.on_formal_revision_published(mapping_domain_id, formal_revision_id)
+        return event
+
+    def _handle_task_completed(self, envelope: dict, payload: dict) -> GovernanceEvent | None:
+        """Route ``task_completed`` so a finished upstream node releases its downstream.
+
+        Without this route the completion fact never reaches the coordinator in
+        a real deployment: the only other trigger is another formal revision,
+        so a downstream node would wait for an unrelated edit.
+        """
+        mapping_domain_id = str(envelope.get("mapping_domain_id") or payload.get("mapping_domain_id") or "")
+        task_node_id = str(payload.get("task_node_id") or payload.get("task_node_logical_id") or "")
+        version_ref = str(
+            payload.get("node_version_ref")
+            or payload.get("task_node_version_ref")
+            or payload.get("target_node_version_ref")
+            or ""
+        )
+        if not mapping_domain_id or not task_node_id or not version_ref:
+            return None
+        event = GovernanceEvent(
+            event_type=_TASK_COMPLETED,
+            mapping_domain_id=mapping_domain_id,
+            formal_revision_id=str(payload.get("formal_revision_id") or ""),
+            dedupe_key=str(
+                envelope.get("dedupe_key")
+                or f"{mapping_domain_id}:{task_node_id}:{version_ref}:task_completed"
+            ),
+        )
+        self.service.on_task_completed(mapping_domain_id, task_node_id, version_ref)
         return event
 
 
