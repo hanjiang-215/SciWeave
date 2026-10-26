@@ -27,6 +27,23 @@ same = decode(body)          # 解回来并再校验一次
 
 `encode` 也做校验，所以生产方在构造时就能发现漏字段，而不是等消费方解析失败。
 
+## 公开接口
+
+| 名称 | 类型 | 用途 |
+| --- | --- | --- |
+| `Envelope` | dataclass | 统一信封本体，九个字段 |
+| `Producer` | dataclass | `service` 必填，`instance_id` 可选 |
+| `Routing` | dataclass | `partition_key` 必填，`target_agent_id` 可选 |
+| `encode(envelope) -> bytes` | 函数 | 校验后编成 UTF-8 JSON |
+| `decode(data) -> Envelope` | 函数 | 解成信封并再校验一次 |
+| `validate(envelope) -> None` | 函数 | 只校验已在内存里的信封，非法时抛具体异常 |
+| `SCHEMA_VERSION` | 常量 | 当前支持的版本，值为 `1` |
+| `MESSAGE_TYPES` | 常量 | 本包认识的消息类型集合 |
+| `EnvelopeError` | 异常基类 | 统一兜底时捕它 |
+| `EnvelopeFormatError` / `SchemaVersionError` / `UnknownMessageTypeError` / `PayloadError` | 异常 | 四类失败，见下节 |
+
+`decode` 会拒绝三种结构性问题：字节不是 UTF-8 JSON、顶层不是对象、缺 `payload` 键。缺键报格式错误而不是当成空载荷——每种消息类型都有必填载荷字段，缺失的信封不可能是合法的。显式写 `{}` 则照常接受。
+
 ## 四类失败
 
 失败被刻意分开，因为消费方对它们的处置不同：
