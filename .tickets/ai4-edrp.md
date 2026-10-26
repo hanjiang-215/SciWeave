@@ -2,7 +2,7 @@
 id: ai4-edrp
 status: open
 deps: [ai4-2raq]
-links: [ai4-2982, ai4-1y6q, ai4-10ja]
+links: [ai4-2982, ai4-1y6q, ai4-10ja, ai4-br61, ai4-9wji]
 created: 2026-10-26T07:36:06Z
 type: feature
 priority: 1
@@ -62,6 +62,8 @@ TerminusDB 文档与 `ports.py` 的 dataclass 形状不一致，适配器负责�
 这是有意的范围控制，不是遗漏：`ai4-te1v` 规定 `dependency_kind` 的判定逻辑属于另一张实现票，把字段提前塞进契约会让两张票焊死。
 
 **代码中必须留显式注释**说明这四个字段被丢弃且指向后续票号，不得静默丢弃。将来补投影时，改动点应当只有这一处。
+
+另有一处**不属于**这四个字段的投影遗漏：边的 `version_id` 在 TerminusDB 文档里存在（`@id = "DependencyEdge/<version_id>"`），但投影时被丢掉了，`DependencyEdgeDoc` 只有 `edge_id`。这挡住了交接载荷的 `dependency_edge_version_refs`，由 `ai4-br61` 补 `edge_version_id`。该票与本票的适配器实现重叠，建议一并做完。
 
 ## Acceptance Criteria
 

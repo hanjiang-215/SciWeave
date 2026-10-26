@@ -1,0 +1,2 @@
+module = ["agent", "mapping"]
+summary = "为依赖边补上被投影丢掉的版本号，供交接载荷引用"
