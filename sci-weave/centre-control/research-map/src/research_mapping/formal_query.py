@@ -206,6 +206,10 @@ class FormalQueryService:
             branch_id=revision.formal_branch_id,
             commit_hash=revision.formal_commit_hash,
             content_digest=snapshot.content_digest,
+            # Carried through from the revision row rather than from the
+            # snapshot: published_by is approval metadata, and the graph
+            # documents do not contain it.
+            published_by=revision.published_by,
             documents=snapshot.documents,
         )
 

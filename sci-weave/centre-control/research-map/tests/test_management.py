@@ -168,6 +168,34 @@ class ManagementServiceTestCase(unittest.TestCase):
         )
         self.assertEqual(denied.error_code, "forbidden")
 
+    def test_formal_read_exposes_the_approver_on_both_entry_points(self):
+        # ai4-2raq: the handoff coordinator needs the approver to address the
+        # terminal summary, and it reads it through whichever of the two entry
+        # points it has a revision id for. Both must answer the same thing.
+        current = self.service.call_tool(
+            "get_formal_mapping", {"mapping_domain_id": DOMAIN}, actor_id="reader",
+        )
+        at_revision = self.service.call_tool(
+            "get_formal_mapping_at_revision",
+            {"mapping_domain_id": DOMAIN, "formal_revision_id": BASE},
+            actor_id="reader",
+        )
+
+        self.assertEqual(current.result["published_by"], "owner")  # type: ignore[index]
+        self.assertEqual(at_revision.result["published_by"], "owner")  # type: ignore[index]
+        self.assertEqual(current.result["published_by"], at_revision.result["published_by"])  # type: ignore[index]
+
+    def test_formal_read_failure_keeps_its_shape_without_an_approver(self):
+        # A failure has no revision row, so there is no approver to report.
+        # Adding a null field would change the shape callers already key off.
+        unknown = self.service.call_tool(
+            "get_formal_mapping_at_revision",
+            {"mapping_domain_id": DOMAIN, "formal_revision_id": "no-such-revision"},
+            actor_id="reader",
+        )
+
+        self.assertEqual(unknown.result, {"status": "no_such_revision", "reason_code": errors.REVISION_NOT_FOUND})  # type: ignore[index]
+
     def test_formal_read_at_revision_unknown_or_bad_arguments(self):
         unknown = self.service.call_tool(
             "get_formal_mapping_at_revision",
