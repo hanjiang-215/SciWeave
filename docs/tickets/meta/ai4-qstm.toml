@@ -1,0 +1,3 @@
+# ai4-qstm 的索引归属与简介（人工维护）
+module = ["mapping", "wiki"]
+summary = "混合候选基准、Wiki 正式化幂等、preview 崩溃与重复定义"
