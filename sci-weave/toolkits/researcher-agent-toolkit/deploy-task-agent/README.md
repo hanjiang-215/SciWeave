@@ -3,7 +3,7 @@
 研究员端 Task Agent 套件，按目标交付结构组织：
 
 - `runtime/`：状态记录、Worker Lease、配置模型、资源注册表和单 Worker 多 Agent 工作流。
-- `service-template/`：`gateway/subscriber` 是已实现的常驻消费者；`gateway/mcp` 是研究员处置面，提供 `docs/data-flow/work-agent.md` 的六个工具（`health`/`query_execution`/`list_pending`/`cancel_execution`/`answer_question`/`review_execution`），读写与 subscriber 共用的 SQLite 执行库；`worker`（一次性执行壳）仍是占位，启动即 fail fast 并说明原因，见 `ai4-58d0`。
+- `service-template/`：`gateway/subscriber` 是已实现的常驻消费者；`gateway/mcp` 是研究员处置面，提供 `docs/data-flow/work-agent.md` 的六个工具（`health`/`query_execution`/`list_pending`/`cancel_execution`/`answer_question`/`review_execution`），读写与 subscriber 共用的 SQLite 执行库；`worker` 是一次性执行壳，用 `build_agent_runtime()` 装配真实 fast-agent 运行时，把队列里的一条执行跑完并写入草稿箱；缺 Key 启动即失败，passthrough 仅在 `SCIWEAVE_GATEWAY_PASSTHROUGH_RUNTIME=1` 时可用。
 - `agent-definitions/`：兼容入口的 Agent 定义、schema；可复用 Workflow 资源位于 `libs/workflow-libs/`。
 - `libs/agent-libs/`：纯 YAML/JSON/Markdown Agent 行为资源，由 runtime 加载。
 - `libs/mcp-libs/`：纯 JSON/YAML MCP 工具描述资源，由 runtime 加载。

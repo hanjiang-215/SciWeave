@@ -215,7 +215,13 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual((outcome.status, outcome.error_summary), ("failed", "fast_agent_runtime_error"))
 
     def test_a_missing_fast_agent_package_is_reported(self) -> None:
+        # Now that the dependency is installed, dropping it from sys.modules only
+        # makes the import reload from disk. A None entry makes ``import
+        # fast_agent`` raise ImportError, which is the state a deployment without
+        # the extra would be in.
         _remove_fake_fast_agent()
+        sys.modules["fast_agent"] = None
+        self.addCleanup(sys.modules.pop, "fast_agent", None)
 
         outcome = self._runtime().run(_Request())
 
