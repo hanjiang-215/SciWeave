@@ -244,8 +244,27 @@ class _DispositionHttpHandler(BaseHTTPRequestHandler):
             and secrets.compare_digest(token.strip(), expected)
         ):
             return True
+        self._drain_body()
         self._send(HTTPStatus.UNAUTHORIZED, {"error": "unauthorized", "message": "invalid bearer token"})
         return False
+
+    def _drain_body(self) -> None:
+        """Read the declared body before an early rejection.
+
+        Answering 401 without consuming the body closes the socket while the
+        client is still writing, so the caller sees a connection reset instead
+        of the rejection. The read is bounded like a normal request.
+        """
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+        except ValueError:
+            return
+        if length <= 0 or length > _MAX_BODY_BYTES:
+            return
+        try:
+            self.rfile.read(length)
+        except OSError:
+            return
 
     def _send(self, status: HTTPStatus, payload: object) -> None:
         body = b"" if payload is None else json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode()

@@ -35,6 +35,7 @@ class _McpHttpHandler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:  # noqa: N802
         if self.path != "/mcp":
+            self._drain_body()
             self._send(HTTPStatus.NOT_FOUND, {"error": "not_found"})
             return
         actor = self._authenticated_actor()
@@ -85,13 +86,35 @@ class _McpHttpHandler(BaseHTTPRequestHandler):
         header = self.headers.get("Authorization") or ""
         scheme, separator, token = header.partition(" ")
         if not separator or scheme.lower() != "bearer" or not token.strip():
+            self._drain_body()
             self._send(HTTPStatus.UNAUTHORIZED, {"error": "unauthorized", "message": "missing bearer token"})
             return None
         actor = self.server.tokens.get(token.strip())  # type: ignore[attr-defined]
         if actor is None:
+            self._drain_body()
             self._send(HTTPStatus.UNAUTHORIZED, {"error": "unauthorized", "message": "unknown bearer token"})
             return None
         return actor
+
+    def _drain_body(self) -> None:
+        """Consume the declared body before answering an early rejection.
+
+        Rejecting before reading the body closes the socket while the client is
+        still writing, which surfaces as a connection reset (WinError 10053)
+        instead of the 401 the client is waiting for. The read is bounded by the
+        same limit as a normal request so an unauthenticated caller cannot make
+        the server buffer an unbounded body.
+        """
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+        except ValueError:
+            return
+        if length <= 0 or length > _MAX_BODY_BYTES:
+            return
+        try:
+            self.rfile.read(length)
+        except OSError:
+            return
 
     def _method_not_allowed(self) -> None:
         self._send(HTTPStatus.METHOD_NOT_ALLOWED, {"error": "method_not_allowed"})
