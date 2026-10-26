@@ -95,6 +95,22 @@ tags: [wayfinder:grilling, centre-control, message-queue, handoff]
 
 ## Notes
 
+**2026-10-26 核心缺陷修复落地（hanjiang，代码修复；验收记录归 ai4-10ja assignee）**
+
+身份核对：本票 assignee 为 hanjiang，当前分支 `feature/hanjiang`、`git config user.name=hanjiang`，一致。
+
+`ai4-10ja`（Frank Qi 负责）审计的 7 项 coordinator 核心缺陷已在本分支完成**代码修复**（提交 `db2b791`），测试按其契约重写。属人规则只约束 ticket 文档；代码修复已附带回归测试与真实 e2e 证据，验收勾选与 Notes 记录仍由 `ai4-10ja` assignee 完成，本票只记录事实供其复核：
+
+1. 去重键不再含触发 revision（同节点同版本同消息类型只派发一次）；
+2. `done` 为终结态，重算不回退 `waiting`；store 增加状态迁移守卫（同状态幂等允许）；
+3. `executor_refs` 按声明顺序选第一个可用 Agent，拒绝"只取第一个"；
+4. 无入边根节点不自动派发，新增 `dispatch_root_task`（幂等、拒绝非根节点）；
+5. `max_attempts` 达到上限转 `dead` 不重放，默认值 5；
+6. 通知收件人改 `task_owner_id`（人工通知）与 `latest_published_by`（终点汇总，ADR-0004），缺失时保留 waiting 并记录 `recipient_unresolved`；
+7. `startup_scan` 与 `_retry_dispatch` 的快照错误处置统一为可重试（保持事实等待）。
+
+验证：coordinator 26 passed + 2 skipped（集成 opt-in）；真实 TerminusDB+Redpanda e2e 在新契约下复跑通过（根节点改为显式 dispatch_root_task）。`FormalSnapshot.latest_published_by` 由适配器从 MCP 响应的 `published_by` 读取（该字段由 `ai4-2raq` 补齐 MCP 返回后生效）。其余缺陷由 `ai4-10ja` 承接验收。
+
 **2026-10-26 真实适配器落地（hanjiang）**
 
 身份核对：本票 assignee 为 hanjiang，当前分支 `feature/hanjiang`、`git config user.name=hanjiang`，一致。
