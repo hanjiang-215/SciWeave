@@ -48,6 +48,47 @@ def test_unverifiable_directory_admits_it_cannot_tell():
     assert directory.state_of("anyone") is not PrincipalState.ABSENT
 
 
+class _StubDirectory:
+    """Minimal stand-in so the three outcomes are exercised via the port."""
+
+    def __init__(self, known: dict[str, PrincipalState], reachable: bool = True) -> None:
+        self._known = known
+        self._reachable = reachable
+
+    def state_of(self, principal_id: str) -> PrincipalState:
+        if not self._reachable:
+            return PrincipalState.UNKNOWN
+        return self._known.get(principal_id, PrincipalState.ABSENT)
+
+
+def test_directory_port_reports_all_three_outcomes():
+    """Each state must be reachable, and each means something different."""
+    directory = _StubDirectory({"principal-1": PrincipalState.ACTIVE})
+    assert directory.state_of("principal-1") is PrincipalState.ACTIVE
+    assert directory.state_of("principal-2") is PrincipalState.ABSENT
+
+    unreachable = _StubDirectory({"principal-1": PrincipalState.ACTIVE}, reachable=False)
+    assert unreachable.state_of("principal-1") is PrincipalState.UNKNOWN
+
+
+def test_service_uses_an_injected_directory_when_given_one():
+    """The port has to be reachable through the service, not just standalone."""
+    connection = sqlite3.connect(":memory:")
+    try:
+        service = CoordinatorService(
+            CoordinatorStore(connection),
+            snapshot_port=None,
+            publisher=None,
+            notifications=None,
+            agents=None,
+            principals=_StubDirectory({"principal-1": PrincipalState.ACTIVE}),
+        )
+        assert service.principals.state_of("principal-1") is PrincipalState.ACTIVE
+        assert service.principals.state_of("principal-2") is PrincipalState.ABSENT
+    finally:
+        connection.close()
+
+
 def test_service_without_a_directory_still_constructs():
     """Existing call sites pass four ports; the fifth must be optional."""
     connection = sqlite3.connect(":memory:")
