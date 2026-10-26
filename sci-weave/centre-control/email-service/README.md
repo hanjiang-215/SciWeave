@@ -2,7 +2,7 @@
 
 受鉴权的通知受理服务。调用方通过官方 Python `mcp` SDK 的 Streamable HTTP 提交一条合法的 `human_notification_intent`。服务通过 Registry 的 Streamable HTTP MCP `get_principal_contact` 按 `principal_id` 异步解析收件人，只有全部收件人解析成功后才写入自己的投递库并返回 `accepted_for_delivery`，再由后台投递循环通过注入的发送端口发信。Registry 查询使用 `SCIWEAVE_EMAIL_REGISTRY_URL`、`SCIWEAVE_EMAIL_REGISTRY_TOKEN` 和 `SCIWEAVE_EMAIL_REGISTRY_TIMEOUT_SECONDS`；暂时性 Registry/MCP 故障直接返回 `registry_unavailable`，不写入投递记录。暂时失败会进入 `retryable` 并按退避重试；进程重启后继续未完成的 `pending`、超时的 `sending` 和 `retryable`，沿用原来的通知。调用方之后用 `get_notification_status` 查看投递状态。`researcher`、`project_owner` 和 `service` 只能查看自己提交的通知。`caller_type=operator` 可以按 `notification_id` 查看任何人提交的状态，但仍然看不到正文、凭据或原始发送错误。失败状态带 `error_summary`，只用稳定错误码，不回传发送端口的原始文本。没有调用方重试工具。
 
-监听地址、端口、令牌、投递库、审计库、公共邮箱和重试参数都来自环境变量。退避、轮询和 sending 超时分别是 `SCIWEAVE_EMAIL_RETRY_INITIAL_SECONDS`、`SCIWEAVE_EMAIL_RETRY_MULTIPLIER`、`SCIWEAVE_EMAIL_RETRY_MAX_SECONDS`、`SCIWEAVE_EMAIL_DISPATCH_POLL_SECONDS`、`SCIWEAVE_EMAIL_SENDING_TIMEOUT_SECONDS`。应用代码只读进程环境，不读取 `.env`。访问账本使用共享的 `sciweave-audit-trail`，与投递库不是同一个库。本服务不连接真实 SMTP，不使用第三方邮件 SDK，也不消费 Redpanda。邮件发送端口仍使用未绑定占位，Registry 收件人解析由官方 MCP 客户端接入；测试注入 Fake。
+监听地址、端口、令牌、投递库、审计库、公共邮箱和重试参数都来自环境变量。退避、轮询和 sending 超时分别是 `SCIWEAVE_EMAIL_RETRY_INITIAL_SECONDS`、`SCIWEAVE_EMAIL_RETRY_MULTIPLIER`、`SCIWEAVE_EMAIL_RETRY_MAX_SECONDS`、`SCIWEAVE_EMAIL_DISPATCH_POLL_SECONDS`、`SCIWEAVE_EMAIL_SENDING_TIMEOUT_SECONDS`。应用代码只读进程环境，不读取 `.env`。访问账本使用共享的 `sciweave-audit-trail`，与投递库不是同一个库。邮件发送端口使用标准库 `smtplib`（`SmtpMailSender`）：EHLO 后按服务端能力决定 STARTTLS，配置了用户名才登录，通知 id 写进 `X-SciWeave-Notification-Id` 头；收件人被拒或登录失败记为永久失败，连不上或超时记为暂时失败并走退避重试，SMTP 主机未配置也按永久失败落在可查询终态上，而不是让整个进程起不来（同一进程还要回答 `get_notification_status`）。不使用第三方邮件 SDK，也不消费 Redpanda。Registry 收件人解析由官方 MCP 客户端接入；测试注入 Fake。
 
 ## 安装
 
