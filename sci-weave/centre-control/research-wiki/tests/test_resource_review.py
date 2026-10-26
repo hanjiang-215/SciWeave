@@ -475,3 +475,72 @@ class ConfigTestCase(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SqliteLocationSourceTests(unittest.TestCase):
+    """ai4-jr5v: the location source that the production entry point wires."""
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.store = SqliteStore(os.path.join(self._tmp.name, "wiki.db"))
+        self.store.initialize()
+
+    def _review(self, decision: str, location) -> None:
+        from llm_wiki.domain import ResourceReviewRecord
+
+        self.store.add_review(
+            ResourceReviewRecord(
+                review_id=f"review-{decision}",
+                resource_version_id=VERSION,
+                target_owner_id=OWNER,
+                reviewer_id=OWNER,
+                authority_reference="owner_identity",
+                decision=decision,
+                reason="checked",
+                evidence_reference=None,
+                decided_at="2026-10-21T00:00:00Z",
+                use_scope=("reference",),
+                limitations=(),
+                content_digest="digest",
+                snapshot_digest="snapshot",
+                unknown_facts=(),
+                snapshot_status="confirmed",
+                target_location=location,
+            )
+        )
+
+    def test_no_governance_record_means_no_location(self) -> None:
+        from llm_wiki.resource_review import SqliteResourceVersionLocationSource
+
+        self.assertIsNone(SqliteResourceVersionLocationSource(self.store).locate(VERSION))
+
+    def test_a_pinned_location_is_replayed(self) -> None:
+        from llm_wiki.resource_review import SqliteResourceVersionLocationSource
+
+        self._review("approved", LOCATION)
+
+        located = SqliteResourceVersionLocationSource(self.store).locate(VERSION)
+
+        self.assertEqual(located, LOCATION)
+
+    def test_a_later_decision_can_read_the_pinned_snapshot(self) -> None:
+        from llm_wiki.resource_review import (
+            ResourceReviewService,
+            SqliteResourceVersionLocationSource,
+        )
+
+        self._review("approved", LOCATION)
+        resources = FakeResourceStore(ResourceVersionRead.confirmed(snapshot()))
+        service = ResourceReviewService(
+            sqlite_store=self.store,
+            terminus_store=resources,
+            authorizer=FakeAuthorizer({(OWNER, VERSION)}),
+            location_source=SqliteResourceVersionLocationSource(self.store),
+            clock=lambda: "2026-10-22T00:00:00Z",
+        )
+
+        outcome = service.record_decision(VERSION, OWNER, "revoked", reason="superseded")
+
+        self.assertTrue(outcome.recorded)
+        self.assertEqual(resources.calls, [(LOCATION, VERSION)])
