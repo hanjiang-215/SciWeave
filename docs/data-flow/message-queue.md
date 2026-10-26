@@ -311,6 +311,12 @@ task_handoff_ready
     },
     "trigger_revision_id": "formal-revision:12",
     "pending_handoff_id": "pending:handoff-2",
+    "dependency_edge_version_refs": [
+      {
+        "logical_id": "edge:literature-to-analysis",
+        "version_id": "edge-version:2"
+      }
+    ],
     "upstream_source_refs": [
       {
         "logical_id": "task:literature-review",
@@ -322,7 +328,9 @@ task_handoff_ready
 }
 ```
 
-`executor_ref_snapshot` 只用于审计，subscriber 仍须按当前正式 Map 校验执行关系。
+`dependency_edge_version_refs` 是该节点在当前正式快照中的全部入边版本引用，只有一条时仍用数组形式。`executor_ref_snapshot` 只用于审计，subscriber 仍须按当前正式 Map 校验执行关系。
+
+`executor_ref_snapshot` 记录完整的 `executor_refs`，`payload.target_agent_id` 记录**实际被选中**的那一个：按声明顺序取第一个可用的 Agent，全部不可用则不发本条消息，转人工通知。
 
 随后：
 

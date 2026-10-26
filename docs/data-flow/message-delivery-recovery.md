@@ -152,9 +152,11 @@ Inbox 中未找到 Workflow 卡片、版本不兼容、加载失败或进程启�
 交接协调服务启动后扫描自己的持久化状态：
 
 ```text
-PendingHandoff.status ∈ {waiting, retryable, ready}
-HandoffDispatch.status ∈ {pending, unknown, retryable}
+PendingHandoff.status ∈ {waiting, ready, dispatched_unknown}
+HandoffDispatch.status ∈ {result_unknown, failed}
 ```
+
+`done`、`superseded`、`published` 与 `dead` 不参与启动扫描：它们要么已终结，要么只保留记录等待人工处理。
 
 恢复流程为：
 
@@ -215,19 +217,21 @@ Redpanda 暂时不可用
     → 不提交 offset，等待消费者重连
 
 消息格式非法且无法重试
-    → 记录错误并进入死信，不无限阻塞分区
+    → 写入可观察的 Inbox 错误状态并提交 offset，不阻塞分区
+    → 不新建独立死信 topic
 
 正式 Mapping 条件不满足
     → 保存 PendingHandoff，提交 dependency-notice offset
 
 交接事件发送结果未知
-    → 保存 HandoffDispatch(status=unknown)，启动时重试
+    → 保存 HandoffDispatch(status=result_unknown)，启动时重试
+    → 达到 max_attempts 转 dead，只留记录不自动重放
 
 Task Agent 明确执行失败
     → Task Agent 写 ExecutionRecord=failed，按 Work Agent 规则提交 task-handoff offset
 
 邮件发送失败
-    → notification intent 保持 retryable，不能回滚正式 Mapping 或阻塞 Task Agent
+    → email-service 记录 retryable，不能回滚正式 Mapping 或阻塞 Task Agent
 ```
 
 ## PO 操作与根任务消息
@@ -235,6 +239,8 @@ Task Agent 明确执行失败
 PO 不直接操作 Redpanda。所有候选创建、混合候选、正式化、返修指派和根任务分派均通过最高权限领域 MCP 完成。
 
 没有上游 DependencyEdge 的正式根 TaskNode，由 PO 调用幂等的 `dispatch_root_task` 发送第一条 `task_handoff_ready`。该工具验证正式 Mapping、`executor_refs` 和幂等键，然后由消息服务完成实际发布。
+
+**无入边节点不自动派发。** 交接协调服务在任何正式版本发布时都不为无入边节点生成 `task_handoff_ready`；「无入边」在依赖重算里是不满足可自动派发条件，不是条件平凡满足。
 
 候选裁决不支持 `defer`：PO 必须选择 `formalize`、`request_revision` 或 `reject`。返修必须指定唯一 `repair_owner_id`，由负责人自己的 Task Agent 执行；Centre Workflow 不负责返修。
 
