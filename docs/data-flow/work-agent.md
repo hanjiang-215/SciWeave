@@ -91,6 +91,21 @@ running ├→ waiting              （Worker 提问，本轮终止；回答创�
 
 业务错误码：`not_found`、`invalid_state`、`unavailable`、`unimplemented`、`internal`。错误不得包含令牌、异常、堆栈、文件路径或原始命令。
 
+## 研究员侧处置面的当前契约
+
+`sci-weave/toolkits/researcher-agent-toolkit/deploy-task-agent` 的研究员自有处置面提供同名六个工具，但只覆盖「这一个研究员的执行记录」，因此签名比中央侧简单，差异如下：
+
+| 工具 | 研究员侧当前签名 | 与上表的差异 |
+| --- | --- | --- |
+| `query_execution(execution_id)` | 同 | 返回状态、草稿 id、错误码、失败 Agent 与已记录的审核决定 |
+| `list_pending()` | 无参数 | 只列 `queued`/`running`/`waiting`，不支持按 task_node 过滤 |
+| `cancel_execution(execution_id)` | 同 | 终态执行拒绝取消并回 `invalid_transition` |
+| `answer_question(question_id, answer)` | 按问题 id | 不创建 `resume_of` 新记录，回答后原地回到 `queued`；无 `idempotency_key` |
+| `review_execution(execution_id, decision, reason)` | 两分支 | 只有 `accepted`/`rejected`，追加不覆盖；无 `request_revision`/`request_human_takeover` 与幂等键 |
+| `health()` | 同 | 返回 `ready` 与 pending 计数 |
+
+补齐幂等键与 `resume_of` 链需要先定研究员侧的重新入队语义，见 `ai4-58d0` 的备注；在那之前两侧契约有意不同，不要按中央侧签名去调用研究员侧工具。
+
 ## Centre Agent 的差异
 
 结构与 Task Agent 完全一致，三处不同：
