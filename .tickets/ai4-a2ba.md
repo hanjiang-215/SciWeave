@@ -77,12 +77,12 @@ tags: [centre-agents, governance, prereview, wayfinder:grilling]
 ## Acceptance Criteria
 
 - [x] 纳入范围可被机械判定，且明确不按基准版本排除
-- [ ] 事件由领域 MCP 自动发布，不依赖人工发送
+- [x] 事件由领域 MCP 自动发布，不依赖人工发送
 - [ ] 正式版本发布也发事件；受影响候选的报告转 `stale` 并触发重算
 - [x] 有去抖规则，且预审输入是同一时点的全量快照
 - [x] 事件载荷只带目标标识，不携带候选正文
 - [x] 门禁粒度为单候选，明确不做整链冻结
-- [ ] 故障时阻塞且可观测：PO 能看出候选卡在缺报告，而不是无响应
+- [x] 故障时阻塞且可观测：PO 能看出候选卡在缺报告，而不是无响应
 - [x] 明确不用分发租约，重放靠报告唯一键幂等
 - [ ] 有回归测试覆盖连续 head 更新只触发一次、故障期间待审候选状态可见、正式版本发布只影响依赖该版本的候选
 
@@ -102,6 +102,18 @@ tags: [centre-agents, governance, prereview, wayfinder:grilling]
 - 覆盖这三种场景的回归测试。
 
 按约定，本票实现部分的触发源、去抖载体和可观测队列都落在 `ai4-te1v` 收敛后的消息/预审触发实现里，因此暂不关闭；已通过 issue 知会 Frank Qi（见下）。
+
+**2026-10-26 实现两块落地（hanjiang）**
+
+身份核对：本票 assignee 为 hanjiang，当前分支 `feature/hanjiang`、`git config user.name=hanjiang`，一致。
+
+`ai4-te1v` 已于 2026-10-25 收敛关闭，上述阻塞解除，本轮把可闭环的两块实现落地并勾选：
+
+**事件自动发布**（验收第 2 条）——提交 `857f823`：`research-map` 新增 `governance_events.py`（GovernanceEvent 信封、`candidate_event`/`formal_revision_event`、`KafkaGovernanceEventPublisher`/`Recording`/`Noop`），`MappingManagementService` 注入 `GovernanceEventPublisher` 端口，`submit_candidate` 成功发布 `candidate_created`（target=submission_id，与候选身份一致）、`formalize_candidate` 成功发布 `formal_revision_published`；`_publish_safely` 保证队列故障不回滚已持久化的治理事实，由 Centre Agent 全量快照扫描兜底恢复。载荷只带 `candidate_id`+`candidate_head`/`formal_revision_id`，符合"不携带候选正文"。新增 `test_governance_events.py`（6 项）与 `test_management.py` 的 `test_candidate_submit_publishes_governance_event`。
+
+**故障时可观测**（验收第 7 条）——提交 `bc09372`：`research-map` 与 `research-wiki` 的 `list_*_reviewable_candidates` 工具为每个候选附加 `prereview_status` 投影（通过新增 `SqliteStore.prereview_status` + `MappingPrereviewLog.status_for_candidate`）：`missing_report`（缺报告、卡住）/ `report_current`（有当前结论，带 report_id/verdict/rule_set_version）/ `report_stale`（被 `head_moved`/`base_moved` 判定失效并带 reason）。PO 无需预审队列，直接从候选列表看出哪些候选卡在缺报告。未配置 prereview log 时省略该字段，向后兼容。各领域新增 `test_reviewable_list_exposes_prereview_status`（覆盖三种状态）。
+
+**仍未勾选**：正式版本发布事件已发，但"受影响候选报告转 stale 并触发重算"的订阅处理在 Centre Agent 侧消费方实现（`ai4-csyj`/`ai4-fv1r` 下游）；回归测试第 9 条中"正式版本发布只影响依赖该版本的候选"需 Centre Agent 订阅路径落地后一并补测。本票保持 `open`。
 
 **2026-10-25 负责人转交（hanjiang 操作，经 Frank Qi 授权）**
 
