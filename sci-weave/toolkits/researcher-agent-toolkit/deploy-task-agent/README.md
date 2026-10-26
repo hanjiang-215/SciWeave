@@ -52,4 +52,4 @@ Agent、MCP、Workflow libs 是纯配置资源，不单独执行 `uv sync`；由
 
 ## 启动边界
 
-安装两个 systemd 用户服务后执行 `systemctl --user enable --now sciweave-task-agent-mcp.service sciweave-task-agent-subscriber.service`。打开 harness 时只执行 `hooks/check-services.sh` 检查并补启动；关闭 harness 不停止用户级常驻服务。
+安装 systemd 用户服务后执行 `systemctl --user enable --now sciweave-task-agent-subscriber.service`。`sciweave-task-agent-mcp.service` 暂不启用：该角色尚未实现（见 `ai4-58d0`），启用只会得到启动失败。打开 harness 时只执行 `hooks/check-services.sh` 检查并补启动；关闭 harness 不停止用户级常驻服务。
