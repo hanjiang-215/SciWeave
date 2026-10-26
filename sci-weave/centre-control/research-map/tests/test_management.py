@@ -23,7 +23,9 @@ from research_mapping.management import (
     TOOL_DEFINITIONS,
 )
 from research_mapping.management_mcp import create_management_mcp_server
+from research_mapping.prereview import MappingPrereviewLog
 from research_mapping.sqlite_store import SqliteStore
+from research_mapping.governance_events import RecordingGovernanceEventPublisher
 
 DOMAIN = "domain-1"
 BASE = "formal-1"
@@ -105,6 +107,7 @@ class ManagementServiceTestCase(unittest.TestCase):
         merged_candidate_service = MappingMergedCandidateService(
             self.sqlite, candidate, service_name="mapping-management",
         )
+        self.governance_events = RecordingGovernanceEventPublisher()
         self.service = MappingManagementService(
             formal_query=formal,
             candidate_service=candidate,
@@ -121,6 +124,7 @@ class ManagementServiceTestCase(unittest.TestCase):
             sqlite_store=self.sqlite,
             prereview_log=prereview_log,
             merged_candidate_service=merged_candidate_service,
+            governance_events=self.governance_events,
         )
 
     def test_list_candidates_reads_back_the_persisted_candidate_record(self):
@@ -187,6 +191,19 @@ class ManagementServiceTestCase(unittest.TestCase):
             "submit_candidate", {"change_set": _change_set(), "idempotency_key": "key-2"}, actor_id="reader",
         )
         self.assertEqual(denied.error_code, "forbidden")
+
+    def test_candidate_submit_publishes_governance_event(self) -> None:
+        outcome = self.service.call_tool(
+            "submit_candidate", {"change_set": _change_set(), "idempotency_key": "key-event"}, actor_id="submitter",
+        )
+        self.assertEqual(outcome.status, "ok")
+        self.assertEqual(len(self.governance_events.events), 1)
+        event = self.governance_events.events[0]
+        self.assertEqual(event.event_type, "candidate_created")
+        self.assertEqual(event.mapping_domain_id, DOMAIN)
+        self.assertEqual(event.target["kind"], "candidate")
+        self.assertEqual(event.target["id"], "submission-1")
+        self.assertEqual(event.dedupe_key, f"{DOMAIN}:submission-1:commit-1")
 
     def test_unknown_tool_and_bad_arguments(self):
         outcome = self.service.call_tool("nope", {}, actor_id="reader")
@@ -565,6 +582,12 @@ class ReviewableCandidatesToolTestCase(unittest.TestCase):
         candidate = MappingCandidateService(self.sqlite, _FakeTerminusForManagement(), terminus_database="db")
         from research_mapping.merged_candidate import MappingMergedCandidateService
         merged_service = MappingMergedCandidateService(self.sqlite, candidate, service_name="mapping-management")
+        rules_dir = os.path.join(self.tmp.name, "rules")
+        os.makedirs(rules_dir)
+        rule_path = os.path.join(rules_dir, "1.0.0.json")
+        with open(rule_path, "w", encoding="utf-8") as handle:
+            handle.write(json.dumps({"version": "1.0.0", "checks": ["权限范围", "冲突", "影响范围"]}, ensure_ascii=False))
+        self.prereview_log = MappingPrereviewLog(self.sqlite, rules_dir=rules_dir)
         self.service = MappingManagementService(
             formal_query=formal,
             candidate_service=candidate,
@@ -574,9 +597,11 @@ class ReviewableCandidatesToolTestCase(unittest.TestCase):
                 "submitter": frozenset({"candidate_submit"}),
                 "centre": frozenset({"centre"}),
                 "merger": frozenset({"merged_candidate"}),
+                "prereviewer": frozenset({"prereview_log"}),
             },
             sqlite_store=self.sqlite,
             merged_candidate_service=merged_service,
+            prereview_log=self.prereview_log,
         )
 
     def _insert_candidate(self, proposal_id="proposal-1", *, submission_id="submission-1",
@@ -667,6 +692,59 @@ class ReviewableCandidatesToolTestCase(unittest.TestCase):
             self.assertEqual(
                 outcome.status, "ok", f"{tool} must stay readable for centre",
             )
+
+    def test_reviewable_list_exposes_prereview_status(self):
+        """Owner can see whether a candidate is blocked on a missing report."""
+        self._insert_candidate(proposal_id="proposal-1", submission_id="submission-1", commit="candidate-commit")
+        self._insert_candidate(proposal_id="proposal-2", submission_id="submission-2", commit="candidate-commit-2")
+        # Append a passing report for candidate 1 only; candidate 2 stays missing.
+        appended = self.service.call_tool(
+            "append_prereview_log",
+            {"candidate_id": "submission-1", "candidate_head": "candidate-commit",
+             "base_formal_revision_id": BASE, "rule_set_version": "1.0.0",
+             "verdict": "passed",
+             "checks": [{"name": "权限范围", "verdict": "passed"}],
+             "conflict_matrix": []},
+            actor_id="prereviewer",
+        )
+        self.assertEqual(appended.status, "ok")
+        outcome = self.service.call_tool(
+            "list_reviewable_candidates", {"mapping_domain_id": DOMAIN}, actor_id="reader",
+        )
+        self.assertEqual(outcome.status, "ok")
+        by_submission = {c["submission_id"]: c for c in outcome.result["candidates"]}  # type: ignore[index]
+        self.assertEqual(by_submission["submission-1"]["prereview_status"]["status"], "report_current")
+        self.assertEqual(by_submission["submission-1"]["prereview_status"]["report_id"], appended.result["report_id"])  # type: ignore[index]
+        self.assertEqual(by_submission["submission-2"]["prereview_status"]["status"], "missing_report")
+        # Invalidate candidate 1 via base_moved -> the list flips to stale.
+        invalidated = self.service.call_tool(
+            "append_prereview_log",
+            {"candidate_id": "submission-1", "candidate_head": "candidate-commit", "reason": "base_moved"},
+            actor_id="prereviewer",
+        )
+        self.assertEqual(invalidated.status, "ok")
+        outcome = self.service.call_tool(
+            "list_reviewable_candidates", {"mapping_domain_id": DOMAIN}, actor_id="reader",
+        )
+        status = outcome.result["candidates"][0]["prereview_status"]  # type: ignore[index]
+        self.assertEqual(status["status"], "report_stale")
+        self.assertEqual(status["reason"], "base_moved")
+
+    def test_reviewable_list_omits_prereview_status_without_log(self):
+        """Backward compatible: without a configured prereview log, no extra field."""
+        service = MappingManagementService(
+            formal_query=self.service._formal_query,
+            candidate_service=self.service._candidate_service,
+            candidate_reader=self.service._candidate_reader,
+            caller_capabilities={"reader": frozenset({"read"})},
+            sqlite_store=self.sqlite,
+        )
+        self._insert_candidate()
+        outcome = service.call_tool(
+            "list_reviewable_candidates", {"mapping_domain_id": DOMAIN}, actor_id="reader",
+        )
+        candidate = outcome.result["candidates"][0]  # type: ignore[index]
+        self.assertNotIn("prereview_status", candidate)
 
     def test_create_merged_candidate_requires_merged_candidate_capability(self):
         self._insert_candidate(proposal_id="proposal-1", submission_id="submission-1", commit="candidate-commit")

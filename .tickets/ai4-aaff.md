@@ -2,7 +2,7 @@
 id: ai4-aaff
 status: in_progress
 deps: [ai4-ay0e, ai4-r3so, ai4-m0vt, ai4-xrxw, ai4-vbnr]
-links: []
+links: [ai4-v869]
 created: 2026-10-17T14:58:26Z
 assignee: hanjiang
 type: prototype

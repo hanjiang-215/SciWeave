@@ -7,7 +7,9 @@ name = "sciweave-coordinator"
 version = "0.1.0"
 description = "SciWeave handoff coordinator core: dependency recomputation, waiting facts and dispatch recovery"
 requires-python = ">=3.11"
-dependencies = []
+dependencies = [
+    "kafka-python>=3.0.11,<4",
+]
 
 [dependency-groups]
 dev = [

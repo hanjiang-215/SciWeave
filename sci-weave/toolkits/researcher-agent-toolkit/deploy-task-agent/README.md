@@ -23,7 +23,16 @@ uv run python -m unittest discover -s tests -v
 ```
 
 Agent、MCP、Workflow libs 是纯配置资源，不单独执行 `uv sync`；由 runtime 通过 `AGENT_LIBS_PATH`、`MCP_LIBS_PATH`、`WORKFLOW_LIBS_PATH` 或显式路径加载。
-测试使用内存状态、假上游交接和假草稿箱，不连接真实队列、真实草稿箱或真实模型。真实地址、令牌和本地扩展路径只通过环境变量配置。
+测试使用内存状态、假上游交接和假草稿箱，不连接真实队列、真实草稿箱或真实模型。真实地址、令牌和本地扩展路径只通过环境变量配置；仓库只提交 `.env.example`。
+
+## 队列消费启动（subscriber）
+
+`service-template/gateway/subscriber` 是常驻消费者：出站连接中央 Redpanda 队列，
+把 `task_handoff_ready` 交给 runtime 驱动 Worker，消息处理完整后才提交 offset。
+`QUEUE_URL` 与 `QUEUE_CONSUMER_GROUP` 配置齐全时用真实 kafka-python 客户端；任一
+为空时退回假队列（本地演示/测试）。子主题为 `sciweave.task-handoff.<agent_id>`，
+已在 `.env.example` 说明。真实链路最小验证见
+`deploy-task-agent-skills/verify-task-agent/references/e2e-checklist.md`。
 
 ## 启动边界
 

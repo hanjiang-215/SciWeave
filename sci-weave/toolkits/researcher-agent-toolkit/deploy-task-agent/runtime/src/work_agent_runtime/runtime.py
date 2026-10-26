@@ -102,19 +102,6 @@ class FakeDraftBox:
         return f"draft-{target_id}-{uuid.uuid4().hex[:8]}"
 
 
-class FakeQueue:
-    def __init__(self) -> None:
-        self._handler: Callable[[str, str], ExecutionRecord] | None = None
-
-    def subscribe(self, handler: Callable[[str, str], ExecutionRecord]) -> None:
-        self._handler = handler
-
-    def deliver(self, target_id: str, event_id: str) -> ExecutionRecord:
-        if self._handler is None:
-            raise RuntimeError("subscriber is not configured")
-        return self._handler(target_id, event_id)
-
-
 class WorkAgentRuntime:
     """The sole runtime seam used by all three service templates."""
 

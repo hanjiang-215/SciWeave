@@ -6,7 +6,7 @@ links: [ai4-xup8, ai4-ufqu, ai4-v19u, ai4-353s, ai4-z3z4, ai4-yvh2]
 created: 2026-10-19T06:46:37Z
 type: epic
 priority: 1
-assignee: Frank Qi
+assignee: hanjiang
 tags: [wayfinder:map]
 ---
 # Gateway 与最小 fast-agent 执行闭环规格地图
@@ -21,6 +21,11 @@ tags: [wayfinder:map]
 > 修订（2026-10-21）：「受控 Owner 请求」改为「人工请求」，因为任务下发已改走消息队列，Gateway 的 MCP 只承担返修与处置。Worker 由 Gateway 启动这一核心不变；Gateway 所在位置不再限定为中央服务器——task-agent 的 Gateway 部署在任务负责人处，「服务端」在本文档中泛指 Gateway 所在的进程侧。依据「Agent 以消息驱动，Gateway 的 MCP 只负责返修」与「Task Agent 改由研究员端侧自持」。
 
 ## Notes
+
+**2026-10-25 转交（hanjiang）**
+
+身份核对：本票 assignee 已由 Frank Qi 改为 hanjiang；当前分支 `feature/hanjiang`、`git config user.name=hanjiang`，一致。转交原因：Frank Qi 暂时无法继续推进项目，经其本人授权，由 hanjiang 接手本票后续推进与收口。原负责人 Frank Qi，转交时间 2026-10-25T12:41:00Z。转交只变更归属并记录，不改写正文、验收标准与既有决策。
+
 承接既有端侧 Agent 规格；优先跑通最小闭环，暂不接入 Research Mapping、领域 MCP、Redpanda 上游交接队列、Agent Kit manifest 或 ZIP 部署。已有 fast-agent-mcp、TaskNode 模板、Owner 通道、Worker 生命周期和审计边界作为输入。外部运行时通过适配器接入，Gateway 核心不复制领域治理逻辑。
 
 ## Decisions so far

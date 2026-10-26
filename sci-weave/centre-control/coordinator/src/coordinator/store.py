@@ -14,6 +14,35 @@ PENDING_DONE = "done"
 PENDING_SUPERSEDED = "superseded"
 PENDING_FAILED = "failed"
 
+
+class InvalidPendingTransition(Exception):
+    """A PendingHandoff status change violates the allowed transition table."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        current: str,
+        requested: str,
+        task_node_id: str,
+    ) -> None:
+        super().__init__(message)
+        self.current = current
+        self.requested = requested
+        self.task_node_id = task_node_id
+
+
+# Valid next states per current state (ai4-zc85 / ai4-te1v). ``done`` is
+# terminal: recompute must never roll it back to waiting.
+_PENDING_TRANSITIONS = {
+    PENDING_WAITING: {PENDING_READY, PENDING_DONE, PENDING_DISPATCHED_UNKNOWN, PENDING_SUPERSEDED, PENDING_FAILED},
+    PENDING_READY: {PENDING_DONE, PENDING_DISPATCHED_UNKNOWN, PENDING_SUPERSEDED, PENDING_FAILED, PENDING_WAITING},
+    PENDING_DISPATCHED_UNKNOWN: {PENDING_DONE, PENDING_FAILED, PENDING_SUPERSEDED, PENDING_WAITING},
+    PENDING_DONE: frozenset(),  # terminal; no rollback
+    PENDING_SUPERSEDED: frozenset(),  # terminal
+    PENDING_FAILED: {PENDING_SUPERSEDED},  # human may supersede a failure
+}
+
 DISPATCH_CREATED = "created"
 DISPATCH_PUBLISHED = "published"
 DISPATCH_RESULT_UNKNOWN = "result_unknown"
@@ -36,6 +65,7 @@ class PendingHandoff:
     task_node_id: str
     target_node_version_ref: str
     upstream_source_refs: tuple[tuple[str, str], ...]
+    executor_refs: tuple[str, ...]
     executor_agent_id: str | None
     status: str
     last_trigger_revision_id: str | None
@@ -76,6 +106,7 @@ class CoordinatorStore:
               task_node_id TEXT NOT NULL,
               target_node_version_ref TEXT NOT NULL,
               upstream_source_refs TEXT NOT NULL,
+              executor_refs TEXT NOT NULL DEFAULT '[]',
               executor_agent_id TEXT,
               status TEXT NOT NULL,
               last_trigger_revision_id TEXT,
@@ -118,23 +149,28 @@ class CoordinatorStore:
         task_node_id: str,
         target_node_version_ref: str,
         upstream_source_refs: tuple[tuple[str, str], ...],
-        executor_agent_id: str | None,
+        executor_refs: tuple[str, ...],
         status: str,
         trigger_revision_id: str | None,
     ) -> PendingHandoff:
         now = now_iso()
         existing = self.get_pending_handoff(mapping_domain_id, task_node_id, target_node_version_ref)
         if existing is not None:
+            if existing.status == PENDING_DONE:
+                # ai4-zc85: done is terminal; a recompute after completion must
+                # not overwrite the published fact (nor blow up the loop).
+                return existing
+            self._guard_transition(existing, status)
             self.conn.execute(
                 """
                 UPDATE pending_handoff
-                SET upstream_source_refs = ?, executor_agent_id = ?, status = ?,
+                SET upstream_source_refs = ?, executor_refs = ?, status = ?,
                     last_trigger_revision_id = ?, updated_at = ?
                 WHERE pending_handoff_id = ?
                 """,
                 (
                     json.dumps(list(upstream_source_refs)),
-                    executor_agent_id,
+                    json.dumps(list(executor_refs)),
                     status,
                     trigger_revision_id,
                     now,
@@ -148,9 +184,9 @@ class CoordinatorStore:
             """
             INSERT INTO pending_handoff (
               pending_handoff_id, mapping_domain_id, task_node_id, target_node_version_ref,
-              upstream_source_refs, executor_agent_id, status, last_trigger_revision_id,
+              upstream_source_refs, executor_refs, executor_agent_id, status, last_trigger_revision_id,
               created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 pending_handoff_id,
@@ -158,7 +194,8 @@ class CoordinatorStore:
                 task_node_id,
                 target_node_version_ref,
                 json.dumps(list(upstream_source_refs)),
-                executor_agent_id,
+                json.dumps(list(executor_refs)),
+                executor_refs[0] if executor_refs else None,
                 status,
                 trigger_revision_id,
                 now,
@@ -205,6 +242,13 @@ class CoordinatorStore:
         status: str,
         trigger_revision_id: str | None = None,
     ) -> PendingHandoff | None:
+        existing = self.get_pending_handoff(mapping_domain_id, task_node_id, target_node_version_ref)
+        if existing is None:
+            return None
+        if existing.status == PENDING_DONE and status != PENDING_DONE:
+            # done is terminal; recovery / recompute must never roll it back.
+            return existing
+        self._guard_transition(existing, status)
         now = now_iso()
         self.conn.execute(
             """
@@ -216,6 +260,26 @@ class CoordinatorStore:
         )
         self.conn.commit()
         return self.get_pending_handoff(mapping_domain_id, task_node_id, target_node_version_ref)
+
+    def _guard_transition(self, pending: PendingHandoff, next_status: str) -> None:
+        # Same-state rewrite is an idempotent recompute (e.g. waiting kept
+        # waiting across two events); everything else must follow the table.
+        if next_status == pending.status:
+            return
+        allowed = _PENDING_TRANSITIONS.get(pending.status, frozenset())
+        if next_status not in allowed:
+            raise InvalidPendingTransition(
+                f"{pending.status} -> {next_status} for {pending.task_node_id}",
+                current=pending.status,
+                requested=next_status,
+                task_node_id=pending.task_node_id,
+            )
+
+    def mark_superseded(self, mapping_domain_id: str, task_node_id: str, target_node_version_ref: str) -> PendingHandoff | None:
+        """Mark a non-terminal pending fact superseded (version moved on)."""
+        return self.set_pending_handoff_status(
+            mapping_domain_id, task_node_id, target_node_version_ref, PENDING_SUPERSEDED
+        )
 
     def record_completed(self, mapping_domain_id: str, task_node_id: str, version_ref: str) -> None:
         self.conn.execute(
@@ -344,6 +408,9 @@ class CoordinatorStore:
             target_node_version_ref=row["target_node_version_ref"],
             upstream_source_refs=tuple(
                 (item[0], item[1]) for item in json.loads(row["upstream_source_refs"])
+            ),
+            executor_refs=tuple(
+                str(item) for item in json.loads(row["executor_refs"] or "[]")
             ),
             executor_agent_id=row["executor_agent_id"],
             status=row["status"],

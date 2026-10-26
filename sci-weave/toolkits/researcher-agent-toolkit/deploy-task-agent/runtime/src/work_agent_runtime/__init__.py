@@ -4,13 +4,14 @@ from .config import AgentDefinition, ConfigError, TaskAgentConfig, WorkflowDefin
 from .resources import AgentResource, ResourceConflictError, ResourceError, ResourceKind, ResourceNotFoundError, ResourceRegistry, ResourceVersionError, load_agent_registry
 from .mcp_resources import MCPResource, MCPResourceError, MCPTool, MCPRegistry, load_mcp_registry
 
+from .queue import KafkaQueueClient, QueueClient, QueueMessage
 from .workflows import WorkflowExecutor, WorkflowRunResult
+from .queue import FakeQueue  # noqa: F401  (forwarded for template/tests compatibility)
 from .runtime import (
     Execution,
     ExecutionRecord,
     ExecutionStore,
     FakeDraftBox,
-    FakeQueue,
     WorkAgentRuntime,
     WorkerLease,
     run_one,
@@ -26,6 +27,7 @@ __all__ = [
     "workflow_to_fast_agent_input",
     "AgentResource", "ResourceConflictError", "ResourceError", "ResourceKind", "ResourceNotFoundError", "ResourceRegistry", "ResourceVersionError", "load_agent_registry",
     "MCPResource", "MCPResourceError", "MCPTool", "MCPRegistry", "load_mcp_registry",
+    "KafkaQueueClient", "QueueClient", "QueueMessage",
     "load_workflow_yaml",
     "workflow_to_fast_agent_input",
     "WorkflowExecutor",

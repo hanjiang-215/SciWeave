@@ -1,12 +1,12 @@
 ---
 id: ai4-csyj
-status: open
+status: closed
 deps: []
 links: [ai4-dhpv]
 created: 2026-10-19T01:14:45Z
 type: epic
 priority: 1
-assignee: Frank Qi
+assignee: hanjiang
 parent: ai4-kpvp
 tags: [wayfinder:grilling]
 ---
@@ -23,10 +23,40 @@ tags: [wayfinder:grilling]
 
 只裁决两件事：
 
-- [ ] **接收确认**：下游收到 `task_handoff_ready` 后是否、以及如何回执；回执与业务事实的关系；无回执时上游如何判定。
-- [ ] **下游解除阻塞**：什么事件才算下游「已可推进」，`task_handoff_ready` 送达本身够不够，以及上游自身的阻塞在何时解除。
+- [x] **接收确认**：下游收到 `task_handoff_ready` 后是否、以及如何回执；回执与业务事实的关系；无回执时上游如何判定。
+- [x] **下游解除阻塞**：什么事件才算下游「已可推进」，`task_handoff_ready` 送达本身够不够，以及上游自身的阻塞在何时解除。
+
+## Resolution（2026-10-26）
+
+### 接收确认：不新增回执消息，回执由 ExecutionRecord 创建 + offset 提交表达
+
+- **不引入独立 ACK/回执消息类型。** `task_handoff_ready` 采用至少一次投递，端侧收到后在一个 SQLite 事务里创建 `queued` 执行记录（`trigger=queue`）即视为「已开始受理」；无单独 ACK 消息。
+- **业务完成确认是 `task_completed`，不是回执。** 协调器（handoff coordinator）只消费 `task_completed` 解除下游依赖条件，不依赖回执判定任务是否真正完成。草稿是否通过审核由后续 `formal_revision_published` 承担，均不入本票语义。
+- **无回执时的判定由 offset 与三层恢复兜底，不靠上游超时等待。** Agent 崩在启动阶段 → 该条 `task_handoff_ready` offset 未提交 → 重放 → 业务键唯一约束挡住第二次执行，不产生第二轮；消息过期则由正式 Mapping 补偿重算。与「人工交接：仅收到或确认通知不算完成」的既有结论对齐——机器侧同理，收到消息只是受理开始，不是完成。
+- 失败处置：Task Agent 明确失败 → `ExecutionRecord=failed`，按失败规则提交 `task-handoff` offset，协调器不重发（重试由端侧租赁与恢复路径承担，不依赖消息回执）。
+
+### 下游解除阻塞：`task_handoff_ready` 送达只是受理前提，不是「已可推进」
+
+- **对下游 Agent**：「已可推进」= 收到消息并以业务键成功创建 `queued` 执行记录，随即可被拉起的 Worker 领取租约执行。消息到达本身只解除「该节点可开工」的前置，不解除执行中状态。
+- **对协调器**：上游任务节点自身的阻塞在**正式版本发布时已解除**（`formal_revision_published` 触发依赖重算，条件满足即对下游发 `task_handoff_ready`）；`PendingHandoff` 等待态在派发成功后关闭。
+- **边界确认**：存在一个人工节点在链路的场景下，「已可推进」仍以该节点完成工作并提交后续消息为准（沿用 2026-10-19 前沿结论）；机器节点则以上述 ExecutionRecord 语义为准。本裁决不改变 `ai4-te1v` 的 `task_completed` 消费边界，也不为 `ai4-za77` 增加新的订阅判定负担——端侧判断「已可推进」只需「业务键去重成功」这一个事实。
 
 ## Notes
+
+**2026-10-26 收口（hanjiang）**
+
+身份核对：本票 assignee 为 hanjiang，当前分支 `feature/hanjiang`、`git config user.name=hanjiang`，一致。
+
+依据 `ai4-te1v`（2026-10-25 收口）与 `ai4-zc85`/`ai4-nfty`/`ai4-1y6q` 契约，把剩余的「接收确认」与「下游解除阻塞」两项裁决写入 Resolution 并关闭本票。要点：
+
+- 不新增回执消息类型；受理以业务键成功创建 `queued` ExecutionRecord 为准，完成以 `task_completed` 为准，offset 提交与三层恢复兜底无回执场景。
+- 下游「已可推进」= 业务键去重成功创建执行记录；上游阻塞在正式版本发布时已解除。
+
+本票 `deps` 为空，`links` 保持 `ai4-dhpv`。正文中 2026-10-19 起的历次讨论结论保留作过程记录，裁决结论统一落于 Resolution。
+
+**2026-10-25 转交（hanjiang）**
+
+身份核对：本票 assignee 已由 Frank Qi 改为 hanjiang；当前分支 `feature/hanjiang`、`git config user.name=hanjiang`，一致。转交原因：Frank Qi 暂时无法继续推进项目，经其本人授权，由 hanjiang 接手本票后续推进与收口。原负责人 Frank Qi，转交时间 2026-10-25T12:41:00Z。转交只变更归属并记录，不改写正文与验收标准。
 
 **2026-10-19T05:47:44Z**
 

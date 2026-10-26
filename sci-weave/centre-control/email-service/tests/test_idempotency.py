@@ -91,6 +91,11 @@ def idempotent_mcp(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         "SCIWEAVE_EMAIL_TOKENS_JSON",
         json.dumps({"gateway": {"caller_id": "service:task-gateway", "caller_type": "service"}}),
     )
+    monkeypatch.setenv("SCIWEAVE_EMAIL_RETRY_INITIAL_SECONDS", "1")
+    monkeypatch.setenv("SCIWEAVE_EMAIL_RETRY_MULTIPLIER", "2")
+    monkeypatch.setenv("SCIWEAVE_EMAIL_RETRY_MAX_SECONDS", "60")
+    monkeypatch.setenv("SCIWEAVE_EMAIL_DISPATCH_POLL_SECONDS", "0.05")
+    monkeypatch.setenv("SCIWEAVE_EMAIL_SENDING_TIMEOUT_SECONDS", "30")
     config = EmailServiceConfig.from_environment()
     resolver = FakeRecipientResolver({PRINCIPAL_ID: RESOLVED_EMAIL, OTHER_PRINCIPAL_ID: OTHER_EMAIL})
     sender = FakeSender()

@@ -103,13 +103,14 @@ Centre Agent 不自行定义第二套审计事件，也不直接写领域治理�
 
 ## 当前项目结构
 
-本目录包含三个独立 Python 子项目：
+本目录包含四个独立 Python 子项目：
 
 - `gateway/mcp`：常驻 MCP 接入与处置面；
+- `gateway/subscriber`：队列订阅器,出站连接消息队列并驱动 Worker；
 - `gateway/ingest`：后续迁移为候选事件订阅角色的骨架；
-- `worker`：短生命周期 Worker 骨架。
+- `worker`：短生命周期 Worker。
 
-中央 Agent 的能力规格见工单「中央 Agent 能力接口收口」和「中央 Agent 候选预审职能地图」。本 README 先定义能力范围，不实现新的 MCP、注册表、通知服务或邮件投递。
+中央 Agent 的能力规格见工单「中央 Agent 能力接口收口」和「中央 Agent 候选预审职能地图」。本 README 先定义能力范围,不实现新的 MCP、注册表、通知服务或邮件投递。
 
 ## 当前工作区验证
 

@@ -26,12 +26,28 @@ email-service 适配器工单 ai4-ndu0 依赖 Registry 工单 ai4-w4su。Registr
 
 ## Acceptance Criteria
 
-- Registry 负责人明确接口冻结状态和剩余工作；
-- 记录 `get_principal_contact` 的成功响应与 `principal_not_found`、`contact_missing`、`contact_disabled` 错误契约；
-- 记录 email-service 使用 `service_role=email` 的只读权限边界；
-- ai4-ndu0 能据此判断是否可以开始真实 MCP 联调。
+- [x] Registry 负责人明确接口冻结状态和剩余工作；
+- [x] 记录 `get_principal_contact` 的成功响应与 `principal_not_found`、`contact_missing`、`contact_disabled` 错误契约；
+- [x] 记录 email-service 使用 `service_role=email` 的只读权限边界；
+- [x] ai4-ndu0 能据此判断是否可以开始真实 MCP 联调。
 
 ## Notes
+
+**2026-10-26 确认冻结并关闭（hanjiang）**
+
+身份核对：本票 assignee 为 hanjiang，当前分支 `feature/hanjiang`、`git config user.name=hanjiang`，一致。
+
+前置 `ai4-w4su`（Registry 登记与查询 MCP）已 closed，`ai4-ndu0`（email-service 通过 Registry 解析收件人）已 closed。实测核对 `sci-weave/centre-control/registry` 现状，接口已冻结：
+
+- **`get_principal_contact` 权限面**：`service.py` 中仅 `caller_type == "project_owner"` 或 `caller.service_role == "email"` 可调用，其余 `denied`。email-service 以 `service_role=email` 只读调用联系人，无登记/状态变更工具权限。
+- **成功响应**：`{ "principal_id", "contact_email", "status", "contact_version" }`，`contact_version` 形如 `contact:<principal_id>:<版本号>`。
+- **稳定错误码**：`principal_not_found`（主体不存在）、`contact_missing`（主体存在但无邮箱）、`contact_disabled`（主体非 active）、`registry_unavailable`（存储故障）、`denied`（调用面不符）。
+- **MCP 传输**：Streamable HTTP `/mcp`，官方 Python `mcp` SDK 实现；独立 `/health` 探针。
+- email-service 侧 `RecipientResolver` 已按此契约实现并通过 `test_registry_client.py` 覆盖（67 passed）。
+
+结论：Registry 联系人查询接口已冻结，`ai4-ndu0` 的真实 MCP 联调前置已解除，本票验收四项全部满足，置 closed。
+
+---
 
 **2026-10-26T22:20:00Z 转交并结案（Frank Qi）**
 
@@ -63,3 +79,7 @@ email-service 适配器工单 ai4-ndu0 依赖 Registry 工单 ai4-w4su。Registr
 这条缺口记在 [修正 email-service 对 Registry 联系人错误码的解析](ai4-dp9t.md)，不要求 Registry 改任何东西。本票不 blocked by 它，因为它问的是 Registry 侧状态，而 Registry 侧答案是「已完成」。
 
 **结论：本票的两个问题已答完，前提已消失，结案。** 后续若还需要 Registry 配合，开新票指向具体工具，不要复用本票。
+
+**2026-10-26 合并 PR #47 时的冲突处理（Frank Qi）**
+
+转交与 hanjiang 的闭票是并行发生的：我在 `feature/frank-qi` 上转交并结案时，`feature/hanjiang` 已写入同样的闭票记录，PR #47 合入 `develop` 后此处产生冲突。按「不覆盖、不删除他人结论」处理：两节 Notes 全量保留、按时间先后排列；验收项沿用 hanjiang 的勾选版本；`links: [ai4-dp9t]` 与 `assignee: Frank Qi` 保留，因为转交是用户明确要求的，且新增的缺口票尚未在 hanjiang 版 `links` 中登记。两份记录的结论一致——接口已冻结、本票关闭——差异只在证据详略（hanjiang 版记录权限面与传输形态，我这版记录实测错误码形状与 `ai4-dp9t` 缺口）。
