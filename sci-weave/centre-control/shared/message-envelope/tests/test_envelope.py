@@ -144,3 +144,18 @@ def test_payload_that_is_not_an_object_is_rejected_on_the_decode_side():
     # and leave the consumer's own guard unexercised.
     with pytest.raises(PayloadError):
         decode(raw_body(payload=[1, 2]))
+
+
+def test_missing_payload_key_is_a_format_error():
+    # Every message type has required payload fields, so an envelope that
+    # arrives without the key at all is malformed rather than empty. An
+    # explicit {} is still a payload and is accepted.
+    body = json.loads(raw_body())
+    del body["payload"]
+
+    with pytest.raises(EnvelopeFormatError):
+        decode(json.dumps(body).encode("utf-8"))
+
+
+def test_explicit_empty_payload_is_accepted():
+    assert decode(raw_body(payload={})).payload == {}

@@ -232,9 +232,12 @@ def _required_int(body: dict[str, Any], name: str) -> int:
 
 
 def _payload_from_value(body: dict[str, Any]) -> dict[str, Any]:
-    value = body.get("payload")
-    if value is None:
-        return {}
+    # Every message type has required payload fields, so an envelope that
+    # arrives without the key is malformed rather than empty. An explicit
+    # {} is still a payload; only an absent key is the format error.
+    if "payload" not in body:
+        raise EnvelopeFormatError("payload is missing")
+    value = body["payload"]
     if not isinstance(value, dict):
         raise PayloadError("payload must be a JSON object")
     return value
