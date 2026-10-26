@@ -6,6 +6,7 @@ import sqlite3
 import time
 
 from .adapter_email import EmailMcpNotificationPublisher
+from .adapter_events import GovernanceEventConsumer, KafkaGovernanceEventConsumer
 from .adapter_publisher import KafkaHandoffPublisher
 from .adapter_registry import RegistryMcpAvailabilityPort
 from .adapter_snapshot import ResearchMapMcpSnapshotPort
@@ -64,11 +65,19 @@ def build(config: CoordinatorConfig) -> "CoordinatorRuntime":
     )
     connection = sqlite3.connect(config.sqlite_path)
     store = CoordinatorStore(connection)
+    governance_group = os.environ.get("SCIWEAVE_COORDINATOR_KAFKA_GROUP_ID", "coordinator").strip()
+    events = KafkaGovernanceEventConsumer(
+        kafka_bootstrap,
+        governance_group,
+    )
+    service = CoordinatorService(store, snapshot, publisher, notifications, registry)
     return CoordinatorRuntime(
-        service=CoordinatorService(store, snapshot, publisher, notifications, registry),
+        service=service,
         publisher=publisher,
         connection=connection,
         poll_seconds=config.dispatch_poll_seconds,
+        events=events,
+        event_router=GovernanceEventConsumer(service),
     )
 
 
@@ -82,11 +91,15 @@ class CoordinatorRuntime:
         publisher: KafkaHandoffPublisher,
         connection: sqlite3.Connection,
         poll_seconds: float,
+        events: KafkaGovernanceEventConsumer,
+        event_router: GovernanceEventConsumer,
     ) -> None:
         self.service = service
         self.publisher = publisher
         self.connection = connection
         self.poll_seconds = poll_seconds
+        self.events = events
+        self.event_router = event_router
         self._running = False
 
     def start(self) -> None:
@@ -96,23 +109,38 @@ class CoordinatorRuntime:
 
     def stop(self) -> None:
         self._running = False
+        self.events.close()
         self.publisher.close()
         self.connection.close()
+
+    def on_event_batch(self) -> int:
+        """Consume one governance-events batch and trigger recomputations.
+
+        Returns the number of formal_revision_published events routed. Offsets
+        are committed after the batch is fully handled, so a crash replays and
+        the store's idempotent pending-handoff keys block double-dispatch.
+        """
+        handled = 0
+        for envelope in self.events.poll(timeout_ms=100):
+            if self.event_router.handle(envelope) is not None:
+                handled += 1
+        if handled:
+            self.events.commit()
+        return handled
 
     def on_formal_revision_published(self, mapping_domain_id: str, formal_revision_id: str) -> None:
         self.service.on_formal_revision_published(mapping_domain_id, formal_revision_id)
 
     def poll_once(self) -> None:
+        self.on_event_batch()
         for dispatch in self.service.store.list_dispatches(
             statuses=("result_unknown", "failed")
         ):
             self.service._retry_dispatch(dispatch.dispatch_id)  # noqa: SLF001 - visibility deliberately fine
 
     def serve_forever(self) -> None:
-        """Minimal blocking loop; runs startup scan then retries non-terminal
-        dispatches on an interval. Consumption of formal_revision_published
-        events remains an integration decision (queue subscriber yet to be
-        wired in centre-control deployment)."""
+        """Blocking loop: startup scan, then consume governance events and
+        retry non-terminal dispatches on an interval."""
         self.start()
         try:
             while self._running:
