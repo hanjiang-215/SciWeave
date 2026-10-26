@@ -1,6 +1,6 @@
 ---
 id: ai4-8pvm
-status: open
+status: closed
 deps: []
 links: [ai4-3zxu, ai4-te1v]
 created: 2026-10-26T08:21:15Z
