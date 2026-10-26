@@ -48,6 +48,12 @@ class WikiReviewService:
             if current_head != candidate['commit_hash']:
                 return WikiReviewResult("stale_candidate", "candidate_head_changed", proposal_id=proposal_id, base_formal_revision_id=proposal['base_formal_revision_id'], candidate_head=candidate['commit_hash'])
         base=self.db.get_formal_revision(proposal['base_formal_revision_id'])
+        if base is None:
+            # The pointer and the proposal agree on a revision id that has no
+            # record: a deleted row, or an empty base written before any formal
+            # revision existed. Reading it raised AttributeError on
+            # base.terminus_store_id; refuse instead of crashing (ai4-qstm).
+            return WikiReviewResult("unavailable","base_missing",proposal_id=proposal_id,base_formal_revision_id=proposal['base_formal_revision_id'],candidate_head=candidate['commit_hash'])
         reads=[]
         for store,branch,commit in ((candidate['terminus_store_id'],candidate['branch_id'],candidate['commit_hash']),(base.terminus_store_id,base.formal_branch_id,base.formal_commit_hash)):
             try: reads.append(self.store.read_exact_snapshot(store,self.database,branch,commit))
