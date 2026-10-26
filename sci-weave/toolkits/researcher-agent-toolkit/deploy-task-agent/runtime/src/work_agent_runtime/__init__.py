@@ -9,6 +9,13 @@ from .workflows import WorkflowExecutor, WorkflowRunResult
 from .queue import FakeQueue  # noqa: F401  (forwarded for template/tests compatibility)
 from .draft_writer import BufferMCPDraftWriter, DraftWriteError
 from .durable import ExecutionNotFound, InvalidTransition, SqliteExecutionStore
+from .fast_agent_runtime import (
+    AgentOutcome,
+    FastAgentDeepSeekRuntime,
+    FastAgentSettings,
+    PassthroughAgentRuntime,
+    build_agent_runtime,
+)
 from .inbox import InboxError, InboxStore
 from .runtime import (
     Execution,
@@ -38,6 +45,11 @@ __all__ = [
     "InboxError",
     "InboxStore",
     "SqliteExecutionStore",
+    "FastAgentDeepSeekRuntime",
+    "FastAgentSettings",
+    "PassthroughAgentRuntime",
+    "build_agent_runtime",
+    "AgentOutcome",
     "ExecutionNotFound",
     "InvalidTransition",
     "Execution",
