@@ -34,6 +34,22 @@ Agent、MCP、Workflow libs 是纯配置资源，不单独执行 `uv sync`；由
 已在 `.env.example` 说明。真实链路最小验证见
 `deploy-task-agent-skills/verify-task-agent/references/e2e-checklist.md`。
 
+### Inbox 与重启恢复
+
+配置 `DATABASE_PATH` 后，subscriber 先把每条入站消息写入 SQLite Inbox 再驱动执行：
+
+- 缺少 Workflow binding 的消息保持 `awaiting_workflow_binding`，不产生执行；
+  binding 建立（`runtime.bind`）后转为 `queued` 再执行；
+- 重复投递按 `dedupe_key` 幂等，不产生第二轮执行；
+- 订阅器启动时先 `drain_queued()` 重放上次运行遗留的 `queued` 行，崩溃不吞消息。
+
+### 草稿写入
+
+配置 `DRAFT_BUFFER_MCP_URL` 与 `DRAFT_BUFFER_MCP_TOKEN` 后，执行结果写入真实中央草稿箱
+（Streamable HTTP `create_draft`）；任一为空时使用假草稿箱（本地演示/测试）。
+领域命名空间由 `SCIWEAVE_DRAFT_NAMESPACE` 指定（默认 `mapping`）。端点、令牌与命名空间
+全部来自环境变量，仓库不持有真实凭据。
+
 ## 启动边界
 
 安装两个 systemd 用户服务后执行 `systemctl --user enable --now sciweave-task-agent-mcp.service sciweave-task-agent-subscriber.service`。打开 harness 时只执行 `hooks/check-services.sh` 检查并补启动；关闭 harness 不停止用户级常驻服务。

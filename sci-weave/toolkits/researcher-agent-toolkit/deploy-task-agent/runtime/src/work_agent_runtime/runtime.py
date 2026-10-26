@@ -70,6 +70,10 @@ class ExecutionStore:
                 None,
             )
 
+    def get_by_event(self, event_id: str) -> ExecutionRecord | None:
+        with self._lock:
+            return self._by_event.get(event_id)
+
     def _replace(self, updated: ExecutionRecord) -> None:
         for event_id, current in self._by_event.items():
             if current.execution_id == updated.execution_id:
@@ -103,15 +107,75 @@ class FakeDraftBox:
 
 
 class WorkAgentRuntime:
-    """The sole runtime seam used by all three service templates."""
+    """The sole runtime seam used by all three service templates.
 
-    def __init__(self, drafts: FakeDraftBox | None = None) -> None:
+    ``handle_message`` keeps the legacy in-memory path (tests and local demos).
+    ``handle_inbound`` is the durable inbox-first path used by the real
+    subscriber: the message is recorded before any execution, a missing
+    workflow binding keeps it ``awaiting_workflow_binding``, and duplicates or
+    restarts are recovered from the inbox instead of being re-run.
+    """
+
+    def __init__(
+        self,
+        drafts: FakeDraftBox | None = None,
+        inbox: object | None = None,
+        binding_resolver: Callable[[str], bool] | None = None,
+    ) -> None:
         self.store = ExecutionStore()
         self.lease = WorkerLease()
         self.drafts = drafts or FakeDraftBox()
+        self.inbox = inbox
+        self.binding_resolver = binding_resolver
 
     def handle_message(self, target_id: str, event_id: str, agent_definition: str = "") -> ExecutionRecord:
         return run_one(self.store, self.lease, self.drafts, target_id, event_id, agent_definition)
+
+    def handle_inbound(self, target_id: str, event_id: str, agent_definition: str = "") -> ExecutionRecord:
+        """Durable inbox-first path; falls back to ``handle_message`` without an inbox.
+
+        Returns an ``ExecutionRecord`` whose ``status`` is
+        ``awaiting_workflow_binding`` when the workflow binding is missing, or
+        the completed/completed-or-duplicate execution otherwise.
+        """
+        if self.inbox is None:
+            return self.handle_message(target_id, event_id, agent_definition)
+        dedupe_key = f"{target_id}:{event_id}"
+        bound = self.binding_resolver(target_id) if self.binding_resolver is not None else True
+        status, _created = self.inbox.enqueue(
+            dedupe_key, target_id, event_id, agent_definition, binding_present=bound
+        )
+        if status == "awaiting_workflow_binding":
+            return ExecutionRecord(dedupe_key, target_id, "awaiting_workflow_binding")
+        existing = self.store.get_by_event(event_id)
+        if existing is not None:
+            return existing
+        if status == "processed":
+            # Duplicate delivery after a restart: never re-run a processed row.
+            return ExecutionRecord(dedupe_key, target_id, "processed")
+        try:
+            return run_one(self.store, self.lease, self.drafts, target_id, event_id, agent_definition)
+        finally:
+            self.inbox.mark_processed(dedupe_key)
+
+    def bind(self, dedupe_key: str) -> ExecutionRecord | None:
+        """Establish a workflow binding: ``awaiting_workflow_binding`` -> ``queued`` and run."""
+        if self.inbox is None:
+            return None
+        row = self.inbox.get(dedupe_key)
+        if row is None:
+            return None
+        self.inbox.bind(dedupe_key)
+        return self.handle_inbound(row["target_id"], row["event_id"], row["agent_definition"])
+
+    def drain_queued(self) -> list[ExecutionRecord]:
+        """Re-drive persisted ``queued`` rows (restart recovery) and return executions."""
+        if self.inbox is None:
+            return []
+        results: list[ExecutionRecord] = []
+        for row in self.inbox.list_status("queued"):
+            results.append(self.handle_inbound(row["target_id"], row["event_id"], row["agent_definition"]))
+        return results
 
     def run_workflow(self, target_id: str, event_id: str, config: object, agent: Callable[..., str], workflow_name: str, prompt: str) -> ExecutionRecord:
         """Run a configured multi-agent workflow under this one lease/record."""
