@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Protocol
-
 from .ports import (
     AgentAvailabilityPort,
     FormalSnapshotPort,
@@ -11,8 +9,10 @@ from .ports import (
     NoSuchRevisionError,
     NotificationIntent,
     NotificationPublisherPort,
+    PrincipalDirectoryPort,
     SnapshotInconsistentError,
     SnapshotUnavailableError,
+    UnverifiablePrincipalDirectory,
 )
 from .store import (
     DISPATCH_DEAD,
@@ -53,12 +53,21 @@ class CoordinatorService:
         publisher: HandoffPublisherPort,
         notifications: NotificationPublisherPort,
         agents: AgentAvailabilityPort,
+        principals: PrincipalDirectoryPort | None = None,
     ) -> None:
         self.store = store
         self.snapshot_port = snapshot_port
         self.publisher = publisher
         self.notifications = notifications
         self.agents = agents
+        # Defaults to "cannot verify", not "not found": until a Registry
+        # adapter is wired, an absent one must not look like proof that a
+        # principal no longer exists. `is not None` rather than `or`, because
+        # a mapping-backed directory is falsy while empty and "nobody
+        # registered yet" is a normal state.
+        self.principals = (
+            principals if principals is not None else UnverifiablePrincipalDirectory()
+        )
 
     def on_formal_revision_published(self, mapping_domain_id: str, formal_revision_id: str) -> None:
         """Recompute every node in the published revision. Idempotent per trigger revision."""

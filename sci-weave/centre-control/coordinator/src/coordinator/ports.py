@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from enum import StrEnum
 from typing import Protocol
 
 
@@ -53,6 +54,11 @@ class FormalSnapshot:
     formal_revision_id: str
     nodes: tuple[TaskNodeDoc, ...] = ()
     edges: tuple[DependencyEdgeDoc, ...] = ()
+    # Who approved this revision most recently, not who was appointed project
+    # owner: after A approves r1 and B approves r2 the answer is B. Outwardly
+    # this still means "notify the project owner".
+    # See docs/adr/0004-po-recipient-from-latest-approver.md.
+    latest_published_by: str | None = None
 
     def node_by_id(self, task_node_id: str) -> TaskNodeDoc | None:
         for node in self.nodes:
@@ -84,6 +90,14 @@ class HandoffReadyMessage:
     target_agent_id: str
     pending_handoff_id: str
     trigger_revision_id: str
+    # Both ref fields answer "which formal versions is this handoff built on",
+    # as (logical_id, version_id) pairs, and stay sequences even at one element
+    # so consumers never branch on cardinality. executor_ref_snapshot is audit
+    # only: who was visible at dispatch time, never a substitute for checking
+    # the current formal map.
+    upstream_source_refs: tuple[tuple[str, str], ...] = ()
+    dependency_edge_version_refs: tuple[tuple[str, str], ...] = ()
+    executor_ref_snapshot: tuple[str, ...] = ()
 
 
 class HandoffPublisherPort(Protocol):
@@ -122,3 +136,40 @@ class AgentAvailabilityPort(Protocol):
         is unregistered, retired or offline so the coordinator keeps the waiting
         fact and notifies a human instead of modifying the formal map.
         """
+
+
+class PrincipalState(StrEnum):
+    """Whether a notification recipient is a usable principal.
+
+    ABSENT and UNKNOWN are deliberately distinct. ABSENT is a fact -- the
+    principal does not exist or is not active -- and suppresses the send.
+    UNKNOWN means the directory could not be consulted, which must not be read
+    as proof of absence: the coordinator fails open and still sends.
+    """
+
+    ACTIVE = "active"
+    ABSENT = "absent"
+    UNKNOWN = "unknown"
+
+
+class PrincipalDirectoryPort(Protocol):
+    """Read-only view of principal existence for pre-send validation."""
+
+    def state_of(self, principal_id: str) -> PrincipalState:
+        """Report whether principal_id is a valid notification recipient.
+
+        Implementations return UNKNOWN, never ABSENT, when the directory is
+        unreachable. Validation exists to reduce misdelivery, not to gate
+        delivery on the availability of a separate service.
+        """
+
+
+class UnverifiablePrincipalDirectory:
+    """Default directory used when no Registry adapter has been wired yet.
+
+    Always UNKNOWN so that pre-send validation is a no-op and behaviour is
+    unchanged until a real adapter arrives.
+    """
+
+    def state_of(self, principal_id: str) -> PrincipalState:
+        return PrincipalState.UNKNOWN

@@ -1,0 +1,2 @@
+module = ["agent", "mapping"]
+summary = "无行为变更地扩展协调器端口、快照字段与交接载荷字段"

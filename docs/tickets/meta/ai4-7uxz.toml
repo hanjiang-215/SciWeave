@@ -1,0 +1,2 @@
+module = ["agent", "mapping"]
+summary = "按声明顺序在多执行者中选择首个可用者，全部不可用才转人工"
