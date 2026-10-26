@@ -8,6 +8,7 @@ from .queue import KafkaQueueClient, QueueClient, QueueMessage
 from .workflows import WorkflowExecutor, WorkflowRunResult
 from .queue import FakeQueue  # noqa: F401  (forwarded for template/tests compatibility)
 from .draft_writer import BufferMCPDraftWriter, DraftWriteError
+from .durable import ExecutionNotFound, InvalidTransition, SqliteExecutionStore
 from .inbox import InboxError, InboxStore
 from .runtime import (
     Execution,
@@ -36,6 +37,9 @@ __all__ = [
     "DraftWriteError",
     "InboxError",
     "InboxStore",
+    "SqliteExecutionStore",
+    "ExecutionNotFound",
+    "InvalidTransition",
     "Execution",
     "ExecutionRecord",
     "ExecutionStore",
