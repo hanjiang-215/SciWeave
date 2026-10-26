@@ -6,7 +6,7 @@ links: [ai4-2982, ai4-1y6q, ai4-10ja]
 created: 2026-10-26T07:36:06Z
 type: feature
 priority: 1
-assignee: Frank Qi
+assignee: hanjiang
 parent: ai4-p5f3
 tags: [implementation, centre-control, coordinator, adapter]
 ---
@@ -80,3 +80,7 @@ TerminusDB 文档与 `ports.py` 的 dataclass 形状不一致，适配器负责�
 - 传输方式与鉴权边界由 `ai4-2982` 定死：走 research-map 管理 MCP 的 `POST /mcp`，不另设内部 HTTP 接口，不直连 Research Mapping 的 SQLite 或 TerminusDB，不因「同进程」豁免鉴权。地址经 `SCIWEAVE_MAPPING_MCP_*` 配置。
 - `FormalSnapshot` 需要新增 `latest_published_by`，供 `task_terminal_summary` 取收件人。它来自 `formal_mapping_revision.published_by`，不是 `documents` 里的字段，因此需要 `ai4-2raq` 把它加进 MCP 返回。命名依据见 [ADR-0004](../docs/adr/0004-po-recipient-from-latest-approver.md)。
 - 本票不实现错误重试策略。适配器只做一次调用并抛出既有错误类型，重试由 `CoordinatorService` 的恢复模型负责。
+
+**2026-10-26 负责人转交（hanjiang 操作，按项目所有者指示）**
+
+身份核对：本票 assignee 已由 Frank Qi 改为 hanjiang；当前分支 `feature/hanjiang`、`git config user.name=hanjiang`，一致。依据：项目所有者 2026-10-26 指示，Frank Qi 名下 coordinator / handoff / message-envelope 链路的 11 张 open 票统一转交 hanjiang 推进与收口。原负责人 Frank Qi，转交时间 2026-10-26T15:41:00Z。转交只变更归属并记录，不改写正文、验收标准与既有决策。

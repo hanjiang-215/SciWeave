@@ -6,7 +6,7 @@ links: [ai4-edrp, ai4-10ja, ai4-f985]
 created: 2026-10-26T07:49:53Z
 type: feature
 priority: 1
-assignee: Frank Qi
+assignee: hanjiang
 parent: ai4-te1v
 tags: [implementation, centre-control, shared, message-queue]
 ---
@@ -64,3 +64,7 @@ tags: [implementation, centre-control, shared, message-queue]
 - 本票不定 topic 名称、分区键或消费者组；全部已由 `ai4-te1v` 定死，照抄即可。
 - 序列化选 JSON 而非 Avro 是 `ai4-te1v` 第五轮的裁决，理由与代价写在那张票里。不要在本票重新论证。
 - `email-service` 不消费 Redpanda，`human_notification_intent` 与 `task_terminal_summary` 不走本包，只走 MCP。
+
+**2026-10-26 负责人转交（hanjiang 操作，按项目所有者指示）**
+
+身份核对：本票 assignee 已由 Frank Qi 改为 hanjiang；当前分支 `feature/hanjiang`、`git config user.name=hanjiang`，一致。依据：项目所有者 2026-10-26 指示，Frank Qi 名下 coordinator / handoff / message-envelope 链路的 11 张 open 票统一转交 hanjiang 推进与收口。原负责人 Frank Qi，转交时间 2026-10-26T15:41:00Z。转交只变更归属并记录，不改写正文、验收标准与既有决策。

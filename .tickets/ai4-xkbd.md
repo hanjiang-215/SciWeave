@@ -6,7 +6,7 @@ links: [ai4-10ja, ai4-te1v, ai4-f985, ai4-2raq, ai4-edrp]
 created: 2026-10-26T08:21:32Z
 type: bug
 priority: 1
-assignee: Frank Qi
+assignee: hanjiang
 parent: ai4-10ja
 tags: [implementation, centre-control, handoff, notification, ready-for-agent]
 ---
@@ -43,3 +43,7 @@ tags: [implementation, centre-control, handoff, notification, ready-for-agent]
 - `task_owner_id` 缺失是数据损坏，不是配置待补。宁可不动，也不能把任务通知给一个随机的人。
 - fail-open 的取舍：校验是为了减少错发，不是阻止正常投递。校验服务挂了就停掉通知，代价大于收益。
 - 命名见 [ADR-0004](../docs/adr/0004-po-recipient-from-latest-approver.md)：`latest_published_by` 回答「最近一次批准者是谁」，不是「谁被任命为负责人」。
+
+**2026-10-26 负责人转交（hanjiang 操作，按项目所有者指示）**
+
+身份核对：本票 assignee 已由 Frank Qi 改为 hanjiang；当前分支 `feature/hanjiang`、`git config user.name=hanjiang`，一致。依据：项目所有者 2026-10-26 指示，Frank Qi 名下 coordinator / handoff / message-envelope 链路的 11 张 open 票统一转交 hanjiang 推进与收口。原负责人 Frank Qi，转交时间 2026-10-26T15:41:00Z。转交只变更归属并记录，不改写正文、验收标准与既有决策。

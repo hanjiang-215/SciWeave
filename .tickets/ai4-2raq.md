@@ -6,7 +6,7 @@ links: [ai4-2982, ai4-edrp]
 created: 2026-10-26T07:36:24Z
 type: feature
 priority: 1
-assignee: Frank Qi
+assignee: hanjiang
 parent: ai4-xup8
 tags: [implementation, research-map, mcp]
 ---
@@ -40,3 +40,7 @@ tags: [implementation, research-map, mcp]
 - 字段名保持 `published_by`，不改成 `project_owner_id`。它回答「最近一次批准者是谁」，不是「谁被任命为负责人」；两者通常重合，但 A 批准 r1、B 批准 r2 之后答案是 B。下游会把它映射为 `FormalSnapshot.latest_published_by`（`ai4-edrp`），对外仍承担「通知 PO」的语义。
 - 本票不动 `is_project_owner` 的能力判定逻辑，也不新增 PO 登记表。将来若真的需要多人共管、轮值或审批代理，那是一次独立决策。
 - 改动会牵动 `research-map` 的 MCP 接口测试，属于 hanjiang 实现的模块；本票由 Frank Qi 承接是因为它服务于 `ai4-edrp` 的收件人链路，合并前需与模块实现方确认无契约冲突。
+
+**2026-10-26 负责人转交（hanjiang 操作，按项目所有者指示）**
+
+身份核对：本票 assignee 已由 Frank Qi 改为 hanjiang；当前分支 `feature/hanjiang`、`git config user.name=hanjiang`，一致。依据：项目所有者 2026-10-26 指示，Frank Qi 名下 coordinator / handoff / message-envelope 链路的 11 张 open 票统一转交 hanjiang 推进与收口。原负责人 Frank Qi，转交时间 2026-10-26T15:41:00Z。转交只变更归属并记录，不改写正文、验收标准与既有决策。

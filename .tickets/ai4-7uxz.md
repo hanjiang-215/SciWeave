@@ -6,7 +6,7 @@ links: [ai4-10ja, ai4-te1v]
 created: 2026-10-26T08:21:32Z
 type: bug
 priority: 1
-assignee: Frank Qi
+assignee: hanjiang
 parent: ai4-10ja
 tags: [implementation, centre-control, handoff, ready-for-agent]
 ---
@@ -35,3 +35,7 @@ tags: [implementation, centre-control, handoff, ready-for-agent]
 - 顺序即偏好。按声明顺序选，不随机、不并发探测、不按负载均衡——配置者写下顺序就是在表达优先级。
 - 可用性判断只问「能不能接活」，不构成授权。执行资格仍由正式 Map 的 `executor_refs` 决定，Registry 事实不能扩权。
 - 注意 `_evaluate_snapshot` 与 `_recompute_downstream` 两处都有这段逻辑，抽一处共用，否则下次改选择规则会漏掉一边。
+
+**2026-10-26 负责人转交（hanjiang 操作，按项目所有者指示）**
+
+身份核对：本票 assignee 已由 Frank Qi 改为 hanjiang；当前分支 `feature/hanjiang`、`git config user.name=hanjiang`，一致。依据：项目所有者 2026-10-26 指示，Frank Qi 名下 coordinator / handoff / message-envelope 链路的 11 张 open 票统一转交 hanjiang 推进与收口。原负责人 Frank Qi，转交时间 2026-10-26T15:41:00Z。转交只变更归属并记录，不改写正文、验收标准与既有决策。

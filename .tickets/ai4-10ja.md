@@ -6,7 +6,7 @@ links: [ai4-zc85, ai4-1y6q]
 created: 2026-10-26T07:11:28Z
 type: task
 priority: 1
-assignee: Frank Qi
+assignee: hanjiang
 parent: ai4-p5f3
 tags: [implementation, centre-control, coordinator, message-queue]
 ---
@@ -118,3 +118,7 @@ recipients                      → 传 mapping_domain_id，非 principal_id
 - 本票只改 `coordinator`，不动 `shared/message-envelope/`（尚未实现）与 Redpanda 适配层，也不写任何真实适配器（见 Q8 裁决）：`TaskNodeDoc(task_owner_id=...)` 与 `FormalSnapshot(latest_published_by=...)` 在测试里直接构造。
 - `dependency_kind` / `activation_condition` / `required_outputs` / `blocks_until` 四个字段在 `ports.py` 的 `DependencyEdgeDoc` 中整体缺失，属独立的判定逻辑扩充，不在本票范围。
 - 缺陷 6 依赖 `ai4-f985` 的收件人来源定义，若届时仍不明确则先只记录、不改调用点。
+
+**2026-10-26 负责人转交（hanjiang 操作，按项目所有者指示）**
+
+身份核对：本票 assignee 已由 Frank Qi 改为 hanjiang；当前分支 `feature/hanjiang`、`git config user.name=hanjiang`，一致。依据：项目所有者 2026-10-26 指示，Frank Qi 名下 coordinator / handoff / message-envelope 链路的 11 张 open 票统一转交 hanjiang 推进与收口。原负责人 Frank Qi，转交时间 2026-10-26T15:41:00Z。转交只变更归属并记录，不改写正文、验收标准与既有决策。

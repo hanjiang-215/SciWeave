@@ -6,7 +6,7 @@ links: [ai4-10ja, ai4-te1v, ai4-9mf8]
 created: 2026-10-26T08:21:32Z
 type: bug
 priority: 1
-assignee: Frank Qi
+assignee: hanjiang
 parent: ai4-10ja
 tags: [implementation, centre-control, handoff, ready-for-agent]
 ---
@@ -34,3 +34,7 @@ tags: [implementation, centre-control, handoff, ready-for-agent]
 - 「无入边」不是条件平凡满足，而是不满足可自动派发条件。当前用 `all(...)` 在空集合上得真，把结构缺失当成了条件成立。
 - 接口契约由 `ai4-9mf8`（已关闭）定义，本票只实现协调器侧。PO 经高权限 MCP 调用，不直接操作队列。
 - 显式分派产出的消息与自动派发同类型，不引入 `root_task_dispatched` 之类的额外事件——`ai4-te1v` 已明确不需要。
+
+**2026-10-26 负责人转交（hanjiang 操作，按项目所有者指示）**
+
+身份核对：本票 assignee 已由 Frank Qi 改为 hanjiang；当前分支 `feature/hanjiang`、`git config user.name=hanjiang`，一致。依据：项目所有者 2026-10-26 指示，Frank Qi 名下 coordinator / handoff / message-envelope 链路的 11 张 open 票统一转交 hanjiang 推进与收口。原负责人 Frank Qi，转交时间 2026-10-26T15:41:00Z。转交只变更归属并记录，不改写正文、验收标准与既有决策。

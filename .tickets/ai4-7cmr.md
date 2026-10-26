@@ -6,7 +6,7 @@ links: [ai4-10ja, ai4-zc85, ai4-te1v]
 created: 2026-10-26T08:21:32Z
 type: bug
 priority: 1
-assignee: Frank Qi
+assignee: hanjiang
 parent: ai4-10ja
 tags: [implementation, centre-control, handoff, ready-for-agent]
 ---
@@ -34,3 +34,7 @@ tags: [implementation, centre-control, handoff, ready-for-agent]
 - 两个修复必须同时落地。只去掉触发版本，`done` 仍会被重算覆盖回 `waiting`，新触发下再次派发；只加状态守卫，同一触发版本重放仍会重复。任缺其一，「三版一次」的验收都过不了。
 - 状态迁移的允许集合来自 `ai4-zc85` 已关闭的规格，不要在实现中自行放宽。
 - 非法迁移的处理是「拒绝并保留原状态」，不是抛异常中断整轮重算——一轮重算里其他节点仍然应该推进。
+
+**2026-10-26 负责人转交（hanjiang 操作，按项目所有者指示）**
+
+身份核对：本票 assignee 已由 Frank Qi 改为 hanjiang；当前分支 `feature/hanjiang`、`git config user.name=hanjiang`，一致。依据：项目所有者 2026-10-26 指示，Frank Qi 名下 coordinator / handoff / message-envelope 链路的 11 张 open 票统一转交 hanjiang 推进与收口。原负责人 Frank Qi，转交时间 2026-10-26T15:41:00Z。转交只变更归属并记录，不改写正文、验收标准与既有决策。
