@@ -19,6 +19,42 @@ from message_envelope import (
 )
 
 
+def task_completed_payload(**overrides) -> dict:
+    """A complete `task_completed` payload.
+
+    Written out rather than derived from PAYLOAD_SCHEMAS: a fixture that
+    reads the schema would keep passing if someone emptied the schema.
+    """
+    payload = {
+        "mapping_domain_id": "map-1",
+        "task_node_id": "T1",
+        "completed_version_ref": "v1",
+        "execution_id": "exec-1",
+        "draft_id": "draft-1",
+        "completed_at": "2026-10-26T08:00:00Z",
+        "result_ref": "result-1",
+    }
+    payload.update(overrides)
+    return payload
+
+
+def handoff_payload(**overrides) -> dict:
+    """A complete `task_handoff_ready` payload, refs as single-element arrays."""
+    payload = {
+        "mapping_domain_id": "map-1",
+        "task_node_id": "T1",
+        "target_node_version_ref": "v1",
+        "target_agent_id": "agent-7",
+        "pending_handoff_id": "ph-1",
+        "trigger_revision_id": "rev-1",
+        "upstream_source_refs": ["rev-0"],
+        "dependency_edge_version_refs": ["edge-v1"],
+        "executor_ref_snapshot": ["agent-7"],
+    }
+    payload.update(overrides)
+    return payload
+
+
 def sample(**overrides) -> Envelope:
     values = dict(
         message_id="msg-1",
@@ -29,7 +65,7 @@ def sample(**overrides) -> Envelope:
         published_at="2026-10-26T08:00:01Z",
         producer=Producer(service="coordinator"),
         routing=Routing(partition_key="task:T1"),
-        payload={"mapping_domain_id": "map-1"},
+        payload=task_completed_payload(),
     )
     values.update(overrides)
     return Envelope(**values)
@@ -80,7 +116,7 @@ def test_unknown_message_type_is_distinct_from_format_error():
 
 
 def test_unknown_payload_fields_are_tolerated_and_survive_a_round_trip():
-    original = sample(payload={"mapping_domain_id": "map-1", "future_field": {"nested": [1, 2]}})
+    original = sample(payload=task_completed_payload(future_field={"nested": [1, 2]}))
 
     restored = decode(encode(original))
 
@@ -139,7 +175,7 @@ def raw_body(**overrides) -> bytes:
         "published_at": "2026-10-26T08:00:01Z",
         "producer": {"service": "coordinator"},
         "routing": {"partition_key": "task:T1"},
-        "payload": {"mapping_domain_id": "map-1"},
+        "payload": task_completed_payload(),
     }
     body.update(overrides)
     return json.dumps(body).encode("utf-8")
@@ -155,7 +191,8 @@ def test_payload_that_is_not_an_object_is_rejected_on_the_decode_side():
 def test_missing_payload_key_is_a_format_error():
     # Every message type has required payload fields, so an envelope that
     # arrives without the key at all is malformed rather than empty. An
-    # explicit {} is still a payload and is accepted.
+    # explicit {} is a different failure: it parses, then fails payload
+    # validation.
     body = json.loads(raw_body())
     del body["payload"]
 
@@ -163,8 +200,13 @@ def test_missing_payload_key_is_a_format_error():
         decode(json.dumps(body).encode("utf-8"))
 
 
-def test_explicit_empty_payload_is_accepted():
-    assert decode(raw_body(payload={})).payload == {}
+def test_explicit_empty_payload_is_a_payload_error():
+    # An absent key is a format error; an explicit {} gets as far as payload
+    # validation and fails there, because every known type has required
+    # fields. Keeping the two apart is what lets a consumer treat a broken
+    # producer differently from a malformed message.
+    with pytest.raises(PayloadError):
+        decode(raw_body(payload={}))
 
 
 def test_routing_target_agent_id_survives_a_round_trip():
@@ -172,7 +214,9 @@ def test_routing_target_agent_id_survives_a_round_trip():
     # serialiser drops this, the handoff silently lands nowhere.
     original = sample(
         message_type="task_handoff_ready",
+        dedupe_key="map-1:T1:v1:task_handoff_ready",
         routing=Routing(partition_key="task:T1", target_agent_id="agent-7"),
+        payload=handoff_payload(),
     )
 
     restored = decode(encode(original))
@@ -303,23 +347,26 @@ def test_unserialisable_payload_is_a_payload_error_not_a_type_error():
     # The README promises EnvelopeError catches everything this package
     # raises; a bare TypeError from json.dumps would break that.
     with pytest.raises(PayloadError):
-        encode(sample(payload={"when": object()}))
+        encode(sample(payload=task_completed_payload(when=object())))
 
 
 def test_nan_payload_is_refused_rather_than_written_as_invalid_json():
     # NaN is Python's json extension, not JSON. Writing it produces a
     # message a non-Python consumer cannot parse.
     with pytest.raises(PayloadError):
-        encode(sample(payload={"n": float("nan")}))
+        encode(sample(payload=task_completed_payload(n=float("nan"))))
 
 
-def test_non_string_payload_keys_become_strings_on_the_wire():
-    # JSON object keys are strings, so this conversion is unavoidable rather
-    # than a bug. Pinning it makes it a documented property instead of a
-    # surprise: a payload keyed by an int comes back keyed by "1".
-    restored = decode(encode(sample(payload={1: "a"})))
+def test_non_string_payload_keys_are_rejected():
+    # JSON object keys are strings, so an int key could never be matched back
+    # by the producer after a round trip. It also breaks the sorted-key
+    # serialisation, whose TypeError would surface as a misleading "not
+    # serialisable" message; the payload rule states the real problem.
+    payload = task_completed_payload()
+    payload[1] = "a"
 
-    assert restored.payload == {"1": "a"}
+    with pytest.raises(PayloadError):
+        encode(sample(payload=payload))
 
 
 def test_structural_defects_outrank_the_version_check():
@@ -367,7 +414,7 @@ def test_catching_the_base_class_catches_every_failure_this_package_raises():
     assert swallow(lambda: decode(b"not json")) is EnvelopeFormatError
     assert swallow(lambda: decode(raw_body(schema_version=2))) is SchemaVersionError
     assert swallow(lambda: decode(raw_body(message_type="unknown"))) is UnknownMessageTypeError
-    assert swallow(lambda: encode(sample(payload={"x": object()}))) is PayloadError
+    assert swallow(lambda: encode(sample(payload=task_completed_payload(x=object())))) is PayloadError
     assert swallow(lambda: validate(sample(occurred_at=""))) is EnvelopeFormatError
 
 

@@ -27,6 +27,15 @@ from dataclasses import asdict, dataclass
 from datetime import datetime
 from typing import Any
 
+from .errors import (
+    EnvelopeError,
+    EnvelopeFormatError,
+    PayloadError,
+    SchemaVersionError,
+    UnknownMessageTypeError,
+)
+from .payloads import PAYLOAD_SCHEMAS, required_payload_fields, validate_payload
+
 SCHEMA_VERSION = 1
 
 MESSAGE_TYPES = frozenset(
@@ -42,6 +51,7 @@ MESSAGE_TYPES = frozenset(
 __all__ = [
     "SCHEMA_VERSION",
     "MESSAGE_TYPES",
+    "PAYLOAD_SCHEMAS",
     "Envelope",
     "EnvelopeError",
     "EnvelopeFormatError",
@@ -52,36 +62,10 @@ __all__ = [
     "UnknownMessageTypeError",
     "decode",
     "encode",
+    "required_payload_fields",
     "validate",
+    "validate_payload",
 ]
-
-
-class EnvelopeError(Exception):
-    """Base class for every envelope failure; catch this to catch them all."""
-
-
-class EnvelopeFormatError(EnvelopeError):
-    """The bytes are not a well-formed envelope."""
-
-
-class SchemaVersionError(EnvelopeError):
-    """The message declares a schema version this code does not support."""
-
-    def __init__(self, version: Any) -> None:
-        super().__init__(f"unsupported schema_version: {version!r}")
-        self.version = version
-
-
-class UnknownMessageTypeError(EnvelopeError):
-    """The message type is not one this code knows how to route."""
-
-    def __init__(self, message_type: Any) -> None:
-        super().__init__(f"unknown message_type: {message_type!r}")
-        self.message_type = message_type
-
-
-class PayloadError(EnvelopeError):
-    """The envelope is valid but the business payload is not."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -188,8 +172,9 @@ def validate(envelope: Envelope) -> None:
 
     Unknown payload fields are not an error. Tolerant reading is the
     contract: same schema version is always consumable, and consumers
-    must ignore what they do not recognise. Only the envelope's own
-    required fields and the schema version are enforced here.
+    must ignore what they do not recognise. Enforced here: the envelope's
+    own required fields, the schema version, the message type, and that
+    type's required payload fields (see :mod:`.payloads`).
     """
     for name, value in (
         ("message_id", envelope.message_id),
@@ -241,6 +226,11 @@ def validate(envelope: Envelope) -> None:
 
     if not isinstance(envelope.payload, dict):
         raise PayloadError("payload must be a JSON object")
+
+    # Per-type required fields. Missing ones are a payload defect, not a
+    # format defect: the envelope itself is fine, and a consumer may want to
+    # dead-letter this message rather than drop the producer's output.
+    validate_payload(envelope.message_type, envelope.payload)
 
 
 def _require_timestamp(name: str, value: Any) -> None:
