@@ -84,3 +84,5 @@ compile-ok
 - `PrincipalDirectoryPort` 尚无真实 Registry 适配器，`state_of` 的三种取值目前只有测试覆盖。
 - `DependencyEdgeDoc` 的 `edge_id` 是单值，没有独立的 `edge logical_id + version_id`。因此 `dependency_edge_version_refs` 目前只能承载 `(edge_id, ?)`；真实版本号要等投影扩展（与上一条同一张后续票）。
 - **`upstream_source_refs` 与 `dependency_edge_version_refs` 的填值没有归属票。** `executor_ref_snapshot` 由 `ai4-7uxz` 的验收覆盖，另外两个字段在 `ai4-10ja` 与六张修复票的验收里都没出现，`service.py` 两处构造仍只传 6 个旧字段，发出去的消息携带空元组。补一张填值票，或把两条验收挂进 `ai4-7cmr`／`ai4-7uxz`，二者选一，不要留空。
+
+PR：[!46](https://gitee.com/qi-yueran/ai4science/pulls/46)，与 `ai4-8pvm` 同一分支进 `develop`。

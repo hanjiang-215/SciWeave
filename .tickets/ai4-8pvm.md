@@ -51,3 +51,4 @@ tags: [implementation, centre-control, shared, message-queue, ready-for-agent]
 - 载荷在本票里是自由字典，不做类型化。类型化由 `ai4-sv1u` 承接。
 - 锁文件：提交了包内 `uv.lock`。`docs/TECH_STACK.md` 禁止的是 `sci-weave/centre-control/` 这一级的组级锁文件，包自身的锁文件不在禁止范围内；`shared/audit-trail/` 已有同样的既有事实。
 - 顺序：先跑通「一个信封往返」再扩校验。四类错误区分的价值在于消费方处置不同，不在于分类本身好看。
+- PR：[!46](https://gitee.com/qi-yueran/ai4science/pulls/46)，与 `ai4-g5fx` 同一分支进 `develop`
