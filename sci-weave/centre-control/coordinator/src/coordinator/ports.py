@@ -39,11 +39,26 @@ class TaskNodeDoc:
 
 @dataclass(frozen=True)
 class DependencyEdgeDoc:
-    edge_id: str
+    """One dependency edge from a formal mapping snapshot.
+
+    ``logical_id`` is the edge's stable identity and ``version_id`` its
+    immutable version (ai4-fu4i); both come straight from the domain
+    DependencyEdge document. The four judgement fields were added whole
+    (ai4-quvy): coordinator must not treat every edge as "all upstream
+    complete means go" (ai4-te1v dependency-kind rules).
+    """
+
+    logical_id: str
+    version_id: str
     source_node_id: str
     source_version_id: str
     target_node_id: str
     target_version_id: str
+    dependency_kind: str = "information"
+    activation_condition: str | None = None
+    required_outputs: tuple[str, ...] = ()
+    blocks_until: str | None = None
+    alternative_group_id: str | None = None
 
 
 @dataclass(frozen=True)

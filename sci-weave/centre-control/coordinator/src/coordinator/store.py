@@ -71,6 +71,9 @@ class PendingHandoff:
     last_trigger_revision_id: str | None
     created_at: str
     updated_at: str
+    # ai4-te1v / ai4-quvy: why the handoff is waiting, when it is
+    # (blocking_dependency_missing, activation_condition_unknown, ...).
+    waiting_reason: str | None = None
 
 
 @dataclass(frozen=True)
@@ -112,6 +115,7 @@ class CoordinatorStore:
               last_trigger_revision_id TEXT,
               created_at TEXT NOT NULL,
               updated_at TEXT NOT NULL,
+              waiting_reason TEXT,
               UNIQUE (mapping_domain_id, task_node_id, target_node_version_ref)
             );
             CREATE TABLE IF NOT EXISTS handoff_dispatch (
@@ -148,6 +152,13 @@ class CoordinatorStore:
             );
             """
         )
+        # ai4-quvy: migrate pre-existing stores to the waiting_reason column.
+        try:
+            self.conn.execute("ALTER TABLE pending_handoff ADD COLUMN waiting_reason TEXT")
+            self.conn.commit()
+        except sqlite3.OperationalError:
+            # Column already exists; the CREATE TABLE above has it for new stores.
+            pass
         self.conn.commit()
 
     def upsert_pending_handoff(
@@ -159,6 +170,7 @@ class CoordinatorStore:
         executor_refs: tuple[str, ...],
         status: str,
         trigger_revision_id: str | None,
+        waiting_reason: str | None = None,
     ) -> PendingHandoff:
         now = now_iso()
         existing = self.get_pending_handoff(mapping_domain_id, task_node_id, target_node_version_ref)
@@ -172,7 +184,7 @@ class CoordinatorStore:
                 """
                 UPDATE pending_handoff
                 SET upstream_source_refs = ?, executor_refs = ?, status = ?,
-                    last_trigger_revision_id = ?, updated_at = ?
+                    last_trigger_revision_id = ?, updated_at = ?, waiting_reason = ?
                 WHERE pending_handoff_id = ?
                 """,
                 (
@@ -181,6 +193,7 @@ class CoordinatorStore:
                     status,
                     trigger_revision_id,
                     now,
+                    waiting_reason,
                     existing.pending_handoff_id,
                 ),
             )
@@ -192,8 +205,8 @@ class CoordinatorStore:
             INSERT INTO pending_handoff (
               pending_handoff_id, mapping_domain_id, task_node_id, target_node_version_ref,
               upstream_source_refs, executor_refs, executor_agent_id, status, last_trigger_revision_id,
-              created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              created_at, updated_at, waiting_reason
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 pending_handoff_id,
@@ -207,6 +220,7 @@ class CoordinatorStore:
                 trigger_revision_id,
                 now,
                 now,
+                waiting_reason,
             ),
         )
         self.conn.commit()
@@ -457,6 +471,7 @@ class CoordinatorStore:
             last_trigger_revision_id=row["last_trigger_revision_id"],
             created_at=row["created_at"],
             updated_at=row["updated_at"],
+            waiting_reason=row["waiting_reason"] if "waiting_reason" in row.keys() else None,
         )
 
     @staticmethod

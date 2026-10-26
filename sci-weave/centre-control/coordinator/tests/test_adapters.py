@@ -148,6 +148,8 @@ def _mapping_documents() -> list[dict[str, Any]]:
             "logical_id": "E1",
             "version_id": "e1-v1",
             "dependency_kind": "blocking",
+            "required_outputs": ["data.csv"],
+            "blocks_until": "data-check/output",
             "source_node_version_ref": {"logical_id": "T1", "version_id": "t1-v1", "mapping_domain_id": "iris-demo"},
             "target_node_version_ref": {"logical_id": "T2", "version_id": "t2-v1", "mapping_domain_id": "iris-demo"},
         },
@@ -175,6 +177,15 @@ def test_snapshot_adapter_reads_revision_and_projects_graph() -> None:
         assert edge.source_node_id == "T1"
         assert edge.source_version_id == "t1-v1"
         assert edge.target_node_id == "T2"
+        assert edge.target_version_id == "t2-v1"
+        # ai4-fu4i: the edge's own identity is projected, not discarded.
+        assert edge.logical_id == "E1"
+        assert edge.version_id == "e1-v1"
+        # ai4-quvy: the four judgement fields are projected whole.
+        assert edge.dependency_kind == "blocking"
+        assert edge.required_outputs == ("data.csv",)
+        assert edge.blocks_until == "data-check/output"
+        assert edge.activation_condition is None
         # the correct tool was called with exact arguments
         assert ("get_formal_mapping_at_revision", {"mapping_domain_id": "iris-demo", "formal_revision_id": "rev-2"}) in stub.calls
 

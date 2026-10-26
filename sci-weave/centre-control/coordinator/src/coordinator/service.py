@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from .ports import (
     AgentAvailabilityPort,
     AgentState,
@@ -40,6 +42,14 @@ from .store import (
 
 class PublisherUnavailableError(Exception):
     """Transient failure publishing a message; the dispatch may be retried."""
+
+
+@dataclass(frozen=True)
+class EdgeGate:
+    """Result of evaluating a node's incoming dependency edges (ai4-quvy)."""
+
+    satisfied: bool
+    reason: str | None
 
 
 # ai4-te1v / ai4-xkbd: the three "no usable executor" cases carry different
@@ -148,6 +158,120 @@ class CoordinatorService:
 
     # ------------------------------------------------------------------ core
 
+    def _edge_gate(
+        self,
+        snapshot: FormalSnapshot,
+        incoming: tuple[DependencyEdgeDoc, ...],
+        node_ids: set[str],
+    ) -> EdgeGate:
+        """Evaluate every incoming edge against the ai4-te1v dependency-kind rules.
+
+        ``satisfied`` is True only when *every* incoming edge passes. The
+        per-kind rules (docs/data-flow/message-queue.md, ai4-quvy):
+
+        - ``information``: notifies downstream; whether execution follows is the
+          task's own decision -- the coordinator only requires the upstream
+          completion fact.
+        - ``blocking``: requires the upstream completion fact (``required_outputs``
+          are treated as satisfied by that completion; the coordinator holds no
+          output ledger to verify them item by item).
+        - ``conditional`` / ``alternative``: an activation condition the
+          coordinator cannot evaluate must NOT auto-advance the node; it parks
+          the handoff waiting with ``activation_condition_unknown`` and asks a
+          human (ai4-te1v). An absent condition on these kinds falls back to the
+          upstream-completion rule so existing blockings keep working.
+        """
+        if not incoming:
+            return EdgeGate(satisfied=True, reason=None)
+        first_unsatisfied: DependencyEdgeDoc | None = None
+        reason: str | None = None
+        for edge in incoming:
+            upstream_ok = (
+                edge.source_node_id in node_ids
+                and self.store.has_completed(
+                    snapshot.mapping_domain_id,
+                    edge.source_node_id,
+                    self._upstream_version(snapshot, edge.source_node_id),
+                )
+            )
+            kind = (edge.dependency_kind or "information").lower()
+            if kind in {"conditional", "alternative"} and edge.activation_condition:
+                # ai4-te1v: an activation condition we cannot evaluate must
+                # not be guessed at; the human decides.
+                first_unsatisfied = edge
+                reason = "activation_condition_unknown"
+                break
+            if not upstream_ok:
+                first_unsatisfied = edge
+                reason = "blocking_dependency_missing"
+                break
+        return EdgeGate(satisfied=first_unsatisfied is None, reason=reason)
+
+    def _notify_condition_hold(
+        self,
+        snapshot: FormalSnapshot,
+        node: TaskNodeDoc,
+        gate: EdgeGate,
+        trigger: str,
+    ) -> None:
+        """Ask a human when a dependency condition cannot be auto-evaluated.
+
+        Only for the ``activation_condition_unknown`` hold: per ai4-te1v it is
+        the case where the coordinator must not guess, so the PendingHandoff
+        stays waiting and a human_notification_intent is produced. A plain
+        missing upstream completion is a normal waiting state, not a question
+        to a human.
+        """
+        if gate.reason != "activation_condition_unknown":
+            return
+        pending = self.store.get_pending_handoff(
+            snapshot.mapping_domain_id, node.task_node_id, node.version_id
+        )
+        if pending is None:
+            return
+        recipient = node.task_owner_id
+        if not recipient:
+            self._record_unresolved_recipient(
+                snapshot, pending, trigger, "recipient_unresolved:task_owner_id_missing"
+            )
+            return
+        if self.principals.state_of(recipient) is PrincipalState.ABSENT:
+            self._record_unresolved_recipient(
+                snapshot, pending, trigger, "recipient_unresolved:principal_absent"
+            )
+            return
+        dedupe_key = self._dedupe(
+            snapshot.mapping_domain_id, pending, MSG_HUMAN_NOTIFICATION, trigger
+        )
+        dispatch = self.store.create_dispatch(
+            pending.pending_handoff_id, dedupe_key, MSG_HUMAN_NOTIFICATION, None
+        )
+        if dispatch is None or dispatch.status in (DISPATCH_PUBLISHED,):
+            return
+        try:
+            self.notifications.publish(
+                NotificationIntent(
+                    notification_kind=NOTIFY_AGENT_UNAVAILABLE,
+                    recipients=(recipient,),
+                    subject="任务交接等待激活条件判定",
+                    body=(
+                        f"TaskNode {node.task_node_id} 有依赖边带激活条件，交接协调无法自动判定，"
+                        "需要人工判断条件是否满足后继续。"
+                    ),
+                    related={
+                        "mapping_domain_id": snapshot.mapping_domain_id,
+                        "task_node_id": node.task_node_id,
+                        "reason": gate.reason or "",
+                    },
+                )
+            )
+        except Exception as exc:
+            self.store.set_dispatch_status(
+                dispatch.dispatch_id, DISPATCH_RESULT_UNKNOWN, error_summary=str(exc), attempt_count=1
+            )
+            return
+        self.store.set_dispatch_status(dispatch.dispatch_id, DISPATCH_PUBLISHED, attempt_count=1)
+
     def _evaluate_snapshot(self, snapshot: FormalSnapshot, trigger_revision_id: str) -> None:
         node_ids = {node.task_node_id for node in snapshot.nodes}
         for node in snapshot.nodes:
@@ -167,17 +291,19 @@ class CoordinatorService:
             upstream_ids = {ref[0] for ref in upstream_refs}
             executor_refs = node.executor_refs
             executor_agent_id, notify_kind = self._select_executor(executor_refs)
-            # A node is structurally ready when every upstream exists in this
-            # snapshot and has a recorded completion fact.
-            conditions_met = all(
-                upstream_id in node_ids and self.store.has_completed(
-                    snapshot.mapping_domain_id, upstream_id, self._upstream_version(snapshot, upstream_id)
-                )
-                for upstream_id in upstream_ids
-            )
+            edge_gate = self._edge_gate(snapshot, incoming, node_ids)
+            # ai4-quvy: a node is structurally ready when every upstream exists
+            # in this snapshot and every incoming edge's gate passes -- the
+            # dependency_kind rules decide what "passes" means, not a blanket
+            # "all upstream complete" (ai4-te1v).
+            conditions_met = edge_gate.satisfied
             if not conditions_met:
                 self._upsert_pending(
-                    snapshot, node, PENDING_WAITING, upstream_refs, trigger_revision_id
+                    snapshot, node, PENDING_WAITING, upstream_refs, trigger_revision_id,
+                    waiting_reason=edge_gate.reason,
+                )
+                self._notify_condition_hold(
+                    snapshot, node, edge_gate, trigger_revision_id
                 )
                 continue
             if not self._upsert_pending(
@@ -220,12 +346,14 @@ class CoordinatorService:
         status: str,
         upstream_refs: tuple[tuple[str, str], ...],
         trigger_revision_id: str,
+        waiting_reason: str | None = None,
     ) -> bool:
         """Record the node's pending fact, tolerating a rejected transition.
 
         ai4-7cmr: an illegal transition keeps the stored status and lets the
         rest of the round advance. One stale node version must not stop every
-        other node from being dispatched.
+        other node from being dispatched. ``waiting_reason`` is the te1v
+        waiting reason (activation_condition_unknown, ...) when known.
         """
         try:
             self.store.upsert_pending_handoff(
@@ -236,6 +364,7 @@ class CoordinatorService:
                 node.executor_refs,
                 status,
                 trigger_revision_id,
+                waiting_reason=waiting_reason,
             )
         except InvalidPendingTransition:
             return False
@@ -251,21 +380,15 @@ class CoordinatorService:
                 (edge.source_node_id, edge.source_version_id) for edge in incoming
             )
             node_ids = {n.task_node_id for n in snapshot.nodes}
-            conditions_met = all(
-                upstream_id in node_ids
-                and self.store.has_completed(
-                    snapshot.mapping_domain_id,
-                    upstream_id,
-                    self._upstream_version(snapshot, upstream_id),
-                )
-                for upstream_id in {ref[0] for ref in upstream_refs}
-            )
+            edge_gate = self._edge_gate(snapshot, incoming, node_ids)
             executor_refs = node.executor_refs
             executor_agent_id, notify_kind = self._select_executor(executor_refs)
-            if not conditions_met:
+            if not edge_gate.satisfied:
                 self._upsert_pending(
-                    snapshot, node, PENDING_WAITING, upstream_refs, snapshot.formal_revision_id
+                    snapshot, node, PENDING_WAITING, upstream_refs,
+                    snapshot.formal_revision_id, waiting_reason=edge_gate.reason,
                 )
+                self._notify_condition_hold(snapshot, node, edge_gate, f"{completed_node_id}:{snapshot.formal_revision_id}")
                 continue
             if not self._upsert_pending(
                 snapshot, node, PENDING_READY, upstream_refs, snapshot.formal_revision_id
@@ -284,6 +407,20 @@ class CoordinatorService:
     def _upstream_version(snapshot: FormalSnapshot, upstream_id: str) -> str:
         node = snapshot.node_by_id(upstream_id)
         return node.version_id if node is not None else ""
+
+    def _incoming_edge_refs(self, snapshot: FormalSnapshot, task_node_id: str) -> tuple[tuple[str, str], ...]:
+        """All incoming edge version refs for a node, as (logical_id, version_id).
+
+        ai4-fu4i: dependency_edge_version_refs answers "which edges of the
+        current formal snapshot this handoff is built on"; the pair is the
+        edge's own identity, not the source node's. Stays a sequence even at
+        one element so consumers never branch on cardinality (ai4-te1v).
+        """
+        return tuple(
+            (edge.logical_id, edge.version_id)
+            for edge in snapshot.incoming_edges(task_node_id)
+            if edge.logical_id and edge.version_id
+        )
 
     # ---------------------------------------------------------------- dispatch
 
@@ -403,6 +540,12 @@ class CoordinatorService:
                     pending_handoff_id=pending.pending_handoff_id,
                     trigger_revision_id=trigger,
                     upstream_source_refs=pending.upstream_source_refs,
+                    # ai4-fu4i: every incoming edge's (logical_id, version_id),
+                    # so the downstream agent can see exactly which edges of the
+                    # formal snapshot this handoff is built on.
+                    dependency_edge_version_refs=self._incoming_edge_refs(
+                        snapshot, pending.task_node_id
+                    ),
                     # ai4-7uxz: the full list, so a later review can tell
                     # "nobody else was configured" from "someone was, and the
                     # wrong one was picked". Audit only, never authorization.
@@ -669,6 +812,12 @@ class CoordinatorService:
                         pending_handoff_id=pending.pending_handoff_id,
                         trigger_revision_id=dispatch.dedupe_key,
                         upstream_source_refs=pending.upstream_source_refs,
+                        # ai4-fu4i: same edge refs as the first dispatch; kept
+                        # consistent across retries so the recovery message
+                        # carries the same snapshot identity.
+                        dependency_edge_version_refs=self._incoming_edge_refs(
+                            snapshot, pending.task_node_id
+                        ),
                         executor_ref_snapshot=pending.executor_refs,
                     )
                 )

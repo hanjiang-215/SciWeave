@@ -181,29 +181,39 @@ def _build_snapshot(
                 )
             )
         elif dtype == "DependencyEdge":
-            # Deliberately NOT projected: dependency_kind,
-            # activation_condition, required_outputs and blocks_until.
-            # DependencyEdgeDoc has no fields for them yet and the
-            # dependency-kind judgement is its own piece of work (ai4-quvy);
-            # adding the fields here first would weld this adapter to a
-            # decision that has not been made. When they are projected, this
-            # is the only place to change.
             source = _parse_ref(document.get("source_node_version_ref"))
             target = _parse_ref(document.get("target_node_version_ref"))
+            # ai4-quvy: the four judgement fields are projected whole now --
+            # dependency_kind, activation_condition, required_outputs and
+            # blocks_until -- so the coordinator can follow ai4-te1v's
+            # dependency-kind rules instead of treating every edge the same.
             edges.append(
                 DependencyEdgeDoc(
-                    edge_id=_text(document.get("version_id")),
+                    logical_id=_text(document.get("logical_id")),
+                    version_id=_text(document.get("version_id")),
                     source_node_id=_text(source.get("logical_id")),
                     source_version_id=_text(source.get("version_id")),
                     target_node_id=_text(target.get("logical_id")),
                     target_version_id=_text(target.get("version_id")),
+                    dependency_kind=_text(document.get("dependency_kind")) or "information",
+                    activation_condition=(
+                        _text(document.get("activation_condition")) or None
+                    ),
+                    required_outputs=tuple(
+                        str(item) for item in (document.get("required_outputs") or [])
+                        if str(item).strip()
+                    ),
+                    blocks_until=_text(document.get("blocks_until")) or None,
+                    alternative_group_id=(
+                        _text(document.get("alternative_group_id")) or None
+                    ),
                 )
             )
     return FormalSnapshot(
         mapping_domain_id=mapping_domain_id,
         formal_revision_id=formal_revision_id,
         nodes=tuple(node for node in nodes if node.task_node_id),
-        edges=tuple(edge for edge in edges if edge.edge_id),
+        edges=tuple(edge for edge in edges if edge.logical_id),
         latest_published_by=_text(latest_published_by) or None,
     )
 

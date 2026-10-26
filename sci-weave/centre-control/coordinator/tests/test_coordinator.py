@@ -127,13 +127,20 @@ def node(task_node_id: str, version_id: str, executor_refs: tuple[str, ...] = ()
     )
 
 
-def edge(edge_id: str, source: str, target: str, source_v: str, target_v: str):
+def edge(edge_id: str, source: str, target: str, source_v: str, target_v: str, **kwargs):
+    """Versioned edge; edge_id is the logical identity, the version defaults to it.
+
+    ``kwargs`` flow through to the judgment fields (dependency_kind,
+    activation_condition, ...) for the ai4-quvy cases.
+    """
     return DependencyEdgeDoc(
-        edge_id=edge_id,
+        logical_id=edge_id,
+        version_id=f"{edge_id}-v1",
         source_node_id=source,
         source_version_id=source_v,
         target_node_id=target,
         target_version_id=target_v,
+        **kwargs,
     )
 
 
@@ -934,4 +941,166 @@ def test_missing_latest_published_by_is_recorded_not_guessed():
     assert [i.notification_kind for i in notifications.published] == []
     failed = service.store.list_dispatches(statuses=(DISPATCH_FAILED,))
     assert [d.error_summary for d in failed] == ["recipient_unresolved:latest_published_by_missing"]
+    connection.close()
+
+
+# ----------------------------------------------------------- ai4-quvy: dependency kinds
+
+def _two_node_service(connection, snapshot_port, publisher, notifications, agents):
+    service = make_service(connection, snapshot_port, publisher, notifications, agents)
+    service.store.set_latest_revision("map-1", "rev-1")
+    return service
+
+
+def _chain_snapshot(*edge_kwargs):
+    return FormalSnapshot(
+        mapping_domain_id="map-1",
+        formal_revision_id="rev-1",
+        nodes=(
+            node("T1", "v1", ("agent-1",)),
+            node("T2", "v2", ("agent-2",), task_owner_id="owner-1"),
+        ),
+        edges=tuple(edge("e1", "T1", "T2", "v1", "v2", **kwargs) for kwargs in edge_kwargs),
+        latest_published_by="owner-1",
+    )
+
+
+def test_blocking_kind_requires_upstream_completion():
+    """ai4-quvy: blocking edges do not advance until the upstream completion fact exists."""
+    connection = sqlite3.connect(":memory:")
+    snapshot_port = FakeSnapshotPort()
+    snapshot = _chain_snapshot({"dependency_kind": "blocking", "required_outputs": ("data.csv",), "blocks_until": "T1/output"})
+    snapshot_port.set("map-1", "rev-1", snapshot)
+    publisher = FakeHandoffPublisher()
+    service = _two_node_service(
+        connection, snapshot_port, publisher, FakeNotificationPublisher(), FakeAgentAvailability({"agent-1", "agent-2"})
+    )
+    service.on_formal_revision_published("map-1", "rev-1")
+    service.store.set_latest_revision("map-1", "rev-1")
+    service.dispatch_root_task("map-1", "T1", "v1", trigger_revision_id="rev-1")
+    # T1 complete; T2 was blocked - waiting, not dispatched.
+    service.on_formal_revision_published("map-1", "rev-1")
+    pending_t2 = service.store.get_pending_handoff("map-1", "T2", "v2")
+    assert pending_t2 is None or pending_t2.status == PENDING_WAITING
+    service.on_task_completed("map-1", "T1", "v1")
+    assert publisher.published[-1].task_node_id == "T2"
+    assert service.store.get_pending_handoff("map-1", "T2", "v2").status == PENDING_DONE
+    connection.close()
+
+
+def test_conditional_edge_with_condition_parks_and_asks_human():
+    """ai4-quvy: an activation_condition the coordinator cannot evaluate must not auto-advance."""
+    connection = sqlite3.connect(":memory:")
+    snapshot_port = FakeSnapshotPort()
+    snapshot = _chain_snapshot({"dependency_kind": "conditional", "activation_condition": "upstream_output >= threshold"})
+    snapshot_port.set("map-1", "rev-1", snapshot)
+    publisher = FakeHandoffPublisher()
+    notifications = FakeNotificationPublisher()
+    service = _two_node_service(
+        connection, snapshot_port, publisher, notifications,
+        FakeAgentAvailability({"agent-1", "agent-2"}),
+    )
+    service.on_formal_revision_published("map-1", "rev-1")
+    service.store.set_latest_revision("map-1", "rev-1")
+    service.dispatch_root_task("map-1", "T1", "v1", trigger_revision_id="rev-1")
+    service.on_task_completed("map-1", "T1", "v1")
+    # T2 stays waiting with activation_condition_unknown and a human is asked.
+    pending_t2 = service.store.get_pending_handoff("map-1", "T2", "v2")
+    assert pending_t2.status == PENDING_WAITING
+    assert pending_t2.waiting_reason == "activation_condition_unknown"
+    assert [i.notification_kind for i in notifications.published if "激活" in i.subject] != []
+    connection.close()
+
+
+def test_conditional_edge_without_condition_falls_back_to_upstream():
+    """ai4-quvy: a conditional edge with no condition behaves like the completion rule."""
+    connection = sqlite3.connect(":memory:")
+    snapshot_port = FakeSnapshotPort()
+    snapshot = _chain_snapshot({"dependency_kind": "conditional", "activation_condition": None})
+    snapshot_port.set("map-1", "rev-1", snapshot)
+    publisher = FakeHandoffPublisher()
+    service = _two_node_service(
+        connection, snapshot_port, publisher, FakeNotificationPublisher(),
+        FakeAgentAvailability({"agent-1", "agent-2"}),
+    )
+    service.on_formal_revision_published("map-1", "rev-1")
+    service.store.set_latest_revision("map-1", "rev-1")
+    service.dispatch_root_task("map-1", "T1", "v1", trigger_revision_id="rev-1")
+    service.on_task_completed("map-1", "T1", "v1")
+    assert publisher.published[-1].task_node_id == "T2"
+    connection.close()
+
+
+def test_alternative_edge_with_condition_parks_not_guesses():
+    """ai4-quvy: alternative edges must not let the agent pick a route itself."""
+    connection = sqlite3.connect(":memory:")
+    snapshot_port = FakeSnapshotPort()
+    snapshot = _chain_snapshot({"dependency_kind": "alternative", "activation_condition": "route==B", "alternative_group_id": "grp-1"})
+    snapshot_port.set("map-1", "rev-1", snapshot)
+    publisher = FakeHandoffPublisher()
+    service = _two_node_service(
+        connection, snapshot_port, publisher, FakeNotificationPublisher(),
+        FakeAgentAvailability({"agent-1", "agent-2"}),
+    )
+    service.on_formal_revision_published("map-1", "rev-1")
+    service.store.set_latest_revision("map-1", "rev-1")
+    service.dispatch_root_task("map-1", "T1", "v1", trigger_revision_id="rev-1")
+    service.on_task_completed("map-1", "T1", "v1")
+    pending_t2 = service.store.get_pending_handoff("map-1", "T2", "v2")
+    assert pending_t2.status == PENDING_WAITING
+    assert pending_t2.waiting_reason == "activation_condition_unknown"
+    connection.close()
+
+
+# ----------------------------------------------------------- ai4-fu4i: edge version refs
+
+def test_handoff_message_carries_incoming_edge_version_refs():
+    """ai4-fu4i: task_handoff_ready carries the incoming edges' (logical_id, version_id)."""
+    connection = sqlite3.connect(":memory:")
+    snapshot_port = FakeSnapshotPort()
+    snapshot = FormalSnapshot(
+        mapping_domain_id="map-1",
+        formal_revision_id="rev-1",
+        nodes=(node("T1", "v1", ("agent-1",)), node("T2", "v2", ("agent-2",))),
+        edges=(edge("e1", "T1", "T2", "v1", "v2"),),
+    )
+    snapshot_port.set("map-1", "rev-1", snapshot)
+    publisher = FakeHandoffPublisher()
+    service = _two_node_service(
+        connection, snapshot_port, publisher, FakeNotificationPublisher(),
+        FakeAgentAvailability({"agent-1", "agent-2"}),
+    )
+    service.on_formal_revision_published("map-1", "rev-1")
+    service.store.set_latest_revision("map-1", "rev-1")
+    service.dispatch_root_task("map-1", "T1", "v1", trigger_revision_id="rev-1")
+    service.on_task_completed("map-1", "T1", "v1")
+    t2_message = publisher.published[-1]
+    assert t2_message.task_node_id == "T2"
+    # Edge logical_id e1, version default e1-v1 from the test helper.
+    assert t2_message.dependency_edge_version_refs == (("e1", "e1-v1"),)
+    connection.close()
+
+
+def test_handoff_message_edge_refs_stay_array_for_single_edge():
+    """ai4-fu4i: one incoming edge still yields a sequence, not a scalar."""
+    connection = sqlite3.connect(":memory:")
+    snapshot_port = FakeSnapshotPort()
+    snapshot = FormalSnapshot(
+        mapping_domain_id="map-1",
+        formal_revision_id="rev-1",
+        nodes=(node("T1", "v1", ("agent-1",)), node("T2", "v2", ("agent-2",))),
+        edges=(edge("e1", "T1", "T2", "v1", "v2"),),
+    )
+    snapshot_port.set("map-1", "rev-1", snapshot)
+    publisher = FakeHandoffPublisher()
+    service = _two_node_service(
+        connection, snapshot_port, publisher, FakeNotificationPublisher(),
+        FakeAgentAvailability({"agent-1", "agent-2"}),
+    )
+    service.on_formal_revision_published("map-1", "rev-1")
+    service.store.set_latest_revision("map-1", "rev-1")
+    service.dispatch_root_task("map-1", "T1", "v1", trigger_revision_id="rev-1")
+    service.on_task_completed("map-1", "T1", "v1")
+    refs = publisher.published[-1].dependency_edge_version_refs
+    assert isinstance(refs, tuple) and len(refs) == 1
     connection.close()
