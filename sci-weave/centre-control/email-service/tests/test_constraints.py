@@ -72,8 +72,14 @@ def _start(
     monkeypatch.setenv("SCIWEAVE_EMAIL_ISSUER_URL", "http://127.0.0.1/issuer")
     monkeypatch.setenv("SCIWEAVE_EMAIL_RESOURCE_URL", "http://127.0.0.1/email-service")
     monkeypatch.setenv("SCIWEAVE_EMAIL_API_VERSION", API_VERSION)
+    monkeypatch.setenv("SCIWEAVE_EMAIL_REGISTRY_URL", "http://registry.test/mcp")
+    monkeypatch.setenv("SCIWEAVE_EMAIL_REGISTRY_TOKEN", "registry-token")
+    monkeypatch.setenv("SCIWEAVE_EMAIL_REGISTRY_TIMEOUT_SECONDS", "1")
     monkeypatch.setenv("SCIWEAVE_EMAIL_DISPATCH_POLL_SECONDS", "0.05")
     monkeypatch.setenv("SCIWEAVE_EMAIL_RETRY_INITIAL_SECONDS", "30")
+    monkeypatch.setenv("SCIWEAVE_EMAIL_RETRY_MULTIPLIER", "2")
+    monkeypatch.setenv("SCIWEAVE_EMAIL_RETRY_MAX_SECONDS", "60")
+    monkeypatch.setenv("SCIWEAVE_EMAIL_SENDING_TIMEOUT_SECONDS", "30")
     mailbox_names = (
         "SCIWEAVE_EMAIL_FROM_ADDRESS",
         "SCIWEAVE_EMAIL_SMTP_HOST",

@@ -43,6 +43,9 @@ class EmailServiceConfig:
     mailbox: MailboxSettings
     retry: RetrySettings
     kind_allowlist: dict[str, frozenset[str]]
+    registry_url: str
+    registry_token: str
+    registry_timeout_seconds: float
 
     @classmethod
     def from_environment(cls) -> "EmailServiceConfig":
@@ -60,6 +63,9 @@ class EmailServiceConfig:
             "SCIWEAVE_EMAIL_RETRY_MAX_SECONDS",
             "SCIWEAVE_EMAIL_DISPATCH_POLL_SECONDS",
             "SCIWEAVE_EMAIL_SENDING_TIMEOUT_SECONDS",
+            "SCIWEAVE_EMAIL_REGISTRY_URL",
+            "SCIWEAVE_EMAIL_REGISTRY_TOKEN",
+            "SCIWEAVE_EMAIL_REGISTRY_TIMEOUT_SECONDS",
         )
         missing = [name for name in required if not os.environ.get(name)]
         if missing:
@@ -106,6 +112,9 @@ class EmailServiceConfig:
                 max_attempts=_max_attempts(),
             ),
             kind_allowlist=_kind_allowlist(),
+            registry_url=os.environ["SCIWEAVE_EMAIL_REGISTRY_URL"],
+            registry_token=os.environ["SCIWEAVE_EMAIL_REGISTRY_TOKEN"],
+            registry_timeout_seconds=_seconds("SCIWEAVE_EMAIL_REGISTRY_TIMEOUT_SECONDS"),
         )
 
 
