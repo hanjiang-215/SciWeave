@@ -328,24 +328,29 @@ class WikiManagementService:
         domain_id = _required(arguments, "wiki_domain_id")
         if self._candidate_reader is None:
             raise RuntimeError("candidate_reader is not configured")
-        return {
-            "wiki_domain_id": domain_id,
-            "candidates": [
-                {
-                    "submission_id": item.submission_id,
-                    "proposal_id": item.proposal_id,
-                    "submitter_id": item.submitter_id,
-                    "base_formal_revision_id": item.base_formal_revision_id,
-                    "candidate_commit_id": item.candidate_commit_id,
-                    "candidate_head": item.candidate_head,
-                    "proposal_status": item.proposal_status,
-                    "snapshot_status": item.snapshot_status,
-                    "reason_code": item.reason_code,
-                    "documents": list(item.documents),
-                }
-                for item in self._candidate_reader.list_reviewable(domain_id)
-            ],
-        }
+        candidates: list[dict[str, Any]] = []
+        for item in self._candidate_reader.list_reviewable(domain_id):
+            candidate: dict[str, Any] = {
+                "submission_id": item.submission_id,
+                "proposal_id": item.proposal_id,
+                "submitter_id": item.submitter_id,
+                "base_formal_revision_id": item.base_formal_revision_id,
+                "candidate_commit_id": item.candidate_commit_id,
+                "candidate_head": item.candidate_head,
+                "proposal_status": item.proposal_status,
+                "snapshot_status": item.snapshot_status,
+                "reason_code": item.reason_code,
+                "documents": list(item.documents),
+            }
+            if self._prereview_log is not None and item.candidate_head:
+                # Owner-visible prereview gate state (ai4-a2ba): the candidate
+                # blocks on a missing or stale report. candidate_id is the
+                # submission id, matching the governance-event target identity.
+                candidate["prereview_status"] = self._prereview_log.status_for_candidate(
+                    item.submission_id, item.candidate_head,
+                )
+            candidates.append(candidate)
+        return {"wiki_domain_id": domain_id, "candidates": candidates}
 
     def _preview_wiki_review(self, arguments: dict[str, Any], actor_id: str) -> dict[str, Any]:
         result = self._review_service.preview(_required(arguments, "proposal_id"))

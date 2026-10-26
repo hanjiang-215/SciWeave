@@ -455,6 +455,14 @@ class ReviewableWikiCandidatesToolTestCase(unittest.TestCase):
         merged_candidate_service = WikiMergedCandidateService(
             self.sqlite, candidate, service_name="wiki-management",
         )
+        rules_dir = Path(self.tmp.name) / "rules"
+        rules_dir.mkdir()
+        (rules_dir / "1.0.0.json").write_text(
+            json.dumps({"version": "1.0.0", "checks": ["权限范围", "冲突", "影响范围"]}, ensure_ascii=False),
+            encoding="utf-8",
+        )
+        from llm_wiki.prereview import WikiPrereviewLog
+        self.prereview_log = WikiPrereviewLog(self.sqlite, rules_dir=str(rules_dir))
         self.service = WikiManagementService(
             formal_query=formal,
             candidate_service=candidate,
@@ -464,9 +472,11 @@ class ReviewableWikiCandidatesToolTestCase(unittest.TestCase):
                 "submitter": frozenset({"candidate_submit"}),
                 "centre": frozenset({"centre"}),
                 "merger": frozenset({"merged_candidate"}),
+                "prereviewer": frozenset({"prereview_log"}),
             },
             sqlite_store=self.sqlite,
             merged_candidate_service=merged_candidate_service,
+            prereview_log=self.prereview_log,
         )
 
     def _insert_candidate(self, proposal_id="proposal-1", *, submission_id="submission-1",
@@ -520,6 +530,41 @@ class ReviewableWikiCandidatesToolTestCase(unittest.TestCase):
         self.assertEqual(by_proposal["proposal-1"]["snapshot_status"], "available")
         self.assertEqual(by_proposal["proposal-2"]["snapshot_status"], "unavailable")
         self.assertEqual(by_proposal["proposal-2"]["reason_code"], "store_unavailable")
+
+    def test_reviewable_list_exposes_prereview_status(self):
+        """Owner can see whether a wiki candidate is blocked on a missing report."""
+        self._insert_candidate(proposal_id="proposal-1", submission_id="submission-1", commit="candidate-commit")
+        self._insert_candidate(proposal_id="proposal-2", submission_id="submission-2", commit="candidate-commit-2")
+        appended = self.service.call_tool(
+            "append_prereview_log",
+            {"candidate_id": "submission-1", "candidate_head": "candidate-commit",
+             "base_formal_revision_id": BASE, "rule_set_version": "1.0.0",
+             "verdict": "passed",
+             "checks": [{"name": "权限范围", "verdict": "passed"}],
+             "conflict_matrix": []},
+            actor_id="prereviewer",
+        )
+        self.assertEqual(appended.status, "ok")
+        outcome = self.service.call_tool(
+            "list_reviewable_wiki_candidates", {"wiki_domain_id": DOMAIN}, actor_id="reader",
+        )
+        self.assertEqual(outcome.status, "ok")
+        by_submission = {c["submission_id"]: c for c in outcome.result["candidates"]}  # type: ignore[index]
+        self.assertEqual(by_submission["submission-1"]["prereview_status"]["status"], "report_current")
+        self.assertEqual(by_submission["submission-1"]["prereview_status"]["report_id"], appended.result["report_id"])  # type: ignore[index]
+        self.assertEqual(by_submission["submission-2"]["prereview_status"]["status"], "missing_report")
+        invalidated = self.service.call_tool(
+            "append_prereview_log",
+            {"candidate_id": "submission-1", "candidate_head": "candidate-commit", "reason": "base_moved"},
+            actor_id="prereviewer",
+        )
+        self.assertEqual(invalidated.status, "ok")
+        outcome = self.service.call_tool(
+            "list_reviewable_wiki_candidates", {"wiki_domain_id": DOMAIN}, actor_id="reader",
+        )
+        status = outcome.result["candidates"][0]["prereview_status"]  # type: ignore[index]
+        self.assertEqual(status["status"], "report_stale")
+        self.assertEqual(status["reason"], "base_moved")
 
     def test_requires_read_or_centre_capability(self):
         self._insert_candidate()

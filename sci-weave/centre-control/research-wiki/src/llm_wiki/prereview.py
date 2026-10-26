@@ -31,6 +31,8 @@ class PrereviewLogStore(Protocol):
 
     def current_prereview_report(self, candidate_id: str, candidate_head: str) -> dict | None: ...
 
+    def prereview_status(self, candidate_id: str, candidate_head: str) -> dict[str, object]: ...
+
 
 @dataclass(frozen=True)
 class PrereviewOutcome:
@@ -148,3 +150,15 @@ class WikiPrereviewLog:
 
     def current_report(self, candidate_id: str, candidate_head: str) -> dict | None:
         return self._store.current_prereview_report(candidate_id, candidate_head)
+
+    def status_for_candidate(self, candidate_id: str, candidate_head: str) -> dict[str, str]:
+        """Derive the observable prereview state of one candidate head.
+
+        State is a projection of the append-only report log (ai4-oz3s):
+        ``missing_report`` when no report exists, ``report_current`` when a
+        report is the latest conclusion for this head, or ``report_stale``
+        when the latest decision invalidates it (head or base moved). This is
+        what the management surface returns so an Owner can see a candidate
+        blocked on a missing report instead of seeing nothing.
+        """
+        return self._store.prereview_status(candidate_id, candidate_head)
