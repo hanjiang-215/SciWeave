@@ -24,6 +24,7 @@ from research_mapping.management import (
 )
 from research_mapping.management_mcp import create_management_mcp_server
 from research_mapping.sqlite_store import SqliteStore
+from research_mapping.governance_events import RecordingGovernanceEventPublisher
 
 DOMAIN = "domain-1"
 BASE = "formal-1"
@@ -105,6 +106,7 @@ class ManagementServiceTestCase(unittest.TestCase):
         merged_candidate_service = MappingMergedCandidateService(
             self.sqlite, candidate, service_name="mapping-management",
         )
+        self.governance_events = RecordingGovernanceEventPublisher()
         self.service = MappingManagementService(
             formal_query=formal,
             candidate_service=candidate,
@@ -121,6 +123,7 @@ class ManagementServiceTestCase(unittest.TestCase):
             sqlite_store=self.sqlite,
             prereview_log=prereview_log,
             merged_candidate_service=merged_candidate_service,
+            governance_events=self.governance_events,
         )
 
     def test_list_candidates_reads_back_the_persisted_candidate_record(self):
@@ -187,6 +190,19 @@ class ManagementServiceTestCase(unittest.TestCase):
             "submit_candidate", {"change_set": _change_set(), "idempotency_key": "key-2"}, actor_id="reader",
         )
         self.assertEqual(denied.error_code, "forbidden")
+
+    def test_candidate_submit_publishes_governance_event(self) -> None:
+        outcome = self.service.call_tool(
+            "submit_candidate", {"change_set": _change_set(), "idempotency_key": "key-event"}, actor_id="submitter",
+        )
+        self.assertEqual(outcome.status, "ok")
+        self.assertEqual(len(self.governance_events.events), 1)
+        event = self.governance_events.events[0]
+        self.assertEqual(event.event_type, "candidate_created")
+        self.assertEqual(event.mapping_domain_id, DOMAIN)
+        self.assertEqual(event.target["kind"], "candidate")
+        self.assertEqual(event.target["id"], "submission-1")
+        self.assertEqual(event.dedupe_key, f"{DOMAIN}:submission-1:commit-1")
 
     def test_unknown_tool_and_bad_arguments(self):
         outcome = self.service.call_tool("nope", {}, actor_id="reader")

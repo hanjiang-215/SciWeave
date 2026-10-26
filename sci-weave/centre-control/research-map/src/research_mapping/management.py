@@ -22,6 +22,11 @@ from .candidate_domain import CandidateSubmissionResult
 from .candidate_submission import MappingCandidateService
 from .domain import FormalQueryResult
 from .formal_query import FormalQueryService
+from .governance_events import (
+    NoopGovernanceEventPublisher,
+    candidate_event,
+    formal_revision_event,
+)
 
 _READ_CAPABILITIES = frozenset({"read", "centre"})
 _CANDIDATE_SUBMIT_CAPABILITIES = frozenset({"candidate_submit"})
@@ -87,6 +92,7 @@ class MappingManagementService:
         candidate_reader=None,
         prereview_log=None,
         merged_candidate_service=None,
+        governance_events=None,
     ) -> None:
         self._formal_query = formal_query
         self._candidate_service = candidate_service
@@ -99,6 +105,7 @@ class MappingManagementService:
         self._capabilities = caller_capabilities
         self._audit = audit_connection
         self._service = service_name
+        self._governance_events = governance_events or NoopGovernanceEventPublisher()
 
     def call_tool(self, tool: str, arguments: dict[str, Any], *, actor_id: str, channel_id: str = "mcp", caller_type: str = "agent") -> ManagementCallOutcome:
         handler = self._handlers().get(tool)
@@ -326,6 +333,16 @@ class MappingManagementService:
         if not isinstance(change_set, dict):
             raise ValueError("change_set is required")
         result = self._candidate_service.submit(change_set, idempotency_key)
+        if result.status in {"submitted", "confirmed", "ok"}:
+            domain_id = str(change_set.get("mapping_domain_id") or arguments.get("mapping_domain_id") or "")
+            self._publish_safely(
+                candidate_event(
+                    mapping_domain_id=domain_id,
+                    submission_id=result.submission_id,
+                    proposal_id=result.proposal_id,
+                    candidate_head=result.commit_hash or result.candidate_commit_id,
+                )
+            )
         return _candidate_result(result)
 
     def _preview_candidate(self, arguments: dict[str, Any], actor_id: str) -> dict[str, Any]:
@@ -365,7 +382,27 @@ class MappingManagementService:
             _required(arguments, "merge_request_id"),
             _required(arguments, "operation_id"),
         )
+        if outcome.status == "succeeded" and outcome.formal_revision_id:
+            self._publish_safely(
+                formal_revision_event(
+                    mapping_domain_id=_text(arguments.get("mapping_domain_id")) or "",
+                    formal_revision_id=outcome.formal_revision_id,
+                    merge_request_id=arguments.get("merge_request_id"),
+                )
+            )
         return _formalization_outcome(outcome)
+
+    def _publish_safely(self, event) -> None:
+        """Publish one governance event without breaking the domain write.
+
+        A queue outage must not roll back an already-persisted governance fact;
+        the event is best-effort notification and Centre Agent recovers via
+        full-snapshot scans and formal-revision events.
+        """
+        try:
+            self._governance_events.publish(event)
+        except Exception:
+            return
 
     def _reconcile_formalization(self, arguments: dict[str, Any], actor_id: str) -> dict[str, Any]:
         outcome = self._formalization_service.reconcile(_required(arguments, "operation_id"))
