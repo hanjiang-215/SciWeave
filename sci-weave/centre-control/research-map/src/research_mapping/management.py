@@ -548,7 +548,7 @@ TOOL_DEFINITIONS = [
     },
     {
         "name": "append_prereview_log",
-        "description": "Append one prereview report, or one invalidation decision, to the Mapping governance log. Append-only: reports and decisions are never edited. Passing ``reason`` (head_moved/base_moved) appends an invalidation decision; otherwise a report row is appended under the (candidate_id, candidate_head, rule_set_version) unique key. Requires the centre capability.",
+        "description": "Append one prereview report, or one invalidation decision, to the Mapping governance log. Append-only: reports and decisions are never edited. Passing ``reason`` (head_moved/base_moved) appends an invalidation decision; otherwise a report row is appended under the (candidate_id, candidate_head, rule_set_version, base_formal_revision_id) unique key. Requires the centre capability.",
         "inputSchema": {
             "type": "object",
             "required": ["candidate_id", "candidate_head"],
