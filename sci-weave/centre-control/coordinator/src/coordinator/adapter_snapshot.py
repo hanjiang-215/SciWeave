@@ -181,6 +181,13 @@ def _build_snapshot(
                 )
             )
         elif dtype == "DependencyEdge":
+            # Deliberately NOT projected: dependency_kind,
+            # activation_condition, required_outputs and blocks_until.
+            # DependencyEdgeDoc has no fields for them yet and the
+            # dependency-kind judgement is its own piece of work (ai4-quvy);
+            # adding the fields here first would weld this adapter to a
+            # decision that has not been made. When they are projected, this
+            # is the only place to change.
             source = _parse_ref(document.get("source_node_version_ref"))
             target = _parse_ref(document.get("target_node_version_ref"))
             edges.append(
