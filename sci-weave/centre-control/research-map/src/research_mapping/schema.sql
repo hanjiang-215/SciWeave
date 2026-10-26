@@ -207,19 +207,23 @@ CREATE TABLE IF NOT EXISTS mapping_current_formal_revision (
 );
 
 -- Centre Agent prereview report log (ai4-oz3s): append-only, unique per
--- (candidate_id, candidate_head, rule_set_version). SQLite never edits a
--- report row; invalidation is expressed by appended decision rows.
+-- (candidate_id, candidate_head, rule_set_version, base_formal_revision_id).
+-- SQLite never edits a report row; invalidation is expressed by appended
+-- decision rows. The base revision is part of the key because a re-review
+-- after ``base_moved`` judges the same head against a different base and must
+-- append a new report instead of colliding with the invalidated one
+-- (ai4-sf8l).
 CREATE TABLE IF NOT EXISTS mapping_prereview_report (
     report_id               TEXT PRIMARY KEY,
     candidate_id            TEXT NOT NULL,
     candidate_head          TEXT NOT NULL,
-    base_formal_revision_id TEXT,
+    base_formal_revision_id TEXT NOT NULL DEFAULT '',
     rule_set_version        TEXT NOT NULL,
     checks                  TEXT NOT NULL,
     verdict                 TEXT NOT NULL CHECK (verdict IN ('passed', 'failed')),
     conflict_matrix         TEXT NOT NULL,
     created_at              TEXT NOT NULL,
-    UNIQUE (candidate_id, candidate_head, rule_set_version)
+    UNIQUE (candidate_id, candidate_head, rule_set_version, base_formal_revision_id)
 );
 
 CREATE TABLE IF NOT EXISTS mapping_prereview_report_decision (
