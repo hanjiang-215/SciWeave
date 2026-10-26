@@ -18,24 +18,78 @@ tags: [wayfinder:grilling]
 
 ## Acceptance Criteria
 
-形成可交给后续实现规划的消息协作领域规格，至少明确 topic/订阅、消息类型与载荷边界、接收者交接/阻塞完成语义、前置任务条件及失败/超时处理；具体基础设施选型另行决策。
-
-> 修订（2026-10-21）：「具体基础设施选型另行决策」已完成，Redpanda 已定，见 `docs/TECH_STACK.md`。本票的验收改为在其之上定义主题、分区、消费者组、保留期与 offset 提交语义。
+- [ ] 明确逻辑 topic 家族与物理 topic 的关系，不按 TaskNode 或 Workflow 实例动态创建 topic。
+- [ ] 明确 `dependency-notice`、`task-handoff`、`governance-events` 的物理 topic、消息类型和消费者关系。
+- [ ] 明确首版不消费 Redpanda `notification-intent`，通知通过 email-service MCP 传递。
+- [ ] 明确 `task_handoff_ready` 的 Agent 路由、`target_node_id` 分区键和消费者组命名。
+- [ ] 明确统一消息信封、schema 版本、幂等键和核心业务载荷。
+- [ ] 明确至少一次投递、业务完成后提交 offset、重复投递幂等和失败处置。
+- [ ] 明确队列短期恢复、端侧 Inbox、协调记录和消息过期补偿的三层恢复边界。
+- [ ] 形成可供真实 Redpanda producer/consumer 和 `deploy-task-agent` subscriber 实现票引用的协议；本票不选择具体 Python 客户端。
 
 ## Current design boundary
 
-以下内容已作为本票继续讨论的工作基线，交接协调服务的最终归属由子票「交接协调服务的职责、存储边界与 centre-control 部署形态」裁决：
+本票现在承载 Redpanda 已选定基础设施之上的消息语义，不承载具体客户端实现。逻辑 topic 家族与物理 topic 分开定义：
 
-- 业务上按目标 TaskNode 形成逻辑消息频道；不要求 Agent 从上游消息中自行过滤任务。
-- 物理上使用四个固定 topic：`sciweave.dependency-notice`、`sciweave.task-handoff`、`sciweave.governance-events`、`sciweave.notification-intent`，不为每个 TaskNode 或每个 Workflow 动态创建 Redpanda topic。
-- `dependency-notice` 的主消费者是交接协调服务，负责读取正式 Mapping、重算依赖、维护 `PendingHandoff` 和 `HandoffDispatch`，不能直接创建 Task Agent 的 `ExecutionRecord`。
-- `task-workflow` 接收 `task_handoff_ready` 并创建 Task Agent 执行；任务交接物理 topic 使用 `sciweave.task-handoff.<agent_id>` 模板，不按 TaskNode 动态创建；`centre-workflow` 接收可扩展的治理事件订阅；`email-service` 只接收 `human_notification_intent` 并投递人工通知。
-- 当前 Centre Agent 是 `centre-workflow` 的一个预审 Workflow，后续可增加其他中央 Workflow；每个 Workflow 使用独立订阅声明和消费者组。
-- `TaskNode.executor_refs` 决定 Task Agent 执行关系；Registry 只提供身份和实例登记事实，不授予权限。
-- 消息交接必须精确引用源节点版本、目标节点版本、DependencyEdge 版本和正式 Mapping 版本；目标节点逻辑 ID或目标版本引用作为路由/分区键。
-- 服务启动时恢复分为三层：同一消费者组继续消费未提交 offset，扫描未完成的 `PendingHandoff`/`HandoffDispatch`，并依据正式 Mapping 做消息过期后的补偿重算。
-- `centre-agents` 是 Centre Agent 预审服务，不承担全局依赖重算；邮件服务不判断是否可以执行。
-- PO 的候选裁决和根任务第一条消息均通过最高权限领域 MCP 完成；根任务使用幂等 `dispatch_root_task`，候选不支持 `defer`，返修必须指定负责人。
+- `dependency-notice` 家族使用物理 topic `sciweave.dependency-notice`。
+- `task-handoff` 家族使用 `sciweave.task-handoff.<agent_id>`；不按 TaskNode、Workflow 实例或 ExecutionRecord 动态创建 topic。
+- `governance-events` 家族使用物理 topic `sciweave.governance-events`；不同中央 Workflow 使用不同 consumer group 隔离消费。
+- 首版不使用 `sciweave.notification-intent`。`human_notification_intent` 通过 email-service 的受鉴权 MCP 传递，email-service 不消费 Redpanda 通知 topic。
+- `dependency-notice` 的主消费者是 handoff coordinator，负责读取正式 Mapping、重算依赖、维护 `PendingHandoff` 和 `HandoffDispatch`，不能直接创建 Task Agent 的 `ExecutionRecord`。
+- `task-workflow` 接收 `task_handoff_ready` 并创建 Task Agent 执行；`centre-workflow` 及后续中央 Workflow 订阅治理事件。
+- `TaskNode.executor_refs` 决定 Task Agent 执行资格；Registry 只提供身份和实例登记事实，不授予权限。
+- `task_handoff_ready` 使用 `target_node_id` 作为分区键；消息载荷仍精确引用源节点版本、目标节点版本、DependencyEdge 版本和正式 Mapping 版本。
+- 消息采用至少一次投递；同一目标按顺序处理；消费者完成业务处理后提交 offset；重复投递使用 `dedupe_key` 和本地唯一约束幂等处理。
+- 服务启动恢复采用三层模型：同一消费者组继续消费未提交 offset；扫描未完成的 `PendingHandoff`、`HandoffDispatch` 和端侧 Inbox；消息过期后依据正式 Mapping 与未完成本地事实补偿重算。
+- 队列保留期只是短期离线恢复窗口，不是业务事实保存期限。消息过期后由协调事实和正式 Mapping 补偿，不新增独立死信 topic。
+- `centre-agents` 是 Centre Workflow 的预审实现，不承担全局依赖重算；PO 的候选裁决和根任务分派通过最高权限领域 MCP 完成，根任务使用幂等 `dispatch_root_task`。
+
+### 首版消息类型
+
+- `sciweave.dependency-notice`：`formal_revision_published`、`task_completed`。
+- `sciweave.task-handoff.<agent_id>`：`task_handoff_ready`。
+- `sciweave.governance-events`：`candidate_created`、`candidate_head_updated`、`formal_revision_published`。
+- `human_notification_intent`、`task_terminal_summary` 不进入首版 Redpanda；`task_failed` 不触发下游完成，保存在 Task Agent 执行事实中；`root_task_dispatched` 不作为额外事件，根任务直接产生 `task_handoff_ready`。
+
+### 统一消息信封
+
+所有 Redpanda 业务消息使用统一信封，业务字段放在 `payload`：
+
+- `message_id`：一次发布消息的唯一标识。
+- `message_type`：消息类型。
+- `schema_version`：消息 schema 主版本，首版为 `1`。
+- `dedupe_key`：业务幂等键，重试发布时保持不变。
+- `occurred_at`、`published_at`：事件发生和发布的时间。
+- `producer`：生产服务及可选实例标识。
+- `routing`：分区键及任务交接时的 `target_agent_id`。
+- `payload`：业务载荷。
+
+`task_handoff_ready` 的载荷至少包含 `target_agent_id`、`target_node_id`、`target_node_version_ref`、`mapping_domain_id`、`pending_handoff_id`、`trigger_revision_id`、`upstream_source_refs` 和 `executor_ref_snapshot`。`executor_ref_snapshot` 仅用于审计，不能替代当前正式 Map 校验。
+
+`task_completed` 的载荷至少包含 `mapping_domain_id`、`task_node_id`、`completed_version_ref`、`execution_id`、`draft_id`、`completed_at` 和 `result_ref`；只有草稿箱写入成功且 ExecutionRecord 保存 `completed` 与 `draft_id` 后才发布。
+
+### 消息生产者与消费者
+
+- `formal_revision_published` 由领域正式化流程生产；handoff coordinator 与 Centre Workflow 按各自 consumer group 消费，不由 PO、Task Agent 或 coordinator 伪造。
+- `task_completed` 由 Task Agent Worker 在 ExecutionRecord 保存 `completed` 且草稿箱写入成功后生产；handoff coordinator 消费。邮件发送成功、Worker 进入 `waiting`、失败或取消均不产生该事件。
+- `task_handoff_ready` 由 handoff coordinator 唯一生产；根任务 `dispatch_root_task` 复用同一发布端口。Task Agent 和 Centre Agent 不得直接发布。
+- `candidate_created`、`candidate_head_updated` 由候选领域管理流程生产，由 Centre Workflow 消费；Centre Agent 不生产治理事件。
+- 首版治理事件的具体生产调用点必须由领域管理实现票保证与相应领域事实写入一致；本票不规定跨服务原子事务实现。
+
+### 消费者组
+
+- handoff coordinator：`sciweave.handoff-coordinator`。
+- Task Agent：`sciweave.task-workflow.<mapping_domain_id>.<agent_id>`。
+- Centre Workflow：`sciweave.centre-workflow.<workflow_id>`。
+
+同一逻辑 Agent 或 Workflow 的多个实例共享同一 consumer group 并竞争消费；consumer group 不包含随机实例 ID。
+
+### 失败与恢复
+
+- 未知消息类型、不支持的主版本、错误目标 Agent 或正式版本校验失败，写入可观察 Inbox 错误状态，不静默丢弃。
+- 依赖暂时不可用、连接超时等可恢复故障进入可重试状态并采用退避；消息格式错误、未知主版本、错误目标 Agent 或正式版本校验失败进入可观察的永久 Inbox 状态，不静默丢弃。
+- offset 提交失败允许消息重放；`dedupe_key` 防止重复业务执行。
+- `result_unknown`、可重试失败和未绑定 Workflow 的消息由启动扫描恢复；已过期队列消息由正式 Mapping 和本地事实补偿发现。
 
 ## Notes
 
@@ -116,9 +170,34 @@ tags: [wayfinder:grilling]
 - [Agent 注册、Map 执行关系与消息订阅边界](ai4-0s02)：`TaskNode.executor_refs` 直接引用 Workflow Agent 的稳定 `agent_id`，是正式任务分配和消息路由依据；Registry 只登记主体、Workflow Agent 和运行实例的基本事实，不保存 TaskNode 关系，Agent 离线或注销不自动修改 Map。
 - [email-service 通知意图协议与投递状态规格](ai4-f985)：首版只走受鉴权 MCP，不消费通知 topic；投递状态独立保存，邮件成败不改变领域事实。实现票不再受这张规格票阻塞。
 
-## Not yet specified
+## Next implementation boundary
 
-- [交接协调服务的职责、存储边界与 centre-control 部署形态](ai4-p5f3)：明确交接协调服务的中央部署、等待事实、派发恢复和多目标事件边界。
-- [Research Mapping 正式快照查询接口与交接协调服务访问边界](ai4-2982)：明确交接协调服务如何通过稳定领域接口读取正式 Mapping，避免直连领域存储。
-- [研究员 Task Agent 动态订阅 task-workflow 交接消息](ai4-nfty)：明确新建 Workflow 后端侧 Agent 如何根据正式 `executor_refs` 发现、订阅和恢复任务交接。
-- [handoff coordinator 依赖重算与派发恢复规格](ai4-zc85)：定义协调核心的输入、输出、等待状态和恢复契约，完成后才进入服务实现。
+本票完成消息语义收敛后，后续实现不得直接假定具体 Python Redpanda 客户端。实现票必须单独记录客户端选型、版本约束、许可证、锁文件和验证命令。
+
+已有规格与实现票继续承担各自边界：
+
+- `ai4-p5f3`：handoff coordinator 的部署和职责边界。
+- `ai4-zc85` / `ai4-1y6q`：协调核心的状态、重算、重试和恢复；`ai4-1y6q` 已完成 Fake ports 实现，不包含真实 Redpanda 适配。
+- `ai4-nfty`：Task Agent 动态订阅、Inbox、consumer group 和补偿；其真实 Redpanda subscriber 适配待实现票承接。
+- `ai4-za77`：研究员 Task Agent 套件收口；真实 subscriber、启动脚本和端到端队列链路必须引用本票最终协议。
+
+不在本票中直接实现 Redpanda producer/consumer、Task Agent subscriber 或 coordinator 的部署适配。
+
+## Decisions so far
+
+- [Agent 注册、Map 执行关系与消息订阅边界](ai4-0s02)：`TaskNode.executor_refs` 直接引用 Workflow Agent 的稳定 `agent_id`，是正式任务分配和消息路由依据；Registry 只登记主体、Workflow Agent 和运行实例的基本事实，不保存 TaskNode 关系，Agent 离线或注销不自动修改 Map。
+- [email-service 通知意图协议与投递状态规格](ai4-f985)：首版只走受鉴权 MCP，不消费通知 topic；投递状态独立保存，邮件成败不改变领域事实。
+- 首版任务下发使用 Redpanda；首版通知使用 email-service 受鉴权 MCP，不消费通知 topic。
+- 任务交接使用 `sciweave.task-handoff.<agent_id>`，同一逻辑 Agent 的多个实例共享派生 consumer group。
+- 消息至少一次投递，业务完成后提交 offset，重复消息按 `dedupe_key` 幂等处理。
+
+**2026-10-26 Grill-with-docs 收敛结论（Frank Qi）**
+
+本轮确认并回写以下决策：
+
+- 逻辑 topic 家族与物理 topic 分离；任务交接使用 `sciweave.task-handoff.<agent_id>`，治理事件使用共享 `sciweave.governance-events`，不按 TaskNode 或 Workflow 实例动态建 topic。
+- 首版移除 `sciweave.notification-intent` 队列入口，`human_notification_intent` 只通过 email-service 受鉴权 MCP 传递。
+- 首版消息类型、唯一生产者、统一消息信封、核心 payload、`target_node_id` 分区键和 consumer group 命名已确定。
+- 消息采用至少一次投递，业务完成后提交 offset，重复消息按 `dedupe_key` 幂等；未知类型、版本不兼容、目标错误和正式版本校验失败必须进入可观察 Inbox 状态。
+- 队列保留期只提供短期离线恢复窗口；恢复依靠 consumer group、端侧 Inbox、协调记录和正式 Mapping 补偿，不新增独立死信 topic。
+- 本票只定义协议，不选择或引入具体 Python Redpanda 客户端；真实 producer/consumer、coordinator 适配和 `deploy-task-agent` subscriber 由后续实现票承接。
