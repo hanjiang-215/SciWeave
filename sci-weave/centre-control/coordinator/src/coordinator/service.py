@@ -501,7 +501,12 @@ class CoordinatorService:
         self.store.set_dispatch_status(dispatch.dispatch_id, DISPATCH_PUBLISHED, attempt_count=1)
 
     def _record_unresolved_recipient(
-        self, snapshot: FormalSnapshot, pending: PendingHandoff, trigger: str, reason: str
+        self,
+        snapshot: FormalSnapshot,
+        pending: PendingHandoff,
+        trigger: str,
+        reason: str,
+        message_type: str = MSG_HUMAN_NOTIFICATION,
     ) -> None:
         """Keep an observable record when no notification could be addressed.
 
@@ -510,8 +515,8 @@ class CoordinatorService:
         """
         failed_dispatch = self.store.create_dispatch(
             pending.pending_handoff_id,
-            self._dedupe(snapshot.mapping_domain_id, pending, MSG_HUMAN_NOTIFICATION, trigger),
-            MSG_HUMAN_NOTIFICATION,
+            self._dedupe(snapshot.mapping_domain_id, pending, message_type, trigger),
+            message_type,
             None,
         )
         if failed_dispatch is not None:
@@ -560,6 +565,24 @@ class CoordinatorService:
         # published the formal revision, not the mapping domain id.
         recipient = snapshot.latest_published_by
         if not recipient:
+            # ai4-xkbd: same rule as a missing task owner - say so instead of
+            # leaving the chain's end unrecorded.
+            self._record_unresolved_recipient(
+                snapshot,
+                pending,
+                trigger,
+                "recipient_unresolved:latest_published_by_missing",
+                MSG_TERMINAL_SUMMARY,
+            )
+            return
+        if self.principals.state_of(recipient) is PrincipalState.ABSENT:
+            self._record_unresolved_recipient(
+                snapshot,
+                pending,
+                trigger,
+                "recipient_unresolved:principal_absent",
+                MSG_TERMINAL_SUMMARY,
+            )
             return
         dedupe_key = self._dedupe(
             snapshot.mapping_domain_id, pending, MSG_TERMINAL_SUMMARY, trigger
@@ -572,7 +595,7 @@ class CoordinatorService:
         try:
             self.notifications.publish(
                 NotificationIntent(
-                    notification_kind="task_terminal_summary",
+                    notification_kind=NOTIFY_TERMINAL_SUMMARY,
                     recipients=(recipient,),
                     subject="任务链已到终点",
                     body=f"TaskNode {task_node_id} 无后继节点，工作流已结束。",

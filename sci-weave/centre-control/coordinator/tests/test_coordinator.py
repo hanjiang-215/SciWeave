@@ -912,3 +912,26 @@ def test_an_illegal_transition_keeps_the_stored_status_and_the_round_advances():
     # waiting fact instead of dying on T2.
     assert service.store.get_pending_handoff("map-1", "T3", "v3").status == PENDING_WAITING
     connection.close()
+
+def test_missing_latest_published_by_is_recorded_not_guessed():
+    """ai4-xkbd: a chain with no approver must not invent a recipient."""
+    connection = sqlite3.connect(":memory:")
+    snapshot_port = FakeSnapshotPort()
+    snapshot = FormalSnapshot(
+        mapping_domain_id="map-1",
+        formal_revision_id="rev-1",
+        nodes=(node("T1", "v1", ("agent-1",), task_owner_id="owner-1"),),
+    )
+    snapshot_port.set("map-1", "rev-1", snapshot)
+    notifications = FakeNotificationPublisher()
+    service = make_service(
+        connection, snapshot_port, FakeHandoffPublisher(), notifications, FakeAgentAvailability({"agent-1"})
+    )
+    service.store.set_latest_revision("map-1", "rev-1")
+
+    service.dispatch_root_task("map-1", "T1", "v1", trigger_revision_id="rev-1")
+
+    assert [i.notification_kind for i in notifications.published] == []
+    failed = service.store.list_dispatches(statuses=(DISPATCH_FAILED,))
+    assert [d.error_summary for d in failed] == ["recipient_unresolved:latest_published_by_missing"]
+    connection.close()
