@@ -15,18 +15,21 @@
 - **派发发布**：`adapter_publisher.py` 用 kafka-python 向 `sciweave.task-handoff.<agent_id>` 发布 `task_handoff_ready`（消息交接恢复契约的固定物理 topic）。
 - **执行者可用性**：`adapter_registry.py` 经 Registry MCP `get_agent_registration` 查询，返回 `AgentState`：`active` 且有 `online` 实例为 `available`；注册存在但不可运行为 `unavailable`；Registry 明确回 `agent_not_found` 才是 `unregistered`；查询不到（超时、拒绝、存储故障）为 `unknown`，不据此断言执行者已不存在。Registry 事实不构成执行授权。
 
-## 人工通知的三类原因
+## 人工通知的四类原因
 
-执行者不可用时保留 `waiting` 并生成一条 `human_notification_intent`，`notification_kind` 取决定收件人下一步动作的那一种：
+需要人介入时保留 `waiting` 并生成一条 `human_notification_intent`，`notification_kind` 取决定收件人下一步动作的那一种：
 
 | 场景 | `notification_kind` | 收件人 |
 | --- | --- | --- |
+| 入边带激活条件、协调无法自动判定 | `dependency_condition_hold` | 该节点 `task_owner_id` |
 | `executor_refs` 为空 | `workflow_binding_required` | 该节点 `task_owner_id` |
 | `executor_refs` 指向未登记的 `agent_id` | `workflow_load_failed` | 该节点 `task_owner_id` |
 | 已注销、无可用实例、或只配置人工处理 | `agent_unavailable` | 该节点 `task_owner_id` |
 | 派发成功的节点无后继 | `task_terminal_summary` | `FormalSnapshot.latest_published_by` |
 
 发送前经 `PrincipalDirectoryPort` 校验收件人：`absent` 不发送、保留 `waiting` 并记录 `recipient_unresolved:principal_absent`；`unknown`（目录查不到）fail-open 照发——Registry 不可用时静默丢掉全部通知比偶尔误发更糟。
+
+通知的去重键是 `mapping_domain_id:task_node_id:target_node_version_ref:message_type:<kind>`：同一节点版本上「条件待判定」与「执行者不可用」是两条不同的事实，键里不带 kind 时后一条会被当成重复而静默跳过。`task_handoff_ready` 与 `task_terminal_summary` 不带这个后缀——它们本来就是每节点版本一条。重试时从键里取回原来的 kind，不按当前状态重算，否则重试可能把邮件换成另一种原因。
 
 ## 快照不可读
 

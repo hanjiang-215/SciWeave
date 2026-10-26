@@ -57,7 +57,22 @@ class EdgeGate:
 NOTIFY_WORKFLOW_BINDING_REQUIRED = "workflow_binding_required"
 NOTIFY_WORKFLOW_LOAD_FAILED = "workflow_load_failed"
 NOTIFY_AGENT_UNAVAILABLE = "agent_unavailable"
+# ai4-lu7y: a dependency condition the coordinator cannot evaluate is a
+# fourth reason to ask a human, and it is not about the executor at all --
+# reusing agent_unavailable pointed the owner at the wrong thing.
+NOTIFY_DEPENDENCY_CONDITION_HOLD = "dependency_condition_hold"
 NOTIFY_TERMINAL_SUMMARY = "task_terminal_summary"
+
+#: Kinds that travel as ``human_notification_intent``; they discriminate the
+#: dispatch dedupe key, so this set is what makes the key recoverable.
+HUMAN_NOTIFICATION_KINDS = frozenset(
+    {
+        NOTIFY_WORKFLOW_BINDING_REQUIRED,
+        NOTIFY_WORKFLOW_LOAD_FAILED,
+        NOTIFY_AGENT_UNAVAILABLE,
+        NOTIFY_DEPENDENCY_CONDITION_HOLD,
+    }
+)
 
 
 class CoordinatorService:
@@ -229,48 +244,13 @@ class CoordinatorService:
         )
         if pending is None:
             return
-        recipient = node.task_owner_id
-        if not recipient:
-            self._record_unresolved_recipient(
-                snapshot, pending, trigger, "recipient_unresolved:task_owner_id_missing"
-            )
-            return
-        if self.principals.state_of(recipient) is PrincipalState.ABSENT:
-            self._record_unresolved_recipient(
-                snapshot, pending, trigger, "recipient_unresolved:principal_absent"
-            )
-            return
-        dedupe_key = self._dedupe(
-            snapshot.mapping_domain_id, pending, MSG_HUMAN_NOTIFICATION, trigger
+        self._publish_human_notification(
+            snapshot,
+            pending,
+            trigger,
+            NOTIFY_DEPENDENCY_CONDITION_HOLD,
+            node.executor_refs,
         )
-        dispatch = self.store.create_dispatch(
-            pending.pending_handoff_id, dedupe_key, MSG_HUMAN_NOTIFICATION, None
-        )
-        if dispatch is None or dispatch.status in (DISPATCH_PUBLISHED,):
-            return
-        try:
-            self.notifications.publish(
-                NotificationIntent(
-                    notification_kind=NOTIFY_AGENT_UNAVAILABLE,
-                    recipients=(recipient,),
-                    subject="任务交接等待激活条件判定",
-                    body=(
-                        f"TaskNode {node.task_node_id} 有依赖边带激活条件，交接协调无法自动判定，"
-                        "需要人工判断条件是否满足后继续。"
-                    ),
-                    related={
-                        "mapping_domain_id": snapshot.mapping_domain_id,
-                        "task_node_id": node.task_node_id,
-                        "reason": gate.reason or "",
-                    },
-                )
-            )
-        except Exception as exc:
-            self.store.set_dispatch_status(
-                dispatch.dispatch_id, DISPATCH_RESULT_UNKNOWN, error_summary=str(exc), attempt_count=1
-            )
-            return
-        self.store.set_dispatch_status(dispatch.dispatch_id, DISPATCH_PUBLISHED, attempt_count=1)
 
     def _evaluate_snapshot(self, snapshot: FormalSnapshot, trigger_revision_id: str) -> None:
         node_ids = {node.task_node_id for node in snapshot.nodes}
@@ -580,47 +560,76 @@ class CoordinatorService:
         notification_kind: str,
     ) -> None:
         node = snapshot.node_by_id(pending.task_node_id)
+        self._publish_human_notification(
+            snapshot,
+            pending,
+            trigger,
+            notification_kind,
+            node.executor_refs if node is not None else (),
+        )
+
+    def _publish_human_notification(
+        self,
+        snapshot: FormalSnapshot,
+        pending: PendingHandoff,
+        trigger: str,
+        notification_kind: str,
+        executor_refs: tuple[str, ...],
+    ) -> bool:
+        """Send one human notification for one reason.
+
+        Returns True when it was published (or already had been). Callers own
+        the PendingHandoff status: this only decides whether a notification
+        may be addressed at all, so the same gate applies to every kind.
+        """
+        node = snapshot.node_by_id(pending.task_node_id)
         recipient = node.task_owner_id if node is not None else None
         # ai4-f985: one notification has exactly one recipient, the task
-        # owner's principal_id. A missing owner means corrupt data: keep the
-        # waiting fact, do not guess a recipient, and surface the gap.
+        # owner's principal_id. A missing owner means corrupt data: do not
+        # guess a recipient, and surface the gap.
         if not recipient:
-            self.store.set_pending_handoff_status(
-                snapshot.mapping_domain_id,
-                pending.task_node_id,
-                pending.target_node_version_ref,
-                PENDING_WAITING,
-            )
             self._record_unresolved_recipient(
-                snapshot, pending, trigger, "recipient_unresolved:task_owner_id_missing"
+                snapshot,
+                pending,
+                trigger,
+                "recipient_unresolved:task_owner_id_missing",
+                notification_kind=notification_kind,
             )
-            return
+            return False
         # ai4-xkbd: validate the recipient before sending. ABSENT is a fact
         # (the principal does not exist or is inactive) and suppresses the
         # send; UNKNOWN means the directory could not be consulted, and
         # failing closed there would stop every notification whenever the
         # Registry is down -- a worse outcome than an occasional misdelivery.
         if self.principals.state_of(recipient) is PrincipalState.ABSENT:
-            self.store.set_pending_handoff_status(
-                snapshot.mapping_domain_id,
-                pending.task_node_id,
-                pending.target_node_version_ref,
-                PENDING_WAITING,
-            )
             self._record_unresolved_recipient(
-                snapshot, pending, trigger, "recipient_unresolved:principal_absent"
+                snapshot,
+                pending,
+                trigger,
+                "recipient_unresolved:principal_absent",
+                notification_kind=notification_kind,
             )
-            return
+            return False
+        # ai4-lu7y: the kind is part of the key. Without it, a node version
+        # that first parked on a dependency condition could never tell its
+        # owner that the executor had also gone away -- the second
+        # notification collided with the first and was skipped as published.
         dedupe_key = self._dedupe(
-            snapshot.mapping_domain_id, pending, MSG_HUMAN_NOTIFICATION, trigger
+            snapshot.mapping_domain_id,
+            pending,
+            MSG_HUMAN_NOTIFICATION,
+            trigger,
+            discriminator=notification_kind,
         )
         dispatch = self.store.create_dispatch(
             pending.pending_handoff_id, dedupe_key, MSG_HUMAN_NOTIFICATION, None
         )
-        if dispatch is None or dispatch.status in (DISPATCH_PUBLISHED,):
-            return
+        if dispatch is None:
+            return False
+        if dispatch.status in (DISPATCH_PUBLISHED,):
+            return True
         subject, body = self._human_notification_content(
-            notification_kind, pending.task_node_id, node.executor_refs if node else ()
+            notification_kind, pending.task_node_id, executor_refs
         )
         try:
             self.notifications.publish(
@@ -640,8 +649,9 @@ class CoordinatorService:
             self.store.set_dispatch_status(
                 dispatch.dispatch_id, DISPATCH_RESULT_UNKNOWN, error_summary=str(exc), attempt_count=1
             )
-            return
+            return False
         self.store.set_dispatch_status(dispatch.dispatch_id, DISPATCH_PUBLISHED, attempt_count=1)
+        return True
 
     def _record_unresolved_recipient(
         self,
@@ -650,6 +660,7 @@ class CoordinatorService:
         trigger: str,
         reason: str,
         message_type: str = MSG_HUMAN_NOTIFICATION,
+        notification_kind: str | None = None,
     ) -> None:
         """Keep an observable record when no notification could be addressed.
 
@@ -658,7 +669,13 @@ class CoordinatorService:
         """
         failed_dispatch = self.store.create_dispatch(
             pending.pending_handoff_id,
-            self._dedupe(snapshot.mapping_domain_id, pending, message_type, trigger),
+            self._dedupe(
+                snapshot.mapping_domain_id,
+                pending,
+                message_type,
+                trigger,
+                discriminator=notification_kind,
+            ),
             message_type,
             None,
         )
@@ -671,12 +688,18 @@ class CoordinatorService:
     def _human_notification_content(
         notification_kind: str, task_node_id: str, executor_refs: tuple[str, ...]
     ) -> tuple[str, str]:
-        """Subject and body for each "no usable executor" case.
+        """Subject and body for each reason a human has to step in.
 
-        The three kinds exist because the owner's next action differs: bind a
-        workflow, correct an agent id, or restore an instance. A shared body
-        would leave the owner guessing which of those applies.
+        The kinds exist because the owner's next action differs: judge a
+        condition, bind a workflow, correct an agent id, or restore an
+        instance. A shared body would leave the owner guessing which applies.
         """
+        if notification_kind == NOTIFY_DEPENDENCY_CONDITION_HOLD:
+            return (
+                "任务交接等待激活条件判定",
+                f"TaskNode {task_node_id} 的入边带激活条件，交接协调无法自动判定，"
+                "因此没有放行。请判断条件是否满足后手动推进。",
+            )
         if notification_kind == NOTIFY_WORKFLOW_BINDING_REQUIRED:
             return (
                 "任务交接缺少执行者绑定",
@@ -881,19 +904,24 @@ class CoordinatorService:
                 dispatch.dispatch_id, DISPATCH_FAILED, "recipient_unresolved:principal_absent", attempt_count=attempt_count
             )
             return
-        # The reason is recomputed rather than stored: an agent may have been
-        # registered (or retired) since the first attempt, and the owner
-        # should hear the reason that holds now.
-        _, notification_kind = self._select_executor(node.executor_refs if node else ())
+        # ai4-lu7y: retry the notification this row was created for. The key
+        # carries the kind, so a retry cannot silently turn a "judge this
+        # condition" mail into an "executor is gone" one; rows written before
+        # the key carried a kind fall back to re-deriving it from the current
+        # Registry state.
+        notification_kind = self._kind_from_dedupe(dispatch.dedupe_key)
+        if notification_kind is None:
+            _, notification_kind = self._select_executor(node.executor_refs if node else ())
+        notification_kind = notification_kind or NOTIFY_AGENT_UNAVAILABLE
         subject, body = self._human_notification_content(
-            notification_kind or NOTIFY_AGENT_UNAVAILABLE,
+            notification_kind,
             pending.task_node_id,
             node.executor_refs if node else (),
         )
         try:
             self.notifications.publish(
                 NotificationIntent(
-                    notification_kind=notification_kind or NOTIFY_AGENT_UNAVAILABLE,
+                    notification_kind=notification_kind,
                     recipients=(recipient,),
                     subject=subject,
                     body=body,
@@ -914,10 +942,27 @@ class CoordinatorService:
         )
 
     @staticmethod
+    def _kind_from_dedupe(dedupe_key: str) -> str | None:
+        """Recover the notification kind a dispatch row was created for."""
+        kind = dedupe_key.rpartition(":")[2]
+        return kind if kind in HUMAN_NOTIFICATION_KINDS else None
+
+    @staticmethod
     def _dedupe(
-        mapping_domain_id: str, pending: PendingHandoff, message_type: str, trigger: str
+        mapping_domain_id: str,
+        pending: PendingHandoff,
+        message_type: str,
+        trigger: str,
+        discriminator: str | None = None,
     ) -> str:
         # ai4-te1v: the dispatch idempotency key must NOT carry the trigger
         # revision - "same node version, same message type" dispatches once
         # even when new formal revisions arrive.
-        return f"{mapping_domain_id}:{pending.task_node_id}:{pending.target_node_version_ref}:{message_type}"
+        # ai4-lu7y: it does carry the reason, because one message type can
+        # have several: two different notifications about the same node
+        # version are two facts, not a repeat of one.
+        key = (
+            f"{mapping_domain_id}:{pending.task_node_id}:"
+            f"{pending.target_node_version_ref}:{message_type}"
+        )
+        return f"{key}:{discriminator}" if discriminator else key

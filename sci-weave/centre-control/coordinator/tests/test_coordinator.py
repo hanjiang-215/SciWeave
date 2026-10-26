@@ -1104,3 +1104,115 @@ def test_handoff_message_edge_refs_stay_array_for_single_edge():
     refs = publisher.published[-1].dependency_edge_version_refs
     assert isinstance(refs, tuple) and len(refs) == 1
     connection.close()
+
+# ------------------------------- notification kind and dedupe granularity (ai4-lu7y)
+
+def test_condition_hold_uses_its_own_notification_kind():
+    """ai4-lu7y: a dependency condition is not an unavailable executor."""
+    connection = sqlite3.connect(":memory:")
+    snapshot_port = FakeSnapshotPort()
+    snapshot_port.set(
+        "map-1", "rev-1",
+        _chain_snapshot({"dependency_kind": "conditional", "activation_condition": "upstream_output >= threshold"}),
+    )
+    notifications = FakeNotificationPublisher()
+    service = _two_node_service(
+        connection, snapshot_port, FakeHandoffPublisher(), notifications,
+        FakeAgentAvailability({"agent-1", "agent-2"}),
+    )
+    service.on_formal_revision_published("map-1", "rev-1")
+    service.dispatch_root_task("map-1", "T1", "v1", trigger_revision_id="rev-1")
+    service.on_task_completed("map-1", "T1", "v1")
+
+    kinds = [i.notification_kind for i in notifications.published]
+    assert kinds == ["dependency_condition_hold"]
+    assert "激活条件" in notifications.published[0].subject
+    connection.close()
+
+
+def test_condition_hold_and_unavailable_executor_both_reach_the_owner():
+    """ai4-lu7y: two reasons about one node version are two notifications."""
+    connection = sqlite3.connect(":memory:")
+    snapshot_port = FakeSnapshotPort()
+    snapshot_port.set(
+        "map-1", "rev-1",
+        _chain_snapshot({"dependency_kind": "conditional", "activation_condition": "route==B"}),
+    )
+    # Same node versions, condition now resolved: the gate passes, but the
+    # executor is gone. The second reason must not collide with the first.
+    snapshot_port.set("map-1", "rev-2", _chain_snapshot({"dependency_kind": "conditional"}))
+    notifications = FakeNotificationPublisher()
+    service = _two_node_service(
+        connection, snapshot_port, FakeHandoffPublisher(), notifications,
+        FakeAgentAvailability({"agent-1"}),
+    )
+    service.on_formal_revision_published("map-1", "rev-1")
+    service.dispatch_root_task("map-1", "T1", "v1", trigger_revision_id="rev-1")
+    service.on_task_completed("map-1", "T1", "v1")
+    assert [i.notification_kind for i in notifications.published] == ["dependency_condition_hold"]
+
+    service.on_formal_revision_published("map-1", "rev-2")
+
+    assert [i.notification_kind for i in notifications.published] == [
+        "dependency_condition_hold",
+        "agent_unavailable",
+    ]
+    notification_keys = [
+        d.dedupe_key for d in service.store.list_dispatches() if d.message_type == MSG_HUMAN_NOTIFICATION
+    ]
+    assert len(set(notification_keys)) == 2
+    connection.close()
+
+
+def test_human_notification_dedupe_key_carries_the_kind():
+    from coordinator.service import CoordinatorService
+    from coordinator.store import PendingHandoff
+
+    pending = PendingHandoff(
+        pending_handoff_id="p1",
+        mapping_domain_id="map-1",
+        task_node_id="T2",
+        target_node_version_ref="v2",
+        upstream_source_refs=(),
+        executor_refs=(),
+        executor_agent_id=None,
+        status=PENDING_WAITING,
+        last_trigger_revision_id=None,
+        created_at="t0",
+        updated_at="t0",
+    )
+    hold = CoordinatorService._dedupe("map-1", pending, MSG_HUMAN_NOTIFICATION, "rev-1", discriminator="dependency_condition_hold")
+    gone = CoordinatorService._dedupe("map-1", pending, MSG_HUMAN_NOTIFICATION, "rev-1", discriminator="agent_unavailable")
+    handoff = CoordinatorService._dedupe("map-1", pending, MSG_HANDOFF_READY, "rev-1")
+    assert hold != gone
+    # Handoff dispatch keeps its old shape: one handoff per node version.
+    assert handoff == "map-1:T2:v2:task_handoff_ready"
+
+
+def test_retry_republishes_the_kind_the_row_was_created_for():
+    connection = sqlite3.connect(":memory:")
+    snapshot_port = FakeSnapshotPort()
+    snapshot_port.set(
+        "map-1", "rev-1",
+        _chain_snapshot({"dependency_kind": "conditional", "activation_condition": "route==B"}),
+    )
+    notifications = FakeNotificationPublisher()
+    notifications.fail_next = 1
+    service = _two_node_service(
+        connection, snapshot_port, FakeHandoffPublisher(), notifications,
+        FakeAgentAvailability({"agent-1", "agent-2"}),
+    )
+    service.on_formal_revision_published("map-1", "rev-1")
+    # The first attempt reached the email service and was rejected: the fact
+    # stays result_unknown, nothing was delivered.
+    assert notifications.published == []
+    assert [
+        d.status for d in service.store.list_dispatches() if d.message_type == MSG_HUMAN_NOTIFICATION
+    ] == [DISPATCH_RESULT_UNKNOWN]
+
+    service.startup_scan()
+
+    # The retry reproduces the row's own kind rather than re-deriving one
+    # from state that may have moved on.
+    assert [i.notification_kind for i in notifications.published] == ["dependency_condition_hold"]
+    connection.close()
