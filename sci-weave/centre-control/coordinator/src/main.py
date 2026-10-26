@@ -14,6 +14,11 @@ from coordinator.adapter_publisher import KafkaHandoffPublisher
 from coordinator.adapter_registry import RegistryMcpAvailabilityPort
 from coordinator.adapter_snapshot import ResearchMapMcpSnapshotPort
 from coordinator.config import CoordinatorConfig
+from coordinator.management_mcp import (
+    CoordinatorMcpServer,
+    create_coordinator_mcp_server,
+    start_in_background,
+)
 from coordinator.ports import NotificationTransportUnavailable
 from coordinator.service import CoordinatorService
 from coordinator.store import CoordinatorStore
@@ -75,7 +80,7 @@ def build(config: CoordinatorConfig) -> "CoordinatorRuntime":
         governance_group,
     )
     service = CoordinatorService(store, snapshot, publisher, notifications, registry)
-    return CoordinatorRuntime(
+    runtime = CoordinatorRuntime(
         service=service,
         publisher=publisher,
         connection=connection,
@@ -83,6 +88,19 @@ def build(config: CoordinatorConfig) -> "CoordinatorRuntime":
         events=events,
         event_router=GovernanceEventConsumer(service),
     )
+    # ai4-nzmm: root tasks are never auto-dispatched, so the PO needs an entry
+    # point. It is optional: without it the coordinator still consumes events.
+    mcp_host = os.environ.get("SCIWEAVE_COORDINATOR_MCP_HOST", "").strip()
+    if mcp_host:
+        mcp_token = os.environ.get("SCIWEAVE_COORDINATOR_MCP_TOKEN", "").strip()
+        if not mcp_token:
+            raise ValueError(
+                "SCIWEAVE_COORDINATOR_MCP_TOKEN is required when "
+                "SCIWEAVE_COORDINATOR_MCP_HOST is configured"
+            )
+        mcp_port = int(os.environ.get("SCIWEAVE_COORDINATOR_MCP_PORT", "8090"))
+        runtime.mcp_server = create_coordinator_mcp_server(mcp_host, mcp_port, service, mcp_token)
+    return runtime
 
 
 class CoordinatorRuntime:
@@ -104,15 +122,26 @@ class CoordinatorRuntime:
         self.poll_seconds = poll_seconds
         self.events = events
         self.event_router = event_router
+        self.mcp_server: CoordinatorMcpServer | None = None
         self._running = False
 
     def start(self) -> None:
         self.service.startup_scan()
+        if self.mcp_server is not None:
+            start_in_background(self.mcp_server)
+            logger.info(
+                "coordinator MCP listening on %s:%s",
+                self.mcp_server.server_address[0],
+                self.mcp_server.server_address[1],
+            )
         self._running = True
         logger.info("coordinator adapter wiring ready; polling every %.1fs", self.poll_seconds)
 
     def stop(self) -> None:
         self._running = False
+        if self.mcp_server is not None:
+            self.mcp_server.shutdown()
+            self.mcp_server.server_close()
         self.events.close()
         self.publisher.close()
         self.connection.close()

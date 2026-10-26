@@ -49,6 +49,7 @@
 - `SCIWEAVE_REGISTRY_MCP_ENDPOINT` / `SCIWEAVE_REGISTRY_MCP_TOKEN`：Registry MCP（必填）。
 - `SCIWEAVE_COORDINATOR_KAFKA_BOOTSTRAP`：Redpanda 引导地址（必填）。
 - `SCIWEAVE_EMAIL_MCP_ENDPOINT` / `SCIWEAVE_EMAIL_MCP_TOKEN`：email-service MCP（可选）。
+- `SCIWEAVE_COORDINATOR_MCP_HOST` / `_PORT` / `_TOKEN`：协调服务自身的 MCP 入口（可选）。配置后进程在消费治理事件的同一进程内提供 `POST /mcp`，只暴露 `dispatch_root_task` 一个工具：根节点不随正式修订自动派发，PO 必须显式调用它才能启动任务图；`_TOKEN` 缺失而 `_HOST` 已配置时启动即失败。
 
 ## 验证
 
