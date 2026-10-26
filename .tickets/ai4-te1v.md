@@ -34,6 +34,7 @@ tags: [wayfinder:grilling]
 - [x] 明确 `PendingHandoff` 与 `HandoffDispatch` 的状态词表以现有实现为准，并固定 `max_attempts` 默认值。
 - [x] 明确 `HandoffDispatch` 的重试上限与退避参数。
 - [x] 明确 `task_completed` 的发布时点与返修后是否重发的规则。
+- [x] 明确人工通知的收件人角色由 `notification_kind` 决定，且每条通知只有一个收件人。
 
 ## Current design boundary
 
@@ -390,3 +391,26 @@ recipients                     → 传 mapping_domain_id，非 principal_id
 ```
 
 实现层缺陷不在本票修改，由新建的实现票承接：重复派发、状态回退、多执行者选择、根节点自动派发、`dead` 状态未落地、人工通知收件人取值错误、`dependency_kind` 与激活条件字段缺失、快照错误码路径不一致。
+
+**2026-10-26 第四轮收敛：人工通知收件人（Frank Qi）**
+
+缺陷 6「收件人传成 `mapping_domain_id`」查下去，根因不是变量写错，而是「该发给谁」这个事实从未被定义。本轮定死：
+
+- 一条通知只有一个收件人，是**需要动手的那个人**，不是抄送名单。
+- 收件人角色由 `notification_kind` 决定，调用方不得自行挑选。三种「执行者不可用」拆成 `workflow_binding_required`（`executor_refs` 为空）、`workflow_load_failed`（指向未登记 `agent_id`）、`agent_unavailable`（已注销、无可用实例或只配置人工处理），前三者指向该节点 TaskNode Owner；`task_terminal_summary` 指向项目负责人。
+- `task_owner_id` 是 TaskNode 文档必填字段，缺失表示数据损坏。此时不猜收件人、不生成通知，保留 `PendingHandoff(status=waiting)` 并记录 `recipient_unresolved:task_owner_id_missing`。
+- 项目负责人身份不新建名册，取自 `formal_mapping_revision.published_by`——它是最近一次批准该域正式版本的人，且落库前已通过 `is_project_owner` 校验。字段名用 `latest_published_by`，不叫 `project_owner_id`，因为它回答的是「最近批准者」而非「被任命的负责人」。详见 [ADR-0004](../docs/adr/0004-po-recipient-from-latest-approver.md)。
+- `task_owner_id` 本来就在 TaskNode 文档中，由快照适配器直接投影，research-map 侧零改动；`published_by` 在 SQLite 的 `formal_mapping_revision` 表中，需要 `get_formal_mapping_at_revision` 把它加进返回，属于 research-map 侧改动。
+- 发送前由协调服务经 Registry 校验 `principal_id` 存在且 `active`；不通过则不建 dispatch、记错误、保持 `waiting`。Registry 不可用时 fail-open 照发——宁可发一条可能失败的邮件，也不能因为校验渠道故障而完全不发。
+
+映射表落在 `docs/data-flow/message-delivery-recovery.md`，`GLOSSARY.md` 的「通知收件人」只补一句「角色由通知类型决定」，不承载映射表。
+
+**第四轮后续：快照适配器（Frank Qi）**
+
+`coordinator` 至今没有任何真实适配器：`src/main.py` 只读配置、开 SQLite、打日志、关连接，四个 Port 全是 Protocol。原因是四个口子各自卡在不同上游，而「接入」这一步从未被立成票。
+
+快照适配器是其中唯一上游已清零的一个：`ai4-2982` 已关闭，`get_formal_mapping_at_revision` 已实现并通过 115 项测试，返回的 `documents` 是原始 TerminusDB 文档。它不需要 Redpanda、不需要信封包、不需要 email-service，而且是让收件人规则真正生效的前提——没有它，`TaskNodeDoc.task_owner_id` 永远是 `None`。
+
+适配器范围取最小投影：只产出 `DependencyEdgeDoc` 现有字段，把嵌套的 `source_node_version_ref` / `target_node_version_ref` 拍平；`dependency_kind`、`activation_condition`、`required_outputs`、`blocks_until` 暂不投影，代码留显式注释指向后续票，不得静默丢弃。节点投影 `task_node_id`、`version_id`、`executor_refs`、`task_owner_id`。
+
+其余三个适配器继续等待：Registry 侧等 `ai4-1kls`（open），消息发布侧等信封包，通知侧等本轮的收件人规则（已定，但依赖快照适配器提供 `task_owner_id`）。

@@ -74,7 +74,20 @@ recipients                      → 传 mapping_domain_id，非 principal_id
 
 `service.py` 四处 `recipients=(snapshot.mapping_domain_id,)`。`ai4-f985` 要求 `recipients` 是 `principal_id`，email-service 用 Registry 只读联系人接口解析邮箱；传 domain id 解析不到收件人。
 
-需要明确 `PendingHandoff` / 节点上「该通知谁」的来源，再由调用点取对应 `principal_id`。来源不明确时本票不臆造字段，先向 `ai4-f985` 的 assignee 确认。
+收件人来源已在 `ai4-te1v` 第四轮收敛中定死，按以下口径修：
+
+| 场景 | `notification_kind` | 收件人 |
+| --- | --- | --- |
+| `executor_refs` 为空 | `workflow_binding_required` | 该节点 `task_owner_id` |
+| `executor_refs` 指向未登记的 `agent_id` | `workflow_load_failed` | 该节点 `task_owner_id` |
+| 已注销、无可用实例、或只配置人工处理 | `agent_unavailable` | 该节点 `task_owner_id` |
+| 派发成功的节点无后继 | `task_terminal_summary` | `FormalSnapshot.latest_published_by` |
+
+一条通知只有一个收件人。`task_owner_id` 缺失表示数据损坏：不猜收件人、不生成通知，保留 `PendingHandoff(status=waiting)` 并记录 `recipient_unresolved:task_owner_id_missing`。
+
+`FormalSnapshot` 新增 `latest_published_by` 字段，命名见 [ADR-0004](../docs/adr/0004-po-recipient-from-latest-approver.md)：它回答「最近一次批准正式版本的人」，不是「被任命的负责人」，代码注释需链到该 ADR。填充它依赖 research-map 把 `published_by` 加进 `get_formal_mapping_at_revision` 的返回，该改动由 `ai4-2raq` 承接。
+
+发送前经 Registry 校验 `principal_id` 存在且 `active`，不通过则不建 dispatch、记错误、保持 `waiting`；Registry 不可用时 fail-open 照发。该校验需要新增 `PrincipalDirectoryPort`，与既有 `AgentAvailabilityPort` 走同一条只读通道。
 
 ### 7. 快照错误路径两处不一致
 
@@ -92,12 +105,16 @@ recipients                      → 传 mapping_domain_id，非 principal_id
 - [ ] `attempt_count` 达到 `max_attempts` 的 dispatch 写入 `dead`，不再被重试。
 - [ ] `MAX_ATTEMPTS` 默认值为 `5`，`README.md` 与 `.env.example` 一致。
 - [ ] 人工通知的 `recipients` 取 `principal_id`，不取 `mapping_domain_id`。
+- [ ] `executor_refs` 为空、指向未登记 `agent_id`、已注销、只配置人工处理四种场景，分别产出 `workflow_binding_required`、`workflow_load_failed`、`agent_unavailable` 三种 `notification_kind`。
+- [ ] `task_terminal_summary` 的收件人取 `FormalSnapshot.latest_published_by`，不取 `mapping_domain_id`。
+- [ ] `task_owner_id` 缺失时不产生通知，`PendingHandoff` 保持 `waiting` 且记录 `recipient_unresolved:task_owner_id_missing`。
+- [ ] Registry 校验失败时不建 dispatch；Registry 不可用仍照发。
 - [ ] 快照不可读时，`startup_scan` 与 `_retry_dispatch` 的状态处置一致。
 - [ ] 上述场景全部转成测试用例，与 `ai4-1y6q` 既有的 9 项测试一起通过。
 - [ ] 在 fer 记录验证命令、结果和提交哈希。
 
 ## Notes
 
-- 本票只改 `coordinator`，不动 `shared/message-envelope/`（尚未实现）与 Redpanda 适配层。
+- 本票只改 `coordinator`，不动 `shared/message-envelope/`（尚未实现）与 Redpanda 适配层，也不写任何真实适配器（见 Q8 裁决）：`TaskNodeDoc(task_owner_id=...)` 与 `FormalSnapshot(latest_published_by=...)` 在测试里直接构造。
 - `dependency_kind` / `activation_condition` / `required_outputs` / `blocks_until` 四个字段在 `ports.py` 的 `DependencyEdgeDoc` 中整体缺失，属独立的判定逻辑扩充，不在本票范围。
 - 缺陷 6 依赖 `ai4-f985` 的收件人来源定义，若届时仍不明确则先只记录、不改调用点。
