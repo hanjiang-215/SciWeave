@@ -179,8 +179,8 @@ def _build_snapshot(
                 )
             )
         elif dtype == "DependencyEdge":
-            source = document.get("source_node_version_ref") or {}
-            target = document.get("target_node_version_ref") or {}
+            source = _parse_ref(document.get("source_node_version_ref"))
+            target = _parse_ref(document.get("target_node_version_ref"))
             edges.append(
                 DependencyEdgeDoc(
                     edge_id=_text(document.get("version_id")),
@@ -200,3 +200,21 @@ def _build_snapshot(
 
 def _text(value: Any) -> str:
     return str(value).strip() if value is not None else ""
+
+
+def _parse_ref(value: Any) -> dict[str, Any]:
+    """Normalize a node-version ref from a DependencyEdge document.
+
+    TerminusDB stores complex fields as JSON text (the demo pipeline seeds
+    ``source_node_version_ref`` with ``json.dumps``), so the value may arrive
+    as a JSON string instead of an inline dict. Accept both shapes.
+    """
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str) and value.strip():
+        try:
+            parsed = json.loads(value)
+        except json.JSONDecodeError:
+            return {}
+        return parsed if isinstance(parsed, dict) else {}
+    return {}
