@@ -23,7 +23,7 @@ has for deciding whether to drop, upgrade, or route to a human.
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass
 from datetime import datetime
 from typing import Any
 
@@ -84,7 +84,7 @@ class PayloadError(EnvelopeError):
     """The envelope is valid but the business payload is not."""
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Producer:
     """Which service published the message, and optionally which instance."""
 
@@ -92,7 +92,7 @@ class Producer:
     instance_id: str | None = None
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Routing:
     """Partition key for ordering, plus the handoff target when there is one."""
 
@@ -100,7 +100,7 @@ class Routing:
     target_agent_id: str | None = None
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Envelope:
     """The envelope every SciWeave business message shares.
 
@@ -117,7 +117,10 @@ class Envelope:
     published_at: str
     producer: Producer
     routing: Routing
-    payload: dict[str, Any] = field(default_factory=dict)
+    # No default. Every message type has required payload fields, so an
+    # envelope without one cannot be valid; defaulting to {} would let this
+    # package build exactly the message its own decoder rejects.
+    payload: dict[str, Any]
 
 
 def encode(envelope: Envelope) -> bytes:
@@ -127,18 +130,31 @@ def encode(envelope: Envelope) -> bytes:
     the point of construction, not when a consumer chokes on it.
     """
     validate(envelope)
-    body: dict[str, Any] = {
-        "message_id": envelope.message_id,
-        "message_type": envelope.message_type,
-        "schema_version": envelope.schema_version,
-        "dedupe_key": envelope.dedupe_key,
-        "occurred_at": envelope.occurred_at,
-        "published_at": envelope.published_at,
-        "producer": _producer_to_dict(envelope.producer),
-        "routing": _routing_to_dict(envelope.routing),
-        "payload": envelope.payload,
-    }
-    return json.dumps(body, ensure_ascii=False, sort_keys=True).encode("utf-8")
+    body = asdict(envelope)
+    _drop_absent_optionals(body)
+    try:
+        # allow_nan=False keeps NaN/Infinity out of the wire format: they are
+        # Python's json extension, not JSON, and a consumer in another language
+        # cannot parse them. Wrapping keeps the promise that EnvelopeError
+        # catches every failure this package can produce.
+        encoded = json.dumps(body, ensure_ascii=False, sort_keys=True, allow_nan=False)
+    except (TypeError, ValueError) as exc:
+        raise PayloadError(f"payload is not JSON-serialisable: {exc}") from exc
+    return encoded.encode("utf-8")
+
+
+def _drop_absent_optionals(body: dict[str, Any]) -> None:
+    """Omit optional keys rather than writing them as null.
+
+    The wire format has no nulls; an absent instance_id and a null one mean
+    the same thing, so only one of them should ever appear.
+    """
+    for container, optional in (
+        ("producer", "instance_id"),
+        ("routing", "target_agent_id"),
+    ):
+        if body[container].get(optional) is None:
+            body[container].pop(optional, None)
 
 
 def decode(data: bytes) -> Envelope:
@@ -159,8 +175,8 @@ def decode(data: bytes) -> Envelope:
         dedupe_key=_required_str(body, "dedupe_key"),
         occurred_at=_required_str(body, "occurred_at"),
         published_at=_required_str(body, "published_at"),
-        producer=_producer_from_value(body, "producer"),
-        routing=_routing_from_value(body, "routing"),
+        producer=_producer_from_value(body),
+        routing=_routing_from_value(body),
         payload=_payload_from_value(body),
     )
     validate(envelope)
@@ -228,8 +244,12 @@ def validate(envelope: Envelope) -> None:
 
 
 def _require_timestamp(name: str, value: Any) -> None:
-    if not isinstance(value, str) or not value:
-        raise EnvelopeFormatError(f"{name} must be a non-empty string")
+    _require_non_empty_str(name, value)
+    # fromisoformat on 3.11+ accepts any single-character date/time separator
+    # and the compact form. The wire format allows only the extended form with
+    # "T"; looser parsing means two services silently disagree on what is valid.
+    if len(value) < 11 or value[10] != "T":
+        raise EnvelopeFormatError(f"{name} must be extended ISO-8601 with a T separator: {value!r}")
     try:
         parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
     except ValueError as exc:
@@ -240,11 +260,14 @@ def _require_timestamp(name: str, value: Any) -> None:
         raise EnvelopeFormatError(f"{name} must carry a timezone: {value!r}")
 
 
-def _required_str(body: dict[str, Any], name: str) -> str:
-    value = body.get(name)
+def _require_non_empty_str(name: str, value: Any) -> str:
     if not isinstance(value, str) or not value:
         raise EnvelopeFormatError(f"{name} must be a non-empty string")
     return value
+
+
+def _required_str(body: dict[str, Any], name: str) -> str:
+    return _require_non_empty_str(name, body.get(name))
 
 
 def _required_int(body: dict[str, Any], name: str) -> int:
@@ -267,41 +290,20 @@ def _payload_from_value(body: dict[str, Any]) -> dict[str, Any]:
     return value
 
 
-def _producer_to_dict(producer: Producer) -> dict[str, Any]:
-    body: dict[str, Any] = {"service": producer.service}
-    if producer.instance_id is not None:
-        body["instance_id"] = producer.instance_id
-    return body
-
-
-def _producer_from_value(body: dict[str, Any], name: str) -> Producer:
-    value = body.get(name)
+def _producer_from_value(body: dict[str, Any]) -> Producer:
+    # Shape only. Field rules live in validate(), which decode() runs next,
+    # so each rule is stated once and the two cannot drift apart.
+    value = body.get("producer")
     if not isinstance(value, dict):
-        raise EnvelopeFormatError(f"{name} must be a JSON object")
-    service = value.get("service")
-    if not isinstance(service, str) or not service:
-        raise EnvelopeFormatError(f"{name}.service must be a non-empty string")
-    instance_id = value.get("instance_id")
-    if instance_id is not None and not isinstance(instance_id, str):
-        raise EnvelopeFormatError(f"{name}.instance_id must be a string when present")
-    return Producer(service=service, instance_id=instance_id)
+        raise EnvelopeFormatError("producer must be a JSON object")
+    return Producer(service=value.get("service"), instance_id=value.get("instance_id"))
 
 
-def _routing_to_dict(routing: Routing) -> dict[str, Any]:
-    body: dict[str, Any] = {"partition_key": routing.partition_key}
-    if routing.target_agent_id is not None:
-        body["target_agent_id"] = routing.target_agent_id
-    return body
-
-
-def _routing_from_value(body: dict[str, Any], name: str) -> Routing:
-    value = body.get(name)
+def _routing_from_value(body: dict[str, Any]) -> Routing:
+    value = body.get("routing")
     if not isinstance(value, dict):
-        raise EnvelopeFormatError(f"{name} must be a JSON object")
-    partition_key = value.get("partition_key")
-    if not isinstance(partition_key, str) or not partition_key:
-        raise EnvelopeFormatError(f"{name}.partition_key must be a non-empty string")
-    target_agent_id = value.get("target_agent_id")
-    if target_agent_id is not None and not isinstance(target_agent_id, str):
-        raise EnvelopeFormatError(f"{name}.target_agent_id must be a string when present")
-    return Routing(partition_key=partition_key, target_agent_id=target_agent_id)
+        raise EnvelopeFormatError("routing must be a JSON object")
+    return Routing(
+        partition_key=value.get("partition_key"),
+        target_agent_id=value.get("target_agent_id"),
+    )

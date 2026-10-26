@@ -3,17 +3,19 @@ import json
 import pytest
 
 from message_envelope import (
-    PayloadError,
     MESSAGE_TYPES,
-    SchemaVersionError,
-    UnknownMessageTypeError,
     SCHEMA_VERSION,
     Envelope,
+    EnvelopeError,
     EnvelopeFormatError,
+    PayloadError,
     Producer,
     Routing,
+    SchemaVersionError,
+    UnknownMessageTypeError,
     decode,
     encode,
+    validate,
 )
 
 
@@ -25,7 +27,7 @@ def sample(**overrides) -> Envelope:
         dedupe_key="map-1:T1:v1:task_completed",
         occurred_at="2026-10-26T08:00:00Z",
         published_at="2026-10-26T08:00:01Z",
-        producer=Producer(service="coordinator", instance_id="c-1"),
+        producer=Producer(service="coordinator"),
         routing=Routing(partition_key="task:T1"),
         payload={"mapping_domain_id": "map-1"},
     )
@@ -65,13 +67,16 @@ def test_bad_published_at_raises_format_error():
 
 
 def test_unsupported_schema_version_is_distinct_from_format_error():
+    # Decode from bytes we did not produce. Going through encode() would
+    # raise inside encode's own validate() and leave the consumer's guard
+    # untested.
     with pytest.raises(SchemaVersionError):
-        decode(encode(sample(schema_version=SCHEMA_VERSION + 1)))
+        decode(raw_body(schema_version=SCHEMA_VERSION + 1))
 
 
 def test_unknown_message_type_is_distinct_from_format_error():
     with pytest.raises(UnknownMessageTypeError):
-        decode(encode(sample(message_type="something_new")))
+        decode(raw_body(message_type="something_new"))
 
 
 def test_unknown_payload_fields_are_tolerated_and_survive_a_round_trip():
@@ -275,3 +280,123 @@ def test_decode_rejects_a_str_argument():
     # (e.g. from a JSON fixture) should read as a format error.
     with pytest.raises(EnvelopeFormatError):
         decode('{"message_id": "m"}')
+
+
+def test_envelope_requires_an_explicit_payload():
+    # Without this, the package can build the empty-payload envelope its own
+    # decoder rejects, which makes "an absent payload is malformed" a rule
+    # only outsiders have to follow.
+    with pytest.raises(TypeError):
+        Envelope(
+            message_id="m",
+            message_type="task_completed",
+            schema_version=SCHEMA_VERSION,
+            dedupe_key="d",
+            occurred_at="2026-10-26T08:00:00Z",
+            published_at="2026-10-26T08:00:01Z",
+            producer=Producer(service="coordinator"),
+            routing=Routing(partition_key="task:T1"),
+        )
+
+
+def test_unserialisable_payload_is_a_payload_error_not_a_type_error():
+    # The README promises EnvelopeError catches everything this package
+    # raises; a bare TypeError from json.dumps would break that.
+    with pytest.raises(PayloadError):
+        encode(sample(payload={"when": object()}))
+
+
+def test_nan_payload_is_refused_rather_than_written_as_invalid_json():
+    # NaN is Python's json extension, not JSON. Writing it produces a
+    # message a non-Python consumer cannot parse.
+    with pytest.raises(PayloadError):
+        encode(sample(payload={"n": float("nan")}))
+
+
+def test_non_string_payload_keys_become_strings_on_the_wire():
+    # JSON object keys are strings, so this conversion is unavoidable rather
+    # than a bug. Pinning it makes it a documented property instead of a
+    # surprise: a payload keyed by an int comes back keyed by "1".
+    restored = decode(encode(sample(payload={1: "a"})))
+
+    assert restored.payload == {"1": "a"}
+
+
+def test_structural_defects_outrank_the_version_check():
+    # A consumer that keys its upgrade prompt off SchemaVersionError needs to
+    # know it will not always get one: a v2 message that is also missing a
+    # required field reports the field. Pinning it keeps that documented
+    # precedence from drifting silently.
+    with pytest.raises(EnvelopeFormatError):
+        decode(raw_body(schema_version=SCHEMA_VERSION + 1, dedupe_key=""))
+
+
+def test_timestamps_must_use_the_extended_form_with_a_t_separator():
+    # fromisoformat on 3.11+ also accepts "2026-10-26X08:00:01Z" and the
+    # compact "20261026T080001Z". Permitting them means our own producers can
+    # emit bytes a stricter consumer elsewhere rejects, so the wire format is
+    # pinned to the extended form here instead of inheriting the parser's tastes.
+    for malformed in (
+        "2026-10-26X08:00:01Z",
+        "20261026T080001Z",
+        "2026-10-26 08:00:01+00:00",
+        # Has the T, but is not a date: the format guard lets it through and
+        # the parser has to reject it.
+        "2026-10-26THELLO!!!",
+    ):
+        with pytest.raises(EnvelopeFormatError):
+            encode(sample(occurred_at=malformed))
+
+
+def test_every_leaf_exception_is_caught_by_the_base_class():
+    # The README tells consumers to catch EnvelopeError for a single handler.
+    # That only works if every leaf actually descends from it.
+    for leaf in (EnvelopeFormatError, SchemaVersionError, UnknownMessageTypeError, PayloadError):
+        assert issubclass(leaf, EnvelopeError)
+
+
+def test_catching_the_base_class_catches_every_failure_this_package_raises():
+    # The behavioural version of the claim above: one handler, four failures.
+    def swallow(fn) -> type:
+        try:
+            fn()
+        except EnvelopeError as exc:
+            return type(exc)
+        raise AssertionError("no EnvelopeError raised")
+
+    assert swallow(lambda: decode(b"not json")) is EnvelopeFormatError
+    assert swallow(lambda: decode(raw_body(schema_version=2))) is SchemaVersionError
+    assert swallow(lambda: decode(raw_body(message_type="unknown"))) is UnknownMessageTypeError
+    assert swallow(lambda: encode(sample(payload={"x": object()}))) is PayloadError
+    assert swallow(lambda: validate(sample(occurred_at=""))) is EnvelopeFormatError
+
+
+def test_absent_optional_fields_are_omitted_not_written_as_null():
+    # The wire format has no nulls. Writing "target_agent_id": null would force
+    # every consumer to treat absent and null as the same thing, and a consumer
+    # that does not would read a null as a real target.
+    body = json.loads(encode(sample()))
+
+    assert "instance_id" not in body["producer"]
+    assert "target_agent_id" not in body["routing"]
+
+
+def test_present_optional_fields_are_written():
+    body = json.loads(
+        encode(
+            sample(
+                producer=Producer(service="coordinator", instance_id="c-1"),
+                routing=Routing(partition_key="task:T1", target_agent_id="agent-7"),
+            )
+        )
+    )
+
+    assert body["producer"]["instance_id"] == "c-1"
+    assert body["routing"]["target_agent_id"] == "agent-7"
+
+
+def test_validate_rejects_a_non_object_payload_directly():
+    # decode() has its own shape guard, so a hole in validate() alone would
+    # only show up for in-process producers that call validate themselves.
+    with pytest.raises(PayloadError):
+        validate(sample(payload=["not", "an", "object"]))
