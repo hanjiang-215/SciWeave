@@ -116,7 +116,7 @@ running ├→ waiting              （Worker 提问，本轮终止；回答创�
 | 一轮 loop 做什么 | 执行科研任务，产出草稿 | 拉全量候选快照做预审，追加报告；必要时新建混合候选 |
 | 处置面承接什么 | 返修、放弃、转人工、回答提问 | 列出待审候选、查看报告、要求重算某候选的报告 |
 
-处置面的工具名与签名保持一致，但 Centre Agent 目前不提供功能：它的工作里没有返修。保留同名接口是为了让两个实例共用一套骨架，返回 `unimplemented`，而不是让 Centre Agent 长出一个自己的工具面。
+处置面的工具名与签名保持一致，两个实例都真的提供功能。Centre Agent 的 `answer_question` 把 `waiting` 的执行回答掉并排入一条 `resume_of` 指向原记录的新执行，`review_execution` 追加一条带 `idempotency_key` 的决定并把执行移到 `needs_revision`、`rejected` 或 `human_takeover`，两者都写审计事件；重放同一把幂等键返回第一次的结果，不会重复排队或重复决定。
 
 Worker Lease 在两种实例里都保留，定位是**本地单实例互斥**：同一目标同时只跑一轮，重复投递由本地的唯一约束挡住。它不是跨实例的分发租约，中央仍然只有一个 Centre Agent 实例。
 
