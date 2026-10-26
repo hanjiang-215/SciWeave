@@ -1,0 +1,9 @@
+---
+alwaysApply: true
+---
+
+# 开发流程  
+
+使用 wayfinder 和 grill-with-docs 推进完后，请先审查是否可以拆分为 spec 和 实现票；如果已经有spec和实现票，优先在已有的票上修改。
+
+修改后，请按照 implement 的要求开始写代码。
