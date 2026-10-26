@@ -33,11 +33,13 @@ tags: [implementation, centre-control, shared, message-queue, ready-for-agent]
 
 ## Verification
 
-- 提交：`a8f5c6e feat(shared): add the message envelope protocol package`
+- 提交：`a8f5c6e` 建包，`de31ef6`、`8447f83`、`6fc3ef9`、`6358cd2`、`390a37d` 补校验与测试
 - 命令：`cd sci-weave/centre-control/shared/message-envelope && UV_CACHE_DIR=/tmp/uvcache uv run --extra test pytest -q`
-- 结果：`17 passed in 0.02s`
+- 结果：`46 passed in 0.07s`
+- 覆盖率：`--cov=src/message_envelope` → 138 语句 / 100%，0 未覆盖
 - 编译检查：`uv run python -m compileall -q src tests` → 通过
-- 边界断言：`tests/test_no_kafka.py` 用 AST 扫描包内全部 `.py`，确认无 `confluent_kafka` / `kafka` / `aiokafka` 导入，且无 `socket` / `threading` / `subprocess`。
+- 边界断言：`tests/test_no_kafka.py` 用 AST 扫描包内全部 `.py` 的 `import` / `from ... import` / 字符串实参调用，确认无 `confluent_kafka` / `kafka` / `aiokafka`，且无 `socket` / `ssl` / `http` / `urllib` / `requests` / `threading` / `subprocess` / `asyncio`。文件内另有一条自检，确认该扫描能识别 `__import__('socket')` 这类动态导入。
+- 变异验证：逐个删除版本校验、类型校验、时区校验、时间格式校验、`payload` 缺键校验、`payload` 形状校验、`instance_id` / `target_agent_id` 序列化，每一项都至少使一条测试失败。
 
 ### 与父票 AC 的一处出入
 
