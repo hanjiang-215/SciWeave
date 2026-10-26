@@ -7,6 +7,7 @@ and ``executor_refs`` selects the first available agent.
 """
 
 import sqlite3
+from pathlib import Path
 
 import pytest
 
@@ -821,4 +822,93 @@ def test_downstream_handoff_carries_upstream_refs_and_executor_snapshot():
     assert len(downstream) == 1
     assert downstream[0].upstream_source_refs == (("T1", "v1"),)
     assert downstream[0].executor_ref_snapshot == ("agent-2",)
+    connection.close()
+
+# --------------------------------------------- retry ceiling and transitions (ai4-7d92 / ai4-7cmr)
+
+def test_max_attempts_default_is_five_and_docs_agree(monkeypatch, tmp_path):
+    from coordinator.config import CoordinatorConfig, _max_attempts
+
+    monkeypatch.delenv("SCIWEAVE_COORDINATOR_MAX_ATTEMPTS", raising=False)
+    assert _max_attempts() == 5
+    for name, value in (
+        ("SCIWEAVE_COORDINATOR_SQLITE_PATH", str(tmp_path / "coordinator.sqlite")),
+        ("SCIWEAVE_COORDINATOR_RETRY_INITIAL_SECONDS", "1"),
+        ("SCIWEAVE_COORDINATOR_RETRY_MULTIPLIER", "2"),
+        ("SCIWEAVE_COORDINATOR_RETRY_MAX_SECONDS", "60"),
+        ("SCIWEAVE_COORDINATOR_DISPATCH_POLL_SECONDS", "5"),
+    ):
+        monkeypatch.setenv(name, value)
+    assert CoordinatorConfig.from_environment().max_attempts == 5
+
+    # Three places state the ceiling; an operator reading the docs must get
+    # the behaviour the code has.
+    root = Path(__file__).resolve().parents[1]
+    assert "SCIWEAVE_COORDINATOR_MAX_ATTEMPTS=5" in (root / ".env.example").read_text(encoding="utf-8")
+    assert "默认 5" in (root / "README.md").read_text(encoding="utf-8")
+
+
+def test_below_the_ceiling_a_dispatch_is_retried_and_succeeds():
+    connection = sqlite3.connect(":memory:")
+    snapshot_port = FakeSnapshotPort()
+    snapshot = FormalSnapshot(
+        mapping_domain_id="map-1",
+        formal_revision_id="rev-1",
+        nodes=(node("T1", "v1", ("agent-1",)),),
+        latest_published_by="owner-1",
+    )
+    snapshot_port.set("map-1", "rev-1", snapshot)
+    publisher = FakeHandoffPublisher()
+    service = make_service(
+        connection, snapshot_port, publisher, FakeNotificationPublisher(),
+        FakeAgentAvailability({"agent-1"}), max_attempts=5,
+    )
+    service.store.set_latest_revision("map-1", "rev-1")
+    publisher.fail_next = 1
+    service.dispatch_root_task("map-1", "T1", "v1", trigger_revision_id="rev-1")
+    assert [d.attempt_count for d in service.store.list_dispatches()] == [1]
+
+    service.startup_scan()
+
+    published = service.store.list_dispatches(statuses=(DISPATCH_PUBLISHED,))
+    assert [d.attempt_count for d in published] == [2]
+    assert service.store.list_dispatches(statuses=(DISPATCH_DEAD,)) == []
+    connection.close()
+
+
+def test_an_illegal_transition_keeps_the_stored_status_and_the_round_advances():
+    """ai4-7cmr: one stale node version must not stop the rest of the round."""
+    connection = sqlite3.connect(":memory:")
+    snapshot_port = FakeSnapshotPort()
+    snapshot = FormalSnapshot(
+        mapping_domain_id="map-1",
+        formal_revision_id="rev-1",
+        nodes=(
+            node("T1", "v1", ("agent-1",), task_owner_id="owner-1"),
+            node("T2", "v2", ("agent-2",), task_owner_id="owner-1"),
+            node("T3", "v3", ("agent-3",), task_owner_id="owner-1"),
+        ),
+        edges=(
+            edge("e1", "T1", "T2", "v1", "v2"),
+            edge("e2", "T2", "T3", "v2", "v3"),
+        ),
+        latest_published_by="owner-1",
+    )
+    snapshot_port.set("map-1", "rev-1", snapshot)
+    publisher = FakeHandoffPublisher()
+    service = make_service(
+        connection, snapshot_port, publisher, FakeNotificationPublisher(),
+        FakeAgentAvailability({"agent-1", "agent-2", "agent-3"}),
+    )
+    service.store.set_latest_revision("map-1", "rev-1")
+    # T2's stored fact moved on to superseded; the revision still carries v2.
+    service.store.upsert_pending_handoff("map-1", "T2", "v2", (), ("agent-2",), PENDING_WAITING, "rev-0")
+    service.store.mark_superseded("map-1", "T2", "v2")
+
+    service.on_formal_revision_published("map-1", "rev-1")
+
+    assert service.store.get_pending_handoff("map-1", "T2", "v2").status == PENDING_SUPERSEDED
+    # T3 has no completed upstream yet, but the round reached it and left a
+    # waiting fact instead of dying on T2.
+    assert service.store.get_pending_handoff("map-1", "T3", "v3").status == PENDING_WAITING
     connection.close()

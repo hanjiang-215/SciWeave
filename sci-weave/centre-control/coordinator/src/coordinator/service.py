@@ -33,6 +33,7 @@ from .store import (
     PENDING_WAITING,
     CoordinatorStore,
     HandoffDispatch,
+    InvalidPendingTransition,
     PendingHandoff,
 )
 
@@ -175,25 +176,16 @@ class CoordinatorService:
                 for upstream_id in upstream_ids
             )
             if not conditions_met:
-                self.store.upsert_pending_handoff(
-                    snapshot.mapping_domain_id,
-                    node.task_node_id,
-                    node.version_id,
-                    upstream_refs,
-                    executor_refs,
-                    PENDING_WAITING,
-                    trigger_revision_id,
+                self._upsert_pending(
+                    snapshot, node, PENDING_WAITING, upstream_refs, trigger_revision_id
                 )
                 continue
-            self.store.upsert_pending_handoff(
-                snapshot.mapping_domain_id,
-                node.task_node_id,
-                node.version_id,
-                upstream_refs,
-                executor_refs,
-                PENDING_READY,
-                trigger_revision_id,
-            )
+            if not self._upsert_pending(
+                snapshot, node, PENDING_READY, upstream_refs, trigger_revision_id
+            ):
+                # A rejected transition means the stored fact is newer than
+                # this round's view; publishing anyway would duplicate work.
+                continue
             dispatched = self._dispatch_ready(
                 snapshot, node.task_node_id, executor_agent_id, notify_kind, trigger_revision_id
             )
@@ -219,15 +211,35 @@ class CoordinatorService:
             PENDING_FAILED,
         ):
             return
-        self.store.upsert_pending_handoff(
-            snapshot.mapping_domain_id,
-            node.task_node_id,
-            node.version_id,
-            (),
-            node.executor_refs,
-            PENDING_WAITING,
-            trigger_revision_id,
-        )
+        self._upsert_pending(snapshot, node, PENDING_WAITING, (), trigger_revision_id)
+
+    def _upsert_pending(
+        self,
+        snapshot: FormalSnapshot,
+        node: TaskNodeDoc,
+        status: str,
+        upstream_refs: tuple[tuple[str, str], ...],
+        trigger_revision_id: str,
+    ) -> bool:
+        """Record the node's pending fact, tolerating a rejected transition.
+
+        ai4-7cmr: an illegal transition keeps the stored status and lets the
+        rest of the round advance. One stale node version must not stop every
+        other node from being dispatched.
+        """
+        try:
+            self.store.upsert_pending_handoff(
+                snapshot.mapping_domain_id,
+                node.task_node_id,
+                node.version_id,
+                upstream_refs,
+                node.executor_refs,
+                status,
+                trigger_revision_id,
+            )
+        except InvalidPendingTransition:
+            return False
+        return True
 
     def _recompute_downstream(self, snapshot: FormalSnapshot, completed_node_id: str) -> None:
         """Re-evaluate nodes that depend on the just-completed node."""
@@ -251,25 +263,16 @@ class CoordinatorService:
             executor_refs = node.executor_refs
             executor_agent_id, notify_kind = self._select_executor(executor_refs)
             if not conditions_met:
-                self.store.upsert_pending_handoff(
-                    snapshot.mapping_domain_id,
-                    node.task_node_id,
-                    node.version_id,
-                    upstream_refs,
-                    executor_refs,
-                    PENDING_WAITING,
-                    snapshot.formal_revision_id,
+                self._upsert_pending(
+                    snapshot, node, PENDING_WAITING, upstream_refs, snapshot.formal_revision_id
                 )
                 continue
-            self.store.upsert_pending_handoff(
-                snapshot.mapping_domain_id,
-                node.task_node_id,
-                node.version_id,
-                upstream_refs,
-                executor_refs,
-                PENDING_READY,
-                snapshot.formal_revision_id,
-            )
+            if not self._upsert_pending(
+                snapshot, node, PENDING_READY, upstream_refs, snapshot.formal_revision_id
+            ):
+                # The stored status won (e.g. a superseded version), so this
+                # round has nothing new to publish for the node.
+                continue
             trigger = f"{completed_node_id}:{snapshot.formal_revision_id}"
             dispatched = self._dispatch_ready(
                 snapshot, node.task_node_id, executor_agent_id, notify_kind, trigger
