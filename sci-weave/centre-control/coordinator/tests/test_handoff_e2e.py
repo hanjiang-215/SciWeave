@@ -262,11 +262,14 @@ class CoordinatorHandoffE2E(unittest.TestCase):
             producer.close()
 
             # --- 4. coordinator consumes and dispatches ---
+            # A fresh group with earliest re-reads governance events left by
+            # earlier runs; only the envelope for the current revision counts.
             handled = 0
             deadline = time.time() + 30
             while time.time() < deadline and handled == 0:
                 for record in consumer.poll(timeout_ms=500):
-                    if router.handle(record) is not None:
+                    event = router.handle(record)
+                    if event is not None and event.formal_revision_id == formal_revision_id:
                         handled += 1
                         consumer.commit()
                         break
@@ -289,10 +292,15 @@ class CoordinatorHandoffE2E(unittest.TestCase):
             while time.time() < deadline and not seen:
                 for records in listener.poll(timeout_ms=500).values():
                     for record in records:
-                        self.assertEqual(record.value.get("message_type"), "task_handoff_ready")
-                        self.assertEqual(record.value.get("task_node_id"), "T1")
-                        self.assertEqual(record.value.get("target_agent_id"), "agent-t1")
-                        self.assertEqual(record.value.get("trigger_revision_id"), formal_revision_id)
+                        value = record.value or {}
+                        # Ignore envelopes left by earlier runs on the same
+                        # broker: only the handoff for the current revision
+                        # counts as evidence.
+                        if value.get("trigger_revision_id") != formal_revision_id:
+                            continue
+                        self.assertEqual(value.get("message_type"), "task_handoff_ready")
+                        self.assertEqual(value.get("task_node_id"), "T1")
+                        self.assertEqual(value.get("target_agent_id"), "agent-t1")
                         seen = True
                 time.sleep(0.2)
             listener.close()
