@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Awaitable, Protocol
 
 
 class EmailServiceError(Exception):
@@ -58,7 +58,7 @@ class OutboundMail:
 
 
 class RecipientResolver(Protocol):
-    def resolve(self, principal_id: str) -> str:
+    def resolve(self, principal_id: str) -> Awaitable[str]:
         """Return the registered contact address for principal_id.
 
         Raise EmailServiceError with contact_missing, contact_disabled, or
@@ -75,7 +75,7 @@ class MailSender(Protocol):
 class UnboundRecipientResolver:
     """Placeholder until a Registry contact adapter is wired. It does not open a network connection."""
 
-    def resolve(self, principal_id: str) -> str:
+    async def resolve(self, principal_id: str) -> str:
         raise EmailServiceError("recipient_resolver_unavailable")
 
 
