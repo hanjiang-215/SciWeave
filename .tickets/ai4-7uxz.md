@@ -24,7 +24,7 @@ tags: [implementation, centre-control, handoff, ready-for-agent]
 - [ ] `executor_refs` 全部不可用时，不发布 `task_handoff_ready`，保留 `waiting` 并产生 `human_notification_intent`。
 - [ ] `executor_refs` 为空时同样转人工，受影响的 `notification_kind` 由 `ai4-xkbd` 决定。
 - [ ] `target_agent_id` 记实际选中的执行者，不是列表第一个。
-- [ ] `executor_ref_snapshot` 记完整快照（所有 `executor_refs`），供事后分辨「当时没有别的执行者」与「当时有但选错了」。
+- [ ] `executor_ref_snapshot` 记完整快照（所有 `executor_refs`），供事后分辨「当时没有别的执行者」与「当时有但选错了」。与 `ai4-9wji` 共用同一处填值实现，只做一次。
 - [ ] 两处选择逻辑（快照全量重算与下游重算）共用同一个选择函数，不各写一份。
 - [ ] 新增测试：多执行者择一、全部不可用、空列表；第一项在修复前失败。
 - [ ] 既有 9 项测试仍通过。
