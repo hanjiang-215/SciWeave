@@ -85,6 +85,7 @@ class ResearchMapMcpSnapshotPort(FormalSnapshotPort):
             mapping_domain_id=mapping_domain_id,
             formal_revision_id=formal_revision_id,
             documents=documents,
+            latest_published_by=result.get("published_by"),
         )
 
     # ------------------------------------------------------------------ http
@@ -160,7 +161,8 @@ class ResearchMapMcpSnapshotPort(FormalSnapshotPort):
 
 
 def _build_snapshot(
-    *, mapping_domain_id: str, formal_revision_id: str, documents: list[dict[str, Any]]
+    *, mapping_domain_id: str, formal_revision_id: str, documents: list[dict[str, Any]],
+    latest_published_by: str | None = None,
 ) -> FormalSnapshot:
     nodes: list[TaskNodeDoc] = []
     edges: list[DependencyEdgeDoc] = []
@@ -195,6 +197,7 @@ def _build_snapshot(
         formal_revision_id=formal_revision_id,
         nodes=tuple(node for node in nodes if node.task_node_id),
         edges=tuple(edge for edge in edges if edge.edge_id),
+        latest_published_by=_text(latest_published_by) or None,
     )
 
 

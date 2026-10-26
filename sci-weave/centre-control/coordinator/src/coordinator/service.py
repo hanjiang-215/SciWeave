@@ -53,15 +53,23 @@ class CoordinatorService:
         publisher: HandoffPublisherPort,
         notifications: NotificationPublisherPort,
         agents: AgentAvailabilityPort,
+        *,
+        max_attempts: int = 5,
     ) -> None:
         self.store = store
         self.snapshot_port = snapshot_port
         self.publisher = publisher
         self.notifications = notifications
         self.agents = agents
+        self.max_attempts = max_attempts
 
     def on_formal_revision_published(self, mapping_domain_id: str, formal_revision_id: str) -> None:
-        """Recompute every node in the published revision. Idempotent per trigger revision."""
+        """Recompute every non-root node in the published revision.
+
+        Idempotent per trigger revision; root nodes (zero inbound edges) are
+        never auto-dispatched here (ai4-te1v) - only ``dispatch_root_task``
+        publishes them.
+        """
         try:
             snapshot = self.snapshot_port.get_formal_mapping_at_revision(
                 mapping_domain_id, formal_revision_id
@@ -105,11 +113,17 @@ class CoordinatorService:
         node_ids = {node.task_node_id for node in snapshot.nodes}
         for node in snapshot.nodes:
             incoming = snapshot.incoming_edges(node.task_node_id)
+            # ai4-te1v: root nodes (zero inbound edges) are never auto
+            # dispatched on a formal-revision event. all([]) is NOT a truthy
+            # condition here; only PO's dispatch_root_task may publish them.
+            if not incoming:
+                continue
             upstream_refs = tuple(
                 (edge.source_node_id, edge.source_version_id) for edge in incoming
             )
             upstream_ids = {ref[0] for ref in upstream_refs}
-            executor_agent_id = node.executor_refs[0] if node.executor_refs else None
+            executor_refs = node.executor_refs
+            executor_agent_id = self._select_executor(executor_refs)
             # A node is structurally ready when every upstream exists in this
             # snapshot and has a recorded completion fact.
             conditions_met = all(
@@ -124,7 +138,7 @@ class CoordinatorService:
                     node.task_node_id,
                     node.version_id,
                     upstream_refs,
-                    executor_agent_id,
+                    executor_refs,
                     PENDING_WAITING,
                     trigger_revision_id,
                 )
@@ -134,7 +148,7 @@ class CoordinatorService:
                 node.task_node_id,
                 node.version_id,
                 upstream_refs,
-                executor_agent_id,
+                executor_refs,
                 PENDING_READY,
                 trigger_revision_id,
             )
@@ -165,14 +179,15 @@ class CoordinatorService:
                 )
                 for upstream_id in {ref[0] for ref in upstream_refs}
             )
-            executor_agent_id = node.executor_refs[0] if node.executor_refs else None
+            executor_refs = node.executor_refs
+            executor_agent_id = self._select_executor(executor_refs)
             if not conditions_met:
                 self.store.upsert_pending_handoff(
                     snapshot.mapping_domain_id,
                     node.task_node_id,
                     node.version_id,
                     upstream_refs,
-                    executor_agent_id,
+                    executor_refs,
                     PENDING_WAITING,
                     snapshot.formal_revision_id,
                 )
@@ -182,7 +197,7 @@ class CoordinatorService:
                 node.task_node_id,
                 node.version_id,
                 upstream_refs,
-                executor_agent_id,
+                executor_refs,
                 PENDING_READY,
                 snapshot.formal_revision_id,
             )
@@ -197,6 +212,65 @@ class CoordinatorService:
         return node.version_id if node is not None else ""
 
     # ---------------------------------------------------------------- dispatch
+
+    def _select_executor(self, executor_refs: tuple[str, ...]) -> str | None:
+        """Pick the first available executor in declared order (ai4-te1v).
+
+        ``executor_refs`` may list a collaboration set; the first currently
+        available agent wins, never blindly ``refs[0]``. Returns None when
+        every ref is unavailable or the list is empty.
+        """
+        for agent_id in executor_refs:
+            if self.agents.is_available(agent_id):
+                return agent_id
+        return None
+
+    def dispatch_root_task(
+        self,
+        mapping_domain_id: str,
+        task_node_id: str,
+        target_node_version_ref: str,
+        *,
+        trigger_revision_id: str,
+    ) -> bool:
+        """Explicitly dispatch a root task (ai4-te1v dispatch_root_task).
+
+        Root nodes are never auto-dispatched on formal-revision events; the PO
+        calls this idempotent entry. The node must exist in the latest
+        snapshot and be a root (zero inbound edges); the executor must be
+        available, otherwise the wait is kept and a human notification is
+        emitted. Idempotent via the dedupe key.
+        """
+        latest = self.store.get_latest_revision(mapping_domain_id)
+        if latest is None:
+            return False
+        try:
+            snapshot = self.snapshot_port.get_formal_mapping_at_revision(mapping_domain_id, latest)
+        except (SnapshotUnavailableError, SnapshotInconsistentError, NoSuchRevisionError):
+            return False
+        node = snapshot.node_by_id(task_node_id)
+        if node is None:
+            return False
+        if snapshot.incoming_edges(task_node_id):
+            raise ValueError(
+                f"task {task_node_id} is not a root node; root dispatch is for zero-inbound nodes only"
+            )
+        executor_agent_id = self._select_executor(node.executor_refs)
+        self.store.upsert_pending_handoff(
+            mapping_domain_id,
+            task_node_id,
+            target_node_version_ref,
+            (),
+            node.executor_refs,
+            PENDING_READY,
+            trigger_revision_id,
+        )
+        dispatched = self._dispatch_ready(
+            snapshot, task_node_id, executor_agent_id, trigger_revision_id
+        )
+        if dispatched and not snapshot.outgoing_edges(task_node_id):
+            self._dispatch_terminal_summary(snapshot, task_node_id, trigger_revision_id)
+        return dispatched
 
     def _dispatch_ready(
         self,
@@ -264,6 +338,31 @@ class CoordinatorService:
     def _dispatch_human_notification(
         self, snapshot: FormalSnapshot, pending: PendingHandoff, trigger: str
     ) -> None:
+        node = snapshot.node_by_id(pending.task_node_id)
+        recipient = node.task_owner_id if node is not None else None
+        # ai4-f985: one notification has exactly one recipient, the task
+        # owner's principal_id. A missing owner means corrupt data: keep the
+        # waiting fact, do not guess a recipient, and surface the gap.
+        if not recipient:
+            self.store.set_pending_handoff_status(
+                snapshot.mapping_domain_id,
+                pending.task_node_id,
+                pending.target_node_version_ref,
+                PENDING_WAITING,
+            )
+            failed_dispatch = self.store.create_dispatch(
+                pending.pending_handoff_id,
+                self._dedupe(snapshot.mapping_domain_id, pending, MSG_HUMAN_NOTIFICATION, trigger),
+                MSG_HUMAN_NOTIFICATION,
+                None,
+            )
+            if failed_dispatch is not None:
+                self.store.set_dispatch_status(
+                    failed_dispatch.dispatch_id,
+                    DISPATCH_FAILED,
+                    "recipient_unresolved:task_owner_id_missing",
+                )
+            return
         dedupe_key = self._dedupe(
             snapshot.mapping_domain_id, pending, MSG_HUMAN_NOTIFICATION, trigger
         )
@@ -276,7 +375,7 @@ class CoordinatorService:
             self.notifications.publish(
                 NotificationIntent(
                     notification_kind="agent_unavailable",
-                    recipients=(snapshot.mapping_domain_id,),
+                    recipients=(recipient,),
                     subject="任务交接等待人工处理",
                     body=f"TaskNode {pending.task_node_id} 的执行者不可用，交接事实已保留。",
                     related={
@@ -301,6 +400,11 @@ class CoordinatorService:
         )
         if pending is None:
             return
+        # ADR-0004 / ai4-10ja#6: the terminal summary goes to whoever last
+        # published the formal revision, not the mapping domain id.
+        recipient = snapshot.latest_published_by
+        if not recipient:
+            return
         dedupe_key = self._dedupe(
             snapshot.mapping_domain_id, pending, MSG_TERMINAL_SUMMARY, trigger
         )
@@ -313,7 +417,7 @@ class CoordinatorService:
             self.notifications.publish(
                 NotificationIntent(
                     notification_kind="task_terminal_summary",
-                    recipients=(snapshot.mapping_domain_id,),
+                    recipients=(recipient,),
                     subject="任务链已到终点",
                     body=f"TaskNode {task_node_id} 无后继节点，工作流已结束。",
                     related={
@@ -337,6 +441,14 @@ class CoordinatorService:
         pending = self.store.get_pending_handoff_by_id(dispatch.pending_handoff_id)
         if pending is None:
             return
+        # ai4-te1v: this retry is one more attempt. Reaching max_attempts with
+        # the outcome still unconfirmed moves the dispatch to dead.
+        attempt_count = dispatch.attempt_count + 1
+        if attempt_count >= self.max_attempts:
+            self.store.set_dispatch_status(
+                dispatch.dispatch_id, DISPATCH_DEAD, "max_attempts_exceeded", attempt_count=attempt_count
+            )
+            return
         latest_revision_id = self.store.get_latest_revision(pending.mapping_domain_id)
         if latest_revision_id is None:
             self.store.set_dispatch_status(dispatch.dispatch_id, DISPATCH_FAILED, "no_revision")
@@ -349,11 +461,15 @@ class CoordinatorService:
                 self.store.set_dispatch_status(dispatch.dispatch_id, DISPATCH_FAILED, "node_missing")
                 return
         except (SnapshotUnavailableError, SnapshotInconsistentError, NoSuchRevisionError) as exc:
-            self.store.set_dispatch_status(dispatch.dispatch_id, DISPATCH_RESULT_UNKNOWN, str(exc))
+            # ai4-te1v: unavailable/inconsistent are retryable - keep the
+            # fact and wait; only a definite unrecoverable state becomes failed.
+            self.store.set_dispatch_status(
+                dispatch.dispatch_id, DISPATCH_RESULT_UNKNOWN, str(exc), attempt_count=attempt_count
+            )
             return
-        self._publish_dispatch(dispatch, snapshot)
+        self._publish_dispatch(dispatch, snapshot, attempt_count=attempt_count)
 
-    def _publish_dispatch(self, dispatch: HandoffDispatch, snapshot: FormalSnapshot) -> None:
+    def _publish_dispatch(self, dispatch: HandoffDispatch, snapshot: FormalSnapshot, attempt_count: int = 1) -> None:
         """Re-publish an existing dispatch record (startup recovery). Uses the
         record's own dedupe_key as trigger so re-publishing stays idempotent."""
         pending = self.store.get_pending_handoff_by_id(dispatch.pending_handoff_id)
@@ -374,10 +490,12 @@ class CoordinatorService:
                 )
             except Exception as exc:
                 self.store.set_dispatch_status(
-                    dispatch.dispatch_id, DISPATCH_RESULT_UNKNOWN, error_summary=str(exc)
+                    dispatch.dispatch_id, DISPATCH_RESULT_UNKNOWN, error_summary=str(exc), attempt_count=attempt_count
                 )
                 return
-            self.store.set_dispatch_status(dispatch.dispatch_id, DISPATCH_PUBLISHED)
+            self.store.set_dispatch_status(
+                dispatch.dispatch_id, DISPATCH_PUBLISHED, attempt_count=attempt_count
+            )
             self.store.set_pending_handoff_status(
                 pending.mapping_domain_id,
                 pending.task_node_id,
@@ -386,11 +504,17 @@ class CoordinatorService:
             )
             return
         if dispatch.message_type == MSG_TERMINAL_SUMMARY:
+            recipient = snapshot.latest_published_by
+            if not recipient:
+                self.store.set_dispatch_status(
+                    dispatch.dispatch_id, DISPATCH_FAILED, "recipient_unresolved:latest_published_by_missing", attempt_count=attempt_count
+                )
+                return
             try:
                 self.notifications.publish(
                     NotificationIntent(
                         notification_kind="task_terminal_summary",
-                        recipients=(snapshot.mapping_domain_id,),
+                        recipients=(recipient,),
                         subject="任务链已到终点",
                         body=f"TaskNode {pending.task_node_id} 无后继节点，工作流已结束。",
                         related={
@@ -402,16 +526,25 @@ class CoordinatorService:
                 )
             except Exception as exc:
                 self.store.set_dispatch_status(
-                    dispatch.dispatch_id, DISPATCH_RESULT_UNKNOWN, error_summary=str(exc)
+                    dispatch.dispatch_id, DISPATCH_RESULT_UNKNOWN, error_summary=str(exc), attempt_count=attempt_count
                 )
                 return
-            self.store.set_dispatch_status(dispatch.dispatch_id, DISPATCH_PUBLISHED)
+            self.store.set_dispatch_status(
+                dispatch.dispatch_id, DISPATCH_PUBLISHED, attempt_count=attempt_count
+            )
+            return
+        node = snapshot.node_by_id(pending.task_node_id)
+        recipient = node.task_owner_id if node is not None else None
+        if not recipient:
+            self.store.set_dispatch_status(
+                dispatch.dispatch_id, DISPATCH_FAILED, "recipient_unresolved:task_owner_id_missing", attempt_count=attempt_count
+            )
             return
         try:
             self.notifications.publish(
                 NotificationIntent(
                     notification_kind="agent_unavailable",
-                    recipients=(snapshot.mapping_domain_id,),
+                    recipients=(recipient,),
                     subject="任务交接等待人工处理",
                     body=f"TaskNode {pending.task_node_id} 的执行者不可用，交接事实已保留。",
                     related={
@@ -423,13 +556,18 @@ class CoordinatorService:
             )
         except Exception as exc:
             self.store.set_dispatch_status(
-                dispatch.dispatch_id, DISPATCH_RESULT_UNKNOWN, error_summary=str(exc)
+                dispatch.dispatch_id, DISPATCH_RESULT_UNKNOWN, error_summary=str(exc), attempt_count=attempt_count
             )
             return
-        self.store.set_dispatch_status(dispatch.dispatch_id, DISPATCH_PUBLISHED)
+        self.store.set_dispatch_status(
+            dispatch.dispatch_id, DISPATCH_PUBLISHED, attempt_count=attempt_count
+        )
 
     @staticmethod
     def _dedupe(
         mapping_domain_id: str, pending: PendingHandoff, message_type: str, trigger: str
     ) -> str:
-        return f"{mapping_domain_id}:{pending.task_node_id}:{pending.target_node_version_ref}:{message_type}:{trigger}"
+        # ai4-te1v: the dispatch idempotency key must NOT carry the trigger
+        # revision - "same node version, same message type" dispatches once
+        # even when new formal revisions arrive.
+        return f"{mapping_domain_id}:{pending.task_node_id}:{pending.target_node_version_ref}:{message_type}"

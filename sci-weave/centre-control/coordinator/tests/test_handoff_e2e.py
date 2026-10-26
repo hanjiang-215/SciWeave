@@ -276,6 +276,16 @@ class CoordinatorHandoffE2E(unittest.TestCase):
                 time.sleep(0.2)
             self.assertEqual(handled, 1, "formal_revision_published was not consumed")
 
+            # --- 4b. root node T1 is never auto-dispatched; PO triggers it ---
+            # (ai4-te1v: zero-inbound nodes only via dispatch_root_task). The
+            # coordinator's on_formal_revision_published still recorded the
+            # latest revision; now dispatch the root explicitly.
+            service.store.set_latest_revision(domain, formal_revision_id)
+            self.assertTrue(
+                service.dispatch_root_task(domain, "T1", "t1-v1", trigger_revision_id=formal_revision_id),
+                "dispatch_root_task failed",
+            )
+
             # --- 5. a plain kafka consumer reads task_handoff_ready back ---
             from kafka import KafkaConsumer as KC
 

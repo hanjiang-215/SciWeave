@@ -53,6 +53,11 @@ class FormalSnapshot:
     formal_revision_id: str
     nodes: tuple[TaskNodeDoc, ...] = ()
     edges: tuple[DependencyEdgeDoc, ...] = ()
+    # Who last approved/published this formal revision. Answers "who made the
+    # latest publish decision", not "who is appointed owner"; recipients for
+    # task_terminal_summary come from here per ADR-0004. Populated from the
+    # mapping MCP's published_by field (ai4-2raq); None when unavailable.
+    latest_published_by: str | None = None
 
     def node_by_id(self, task_node_id: str) -> TaskNodeDoc | None:
         for node in self.nodes:

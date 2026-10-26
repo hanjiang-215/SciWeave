@@ -1,3 +1,11 @@
+"""Coordinator core tests (ai4-1y6q core regression + ai4-10ja defect fixes).
+
+The fixture set mirrors the ai4-1y6q sandbox plus the ai4-10ja defect scenes:
+root nodes are never auto-dispatched (only ``dispatch_root_task``), the
+dispatch idempotency key excludes the trigger revision, ``done`` is terminal,
+and ``executor_refs`` selects the first available agent.
+"""
+
 import sqlite3
 
 import pytest
@@ -13,6 +21,7 @@ from coordinator.ports import (
 )
 from coordinator.service import CoordinatorService
 from coordinator.store import (
+    DISPATCH_DEAD,
     DISPATCH_FAILED,
     DISPATCH_PUBLISHED,
     DISPATCH_RESULT_UNKNOWN,
@@ -22,6 +31,7 @@ from coordinator.store import (
     PENDING_DISPATCHED_UNKNOWN,
     PENDING_DONE,
     PENDING_READY,
+    PENDING_SUPERSEDED,
     PENDING_WAITING,
     CoordinatorStore,
 )
@@ -80,9 +90,9 @@ class FakeAgentAvailability:
         return agent_id in self.available
 
 
-def make_service(connection, snapshot_port, publisher, notifications, agents) -> CoordinatorService:
+def make_service(connection, snapshot_port, publisher, notifications, agents, **kwargs) -> CoordinatorService:
     return CoordinatorService(
-        CoordinatorStore(connection), snapshot_port, publisher, notifications, agents
+        CoordinatorStore(connection), snapshot_port, publisher, notifications, agents, **kwargs
     )
 
 
@@ -93,8 +103,12 @@ def store():
     connection.close()
 
 
-def node(task_node_id: str, version_id: str, executor_refs: tuple[str, ...] = ()):
-    return TaskNodeDoc(task_node_id=task_node_id, version_id=version_id, executor_refs=executor_refs)
+def node(task_node_id: str, version_id: str, executor_refs: tuple[str, ...] = (),
+         task_owner_id: str | None = None):
+    return TaskNodeDoc(
+        task_node_id=task_node_id, version_id=version_id,
+        executor_refs=executor_refs, task_owner_id=task_owner_id,
+    )
 
 
 def edge(edge_id: str, source: str, target: str, source_v: str, target_v: str):
@@ -107,13 +121,37 @@ def edge(edge_id: str, source: str, target: str, source_v: str, target_v: str):
     )
 
 
-def test_conditions_met_publishes_handoff_for_ready_node():
+# --------------------------------------------------------- root task dispatch
+
+def test_root_node_is_not_auto_dispatched_on_publication():
+    """ai4-10ja#4: a zero-inbound node must not auto-dispatch on any formal-revision event."""
     connection = sqlite3.connect(":memory:")
     snapshot_port = FakeSnapshotPort()
     snapshot = FormalSnapshot(
         mapping_domain_id="map-1",
         formal_revision_id="rev-1",
         nodes=(node("T1", "v1", ("agent-1",)),),
+        latest_published_by="owner-1",
+    )
+    snapshot_port.set("map-1", "rev-1", snapshot)
+    publisher = FakeHandoffPublisher()
+    service = make_service(
+        connection, snapshot_port, publisher, FakeNotificationPublisher(), FakeAgentAvailability({"agent-1"})
+    )
+    service.on_formal_revision_published("map-1", "rev-1")
+    assert publisher.published == []
+    connection.close()
+
+
+def test_dispatch_root_task_publishes_and_is_idempotent():
+    """ai4-te1v dispatch_root_task publishes a root once; repeat is a no-op."""
+    connection = sqlite3.connect(":memory:")
+    snapshot_port = FakeSnapshotPort()
+    snapshot = FormalSnapshot(
+        mapping_domain_id="map-1",
+        formal_revision_id="rev-1",
+        nodes=(node("T1", "v1", ("agent-1",)),),
+        latest_published_by="owner-1",
     )
     snapshot_port.set("map-1", "rev-1", snapshot)
     publisher = FakeHandoffPublisher()
@@ -121,20 +159,23 @@ def test_conditions_met_publishes_handoff_for_ready_node():
     service = make_service(
         connection, snapshot_port, publisher, notifications, FakeAgentAvailability({"agent-1"})
     )
-    service.on_formal_revision_published("map-1", "rev-1")
+    service.store.set_latest_revision("map-1", "rev-1")
+    assert service.dispatch_root_task("map-1", "T1", "v1", trigger_revision_id="rev-1") is True
     assert [m.task_node_id for m in publisher.published] == ["T1"]
     assert publisher.published[0].target_agent_id == "agent-1"
     pending = service.store.get_pending_handoff("map-1", "T1", "v1")
     assert pending.status == PENDING_DONE
-    # 无后继时额外发送终点汇总
+    # repeat is idempotent (dedupe key excludes trigger revision)
+    service.dispatch_root_task("map-1", "T1", "v1", trigger_revision_id="rev-1")
+    service.dispatch_root_task("map-1", "T1", "v1", trigger_revision_id="rev-2")
+    assert len(publisher.published) == 1
     assert [i.notification_kind for i in notifications.published] == ["task_terminal_summary"]
     connection.close()
 
 
-def test_conditions_not_met_keeps_waiting():
+def test_dispatch_root_task_rejects_non_root_node():
     connection = sqlite3.connect(":memory:")
     snapshot_port = FakeSnapshotPort()
-    # T2 依赖 T1，但 T1 尚无完成事实
     snapshot = FormalSnapshot(
         mapping_domain_id="map-1",
         formal_revision_id="rev-1",
@@ -142,28 +183,26 @@ def test_conditions_not_met_keeps_waiting():
         edges=(edge("e1", "T1", "T2", "v1", "v2"),),
     )
     snapshot_port.set("map-1", "rev-1", snapshot)
-    publisher = FakeHandoffPublisher()
     service = make_service(
-        connection,
-        snapshot_port,
-        publisher,
-        FakeNotificationPublisher(),
-        FakeAgentAvailability({"agent-1", "agent-2"}),
+        connection, snapshot_port, FakeHandoffPublisher(), FakeNotificationPublisher(), FakeAgentAvailability({"agent-1"})
     )
-    service.on_formal_revision_published("map-1", "rev-1")
-    assert [m.task_node_id for m in publisher.published] == ["T1"]
-    pending_t2 = service.store.get_pending_handoff("map-1", "T2", "v2")
-    assert pending_t2.status == PENDING_WAITING
+    service.store.set_latest_revision("map-1", "rev-1")
+    with pytest.raises(ValueError):
+        service.dispatch_root_task("map-1", "T2", "v2", trigger_revision_id="rev-1")
     connection.close()
 
 
-def test_task_completed_unblocks_downstream():
+def test_downstream_unblocks_after_task_completed():
+    """Root T1 dispatched explicitly; T2 unblocks once T1 completion is recorded."""
     connection = sqlite3.connect(":memory:")
     snapshot_port = FakeSnapshotPort()
     snapshot = FormalSnapshot(
         mapping_domain_id="map-1",
         formal_revision_id="rev-1",
-        nodes=(node("T1", "v1", ("agent-1",)), node("T2", "v2", ("agent-2",))),
+        nodes=(
+            node("T1", "v1", ("agent-1",)),
+            node("T2", "v2", ("agent-2",)),
+        ),
         edges=(edge("e1", "T1", "T2", "v1", "v2"),),
     )
     snapshot_port.set("map-1", "rev-1", snapshot)
@@ -176,6 +215,9 @@ def test_task_completed_unblocks_downstream():
         FakeAgentAvailability({"agent-1", "agent-2"}),
     )
     service.on_formal_revision_published("map-1", "rev-1")
+    assert publisher.published == []  # root T1 not auto-dispatched
+    service.store.set_latest_revision("map-1", "rev-1")
+    service.dispatch_root_task("map-1", "T1", "v1", trigger_revision_id="rev-1")
     assert [m.task_node_id for m in publisher.published] == ["T1"]
     service.on_task_completed("map-1", "T1", "v1")
     assert [m.task_node_id for m in publisher.published] == ["T1", "T2"]
@@ -184,69 +226,218 @@ def test_task_completed_unblocks_downstream():
     connection.close()
 
 
-def test_duplicate_event_does_not_publish_twice():
+def test_duplicate_formal_revision_does_not_redispatch():
+    """ai4-10ja#1: a downstream node is dispatched once across two revisions."""
     connection = sqlite3.connect(":memory:")
     snapshot_port = FakeSnapshotPort()
     snapshot = FormalSnapshot(
         mapping_domain_id="map-1",
         formal_revision_id="rev-1",
-        nodes=(node("T1", "v1", ("agent-1",)),),
+        nodes=(
+            node("T1", "v1", ("agent-1",)),
+            node("T2", "v2", ("agent-2",)),
+        ),
+        edges=(edge("e1", "T1", "T2", "v1", "v2"),),
+    )
+    snapshot_port.set("map-1", "rev-1", snapshot)
+    snapshot_port.set("map-1", "rev-2", FormalSnapshot(
+        mapping_domain_id="map-1",
+        formal_revision_id="rev-2",
+        nodes=(
+            node("T1", "v1", ("agent-1",)),
+            node("T2", "v2", ("agent-2",)),
+        ),
+        edges=(edge("e1", "T1", "T2", "v1", "v2"),),
+    ))
+    publisher = FakeHandoffPublisher()
+    service = make_service(
+        connection,
+        snapshot_port,
+        publisher,
+        FakeNotificationPublisher(),
+        FakeAgentAvailability({"agent-1", "agent-2"}),
+    )
+    service.on_formal_revision_published("map-1", "rev-1")
+    service.store.set_latest_revision("map-1", "rev-1")
+    service.dispatch_root_task("map-1", "T1", "v1", trigger_revision_id="rev-1")
+    service.on_task_completed("map-1", "T1", "v1")
+    assert [m.task_node_id for m in publisher.published] == ["T1", "T2"]
+    # rev-2 arrives; recompute must not re-dispatch T2 (already done)
+    service.on_formal_revision_published("map-1", "rev-2")
+    assert [m.task_node_id for m in publisher.published] == ["T1", "T2"]
+    dispatch_rows = service.store.list_dispatches()
+    handoff_rows = [d for d in dispatch_rows if d.message_type == MSG_HANDOFF_READY and d.target_agent_id]
+    assert len(handoff_rows) == 2
+    connection.close()
+
+
+def test_done_is_terminal_after_upstream_moves():
+    """ai4-10ja#2: an existing done PendingHandoff is never rolled back to waiting."""
+    connection = sqlite3.connect(":memory:")
+    snapshot_port = FakeSnapshotPort()
+    snapshot = FormalSnapshot(
+        mapping_domain_id="map-1",
+        formal_revision_id="rev-1",
+        nodes=(
+            node("T1", "v1", ("agent-1",)),
+            node("T2", "v2", ("agent-2",)),
+        ),
+        edges=(edge("e1", "T1", "T2", "v1", "v2"),),
     )
     snapshot_port.set("map-1", "rev-1", snapshot)
     publisher = FakeHandoffPublisher()
     service = make_service(
-        connection, snapshot_port, publisher, FakeNotificationPublisher(), FakeAgentAvailability({"agent-1"})
+        connection,
+        snapshot_port,
+        publisher,
+        FakeNotificationPublisher(),
+        FakeAgentAvailability({"agent-1", "agent-2"}),
     )
     service.on_formal_revision_published("map-1", "rev-1")
-    service.on_formal_revision_published("map-1", "rev-1")
-    assert len(publisher.published) == 1
+    service.store.set_latest_revision("map-1", "rev-1")
+    service.dispatch_root_task("map-1", "T1", "v1", trigger_revision_id="rev-1")
+    service.on_task_completed("map-1", "T1", "v1")
+    pending_t2 = service.store.get_pending_handoff("map-1", "T2", "v2")
+    assert pending_t2.status == PENDING_DONE
+    # upstream version moves to a new revision; recompute must not roll back
+    snapshot_port.set("map-1", "rev-3", FormalSnapshot(
+        mapping_domain_id="map-1",
+        formal_revision_id="rev-3",
+        nodes=(
+            node("T1", "v1", ("agent-1",)),
+            node("T2", "v2", ("agent-2",)),
+        ),
+        edges=(edge("e1", "T1", "T2", "v1", "v2"),),
+    ))
+    service.on_formal_revision_published("map-1", "rev-3")
+    pending_t2 = service.store.get_pending_handoff("map-1", "T2", "v2")
+    assert pending_t2.status == PENDING_DONE
     connection.close()
 
 
-def test_agent_unavailable_keeps_waiting_and_notifies_human():
+# ------------------------------------------------------------- executor refs
+
+def test_executor_refs_selects_first_available():
+    """ai4-10ja#3: executor_refs=(a1,a2) with only a2 online dispatches to a2."""
     connection = sqlite3.connect(":memory:")
     snapshot_port = FakeSnapshotPort()
     snapshot = FormalSnapshot(
         mapping_domain_id="map-1",
         formal_revision_id="rev-1",
-        nodes=(node("T1", "v1", ("agent-ghost",)),),
+        nodes=(node("T1", "v1", ("agent-a1", "agent-a2"), task_owner_id="owner-1"),),
+        latest_published_by="owner-1",
+    )
+    snapshot_port.set("map-1", "rev-1", snapshot)
+    publisher = FakeHandoffPublisher()
+    notifications = FakeNotificationPublisher()
+    service = make_service(
+        connection, snapshot_port, publisher, notifications, FakeAgentAvailability({"agent-a2"})
+    )
+    service.store.set_latest_revision("map-1", "rev-1")
+    assert service.dispatch_root_task("map-1", "T1", "v1", trigger_revision_id="rev-1") is True
+    assert publisher.published[0].target_agent_id == "agent-a2"
+    assert [i.notification_kind for i in notifications.published] == ["task_terminal_summary"]
+    connection.close()
+
+
+def test_all_executors_unavailable_keeps_waiting_and_notifies_human():
+    connection = sqlite3.connect(":memory:")
+    snapshot_port = FakeSnapshotPort()
+    snapshot = FormalSnapshot(
+        mapping_domain_id="map-1",
+        formal_revision_id="rev-1",
+        nodes=(node("T1", "v1", ("agent-ghost", "agent-ghost2"), task_owner_id="owner-1"),),
+        latest_published_by="owner-1",
     )
     snapshot_port.set("map-1", "rev-1", snapshot)
     notifications = FakeNotificationPublisher()
     service = make_service(
         connection, snapshot_port, FakeHandoffPublisher(), notifications, FakeAgentAvailability(set())
     )
-    service.on_formal_revision_published("map-1", "rev-1")
+    service.store.set_latest_revision("map-1", "rev-1")
+    assert service.dispatch_root_task("map-1", "T1", "v1", trigger_revision_id="rev-1") is False
     pending = service.store.get_pending_handoff("map-1", "T1", "v1")
     assert pending.status == PENDING_WAITING
     assert [i.notification_kind for i in notifications.published] == ["agent_unavailable"]
+    assert notifications.published[0].recipients == ("owner-1",)
     connection.close()
 
 
-def test_unknown_result_is_retried_on_startup_scan():
+def test_human_notification_recipient_is_task_owner_principal():
+    """ai4-10ja#6: the human notification carries the principal id, not the domain."""
+    connection = sqlite3.connect(":memory:")
+    snapshot_port = FakeSnapshotPort()
+    snapshot = FormalSnapshot(
+        mapping_domain_id="map-1",
+        formal_revision_id="rev-1",
+        nodes=(node("T1", "v1", (), task_owner_id="principal-researcher"),),
+        latest_published_by="owner-1",
+    )
+    snapshot_port.set("map-1", "rev-1", snapshot)
+    notifications = FakeNotificationPublisher()
+    service = make_service(
+        connection, snapshot_port, FakeHandoffPublisher(), notifications, FakeAgentAvailability(set())
+    )
+    service.store.set_latest_revision("map-1", "rev-1")
+    service.dispatch_root_task("map-1", "T1", "v1", trigger_revision_id="rev-1")
+    published = [i for i in notifications.published if i.notification_kind != "task_terminal_summary"]
+    assert published[0].recipients == ("principal-researcher",)
+    connection.close()
+
+
+def test_missing_task_owner_keeps_waiting_without_notification():
+    """ai4-10ja#6: missing task_owner_id means no guessing; keep waiting + record gap."""
+    connection = sqlite3.connect(":memory:")
+    snapshot_port = FakeSnapshotPort()
+    snapshot = FormalSnapshot(
+        mapping_domain_id="map-1",
+        formal_revision_id="rev-1",
+        nodes=(node("T1", "v1", ("agent-ghost",), task_owner_id=None),),
+        latest_published_by="owner-1",
+    )
+    snapshot_port.set("map-1", "rev-1", snapshot)
+    notifications = FakeNotificationPublisher()
+    service = make_service(
+        connection, snapshot_port, FakeHandoffPublisher(), notifications, FakeAgentAvailability(set())
+    )
+    service.store.set_latest_revision("map-1", "rev-1")
+    service.dispatch_root_task("map-1", "T1", "v1", trigger_revision_id="rev-1")
+    pending = service.store.get_pending_handoff("map-1", "T1", "v1")
+    assert pending.status == PENDING_WAITING
+    assert notifications.published == []
+    unresolved = [d for d in service.store.list_dispatches() if "recipient_unresolved" in (d.error_summary or "")]
+    assert any("task_owner_id_missing" in (d.error_summary or "") for d in unresolved)
+    connection.close()
+
+
+# ------------------------------------------------------------ retry / dead
+
+def test_max_attempts_reaches_dead_and_is_not_replayed():
+    """ai4-10ja#5: a dispatch hitting max_attempts goes dead and is not retried."""
     connection = sqlite3.connect(":memory:")
     snapshot_port = FakeSnapshotPort()
     snapshot = FormalSnapshot(
         mapping_domain_id="map-1",
         formal_revision_id="rev-1",
         nodes=(node("T1", "v1", ("agent-1",)),),
+        latest_published_by="owner-1",
     )
     snapshot_port.set("map-1", "rev-1", snapshot)
     publisher = FakeHandoffPublisher()
-    publisher.fail_next = 1  # 首次发布失败 -> result_unknown
     service = make_service(
-        connection, snapshot_port, publisher, FakeNotificationPublisher(), FakeAgentAvailability({"agent-1"})
+        connection, snapshot_port, publisher, FakeNotificationPublisher(),
+        FakeAgentAvailability({"agent-1"}), max_attempts=2,
     )
-    service.on_formal_revision_published("map-1", "rev-1")
-    assert len(publisher.published) == 0
+    service.store.set_latest_revision("map-1", "rev-1")
+    publisher.fail_next = 100  # every publish fails
+    service.dispatch_root_task("map-1", "T1", "v1", trigger_revision_id="rev-1")
     unknown = service.store.list_dispatches(statuses=(DISPATCH_RESULT_UNKNOWN,))
     assert len(unknown) == 1
-    assert unknown[0].message_type == MSG_HANDOFF_READY
-    # 启动扫描重试
+    # attempt 1 exceeds max_attempts=2? attempts: 1 -> retry -> 2 -> dead
     service.startup_scan()
-    assert len(publisher.published) == 1
-    recovered = service.store.get_dispatch(unknown[0].dispatch_id)
-    assert recovered.status == DISPATCH_PUBLISHED
+    dead = service.store.list_dispatches(statuses=(DISPATCH_DEAD,))
+    assert len(dead) == 1
+    assert "max_attempts_exceeded" in (dead[0].error_summary or "")
     connection.close()
 
 
@@ -269,7 +460,10 @@ def test_startup_scan_recovers_waiting_from_latest_revision():
     snapshot = FormalSnapshot(
         mapping_domain_id="map-1",
         formal_revision_id="rev-1",
-        nodes=(node("T1", "v1", ("agent-1",)), node("T2", "v2", ("agent-2",))),
+        nodes=(
+            node("T1", "v1", ("agent-1",)),
+            node("T2", "v2", ("agent-2",)),
+        ),
         edges=(edge("e1", "T1", "T2", "v1", "v2"),),
     )
     snapshot_port.set("map-1", "rev-1", snapshot)
@@ -282,19 +476,21 @@ def test_startup_scan_recovers_waiting_from_latest_revision():
         FakeAgentAvailability({"agent-1", "agent-2"}),
     )
     service.on_formal_revision_published("map-1", "rev-1")
-    assert [m.task_node_id for m in publisher.published] == ["T1"]
-    # 不触发完成事件，但模拟一个进程里等待中的 T2；启动扫描应保持其 waiting
+    assert publisher.published == []
+    service.store.set_latest_revision("map-1", "rev-1")
+    service.dispatch_root_task("map-1", "T1", "v1", trigger_revision_id="rev-1")
+    # scan keeps the waiting T2 without re-dispatching
     service.startup_scan()
     pending_t2 = service.store.get_pending_handoff("map-1", "T2", "v2")
     assert pending_t2.status == PENDING_WAITING
-    assert len(publisher.published) == 1  # 不重复发布 T1
+    assert [m.task_node_id for m in publisher.published] == ["T1"]
     connection.close()
 
 
-def test_terminal_summary_only_for_nodes_without_successors():
+def test_terminal_summary_goes_to_latest_publisher():
+    """ai4-10ja#6: task_terminal_summary recipient is latest_published_by (ADR-0004)."""
     connection = sqlite3.connect(":memory:")
     snapshot_port = FakeSnapshotPort()
-    # 链式 T1 -> T2 -> T3，T1/T2 有后继，只有 T3 是终点
     snapshot = FormalSnapshot(
         mapping_domain_id="map-1",
         formal_revision_id="rev-1",
@@ -307,6 +503,7 @@ def test_terminal_summary_only_for_nodes_without_successors():
             edge("e1", "T1", "T2", "v1", "v2"),
             edge("e2", "T2", "T3", "v2", "v3"),
         ),
+        latest_published_by="po-principal-1",
     )
     snapshot_port.set("map-1", "rev-1", snapshot)
     notifications = FakeNotificationPublisher()
@@ -317,12 +514,12 @@ def test_terminal_summary_only_for_nodes_without_successors():
         notifications,
         FakeAgentAvailability({"agent-1", "agent-2", "agent-3"}),
     )
-    service.on_formal_revision_published("map-1", "rev-1")
-    # 只发 T1；T3 未满足条件（依赖 T2 未完成），无终点汇总
-    assert notifications.published == []
+    service.store.set_latest_revision("map-1", "rev-1")
+    service.dispatch_root_task("map-1", "T1", "v1", trigger_revision_id="rev-1")
     service.on_task_completed("map-1", "T1", "v1")
-    assert notifications.published == []
     service.on_task_completed("map-1", "T2", "v2")
-    assert [i.notification_kind for i in notifications.published] == ["task_terminal_summary"]
-    assert notifications.published[0].related["task_node_id"] == "T3"
+    terminal = [i for i in notifications.published if i.notification_kind == "task_terminal_summary"]
+    assert len(terminal) == 1
+    assert terminal[0].recipients == ("po-principal-1",)
+    assert terminal[0].related["task_node_id"] == "T3"
     connection.close()
