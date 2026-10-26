@@ -117,6 +117,8 @@ class WikiManagementServiceTestCase(unittest.TestCase):
         merged_candidate_service = WikiMergedCandidateService(
             self.sqlite, candidate, service_name="wiki-management",
         )
+        from llm_wiki.governance_events import RecordingGovernanceEventPublisher
+        self.governance_events = RecordingGovernanceEventPublisher()
         self.service = WikiManagementService(
             formal_query=formal,
             candidate_service=candidate,
@@ -131,6 +133,7 @@ class WikiManagementServiceTestCase(unittest.TestCase):
             sqlite_store=self.sqlite,
             prereview_log=prereview_log,
             merged_candidate_service=merged_candidate_service,
+            governance_events=self.governance_events,
         )
 
     def test_list_wiki_candidates_reads_back_persisted_submissions(self):
@@ -150,6 +153,20 @@ class WikiManagementServiceTestCase(unittest.TestCase):
         self.assertEqual(outcome.status, "ok")
         denied = self.service.call_tool("get_formal_wiki", {"wiki_domain_id": DOMAIN}, actor_id="submitter")
         self.assertEqual(denied.error_code, "forbidden")
+
+    def test_candidate_submit_publishes_governance_event(self) -> None:
+        outcome = self.service.call_tool(
+            "submit_wiki_candidate",
+            {"document_change": _change(), "idempotency_key": "key-event-wiki"},
+            actor_id="submitter",
+        )
+        self.assertEqual(outcome.status, "ok")
+        self.assertEqual(len(self.governance_events.events), 1)
+        event = self.governance_events.events[0]
+        self.assertEqual(event.event_type, "candidate_created")
+        self.assertEqual(event.wiki_domain_id, DOMAIN)
+        self.assertEqual(event.target["kind"], "candidate")
+        self.assertEqual(event.dedupe_key, f"{DOMAIN}:submission-1:candidate-commit")
 
     def test_candidate_submit_requires_candidate_submit_capability(self):
         outcome = self.service.call_tool(
