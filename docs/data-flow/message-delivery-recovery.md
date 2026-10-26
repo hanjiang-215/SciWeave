@@ -2,21 +2,25 @@
 
 本文记录消息交接在三类接收目标之间的边界，以及交接协调服务启动后的恢复流程。它补充 [`message-queue.md`](message-queue.md) 的事件流，不实现 Redpanda 客户端、邮件服务或具体 Workflow。
 
-交接协调服务通过 Research Mapping 的只读领域接口读取正式快照；具体采用 MCP Streamable HTTP、内部 HTTP 或其他稳定传输方式，暂由[Research Mapping 正式快照查询接口与交接协调服务访问边界](../../.tickets/ai4-2982.md)裁决。交接协调服务不得直连 Research Mapping SQLite 或 TerminusDB。
+交接协调服务通过 Research Mapping 的只读领域接口读取正式快照；具体采用 MCP Streamable HTTP、内部 HTTP 或其他稳定传输方式，由[Research Mapping 正式快照查询接口与交接协调服务访问边界](../../.tickets/ai4-2982.md)裁决（该票已关闭，结论为经 research-map 管理 MCP 的 `get_formal_mapping_at_revision` 读取）。交接协调服务不得直连 Research Mapping SQLite 或 TerminusDB。
 
-研究员端新建 `task-workflow` 后的订阅发现、消费者组和历史消息恢复，由[研究员 Task Agent 动态订阅 task-workflow 交接消息](../../.tickets/ai4-nfty.md)收敛；本文件只要求交接事件携带稳定的目标 Agent 和目标节点版本引用。
+研究员端新建 `task-workflow` 后的订阅发现、消费者组和历史消息恢复，由[研究员 Task Agent 动态订阅 task-workflow 交接消息](../../.tickets/ai4-nfty.md)收敛（该票已关闭）；本文件只要求交接事件携带稳定的目标 Agent 和目标节点版本引用。
+
+消息信封字段、消息类型与消费者组的权威定义在[消息队列协作模型分支](../../.tickets/ai4-te1v.md)。
 
 ## 目标类型不是同一种交接语义
 
 交接协调服务可以根据同一份正式 Mapping 判断多个下游目标，但不把三类目标压成同一种 `task_handoff_ready`：
 
 ```text
-dependency-notice
+sciweave.dependency-notice
     → 交接协调服务统一重算正式依赖
-        ├── task-workflow    → task_handoff_ready
-        ├── centre-workflow  → centre_review_trigger
-        └── email-service    → human_notification_intent
+        ├── task-workflow    → sciweave.task-handoff.<agent_id> → task_handoff_ready
+        ├── centre-workflow  → sciweave.governance-events → 治理事件
+        └── email-service    → 受鉴权 MCP send_notification → human_notification_intent
 ```
+
+前两类是 Redpanda 消费者，第三类不是。email-service 不订阅任何 topic，只接受 MCP 调用；而 `centre-workflow` 订阅的治理事件由领域管理流程生产，不由交接协调服务生产。
 
 ### task-workflow
 
@@ -25,16 +29,19 @@ dependency-notice
 消息至少携带：
 
 ```text
-target_kind = task-workflow
-target_node_version_ref
-target_agent_id
-source_node_version_ref
-dependency_edge_version_ref
-formal_revision_id
-required_outputs
-business_key
-event_id
+message_id
+message_type = task_handoff_ready
 schema_version
+dedupe_key
+routing.target_agent_id
+routing.partition_key = target_node_id
+payload.target_node_id
+payload.target_node_version_ref
+payload.mapping_domain_id
+payload.pending_handoff_id
+payload.trigger_revision_id
+payload.upstream_source_refs
+payload.executor_ref_snapshot
 ```
 
 消息由目标 TaskNode 对应的 Task Agent subscriber 消费，创建 `queued ExecutionRecord`、获取 Worker Lease 并启动 Worker。
@@ -73,13 +80,9 @@ consumer_group
 
 ### email-service
 
-`email-service` 不是 Workflow Agent，而是人工通知投递服务。它消费：
+`email-service` 不是 Workflow Agent，而是人工通知投递服务。它**不消费任何 Redpanda topic**，只以受鉴权 MCP `send_notification` 接受调用。调用方是交接协调服务（以及需要通知研究员的端侧 Work Agent）。
 
-```text
-sciweave.notification-intent
-```
-
-消息类型为 `human_notification_intent`，至少携带：
+业务对象仍是 `human_notification_intent`，至少携带：
 
 ```text
 notification_id
@@ -94,31 +97,39 @@ dedupe_key
 schema_version
 ```
 
-邮件服务记录发送成功、失败和重试状态。邮件投递成功不代表依赖满足、任务完成、PendingHandoff 解决或正式路线推进。
+首版没有 `sciweave.notification-intent` topic。`task_terminal_summary` 同样走 MCP，不进队列。
 
-## 消息封套
+email-service 记录发送成功、失败和重试状态。邮件投递成功不代表依赖满足、任务完成、PendingHandoff 解决或正式路线推进。
 
-三类消息可以共享序列化封套，但物理 topic 和消费组按处理语义隔离：
+## 消息信封
+
+三类消息共享同一信封，但物理 topic 和消费组按处理语义隔离：
 
 ```json
 {
-  "event_id": "event:...",
-  "event_type": "...",
+  "message_id": "msg:...",
+  "message_type": "...",
   "schema_version": 1,
-  "mapping_domain_id": "mapping:...",
-  "occurred_at": "...",
   "dedupe_key": "...",
-  "target": {
-    "kind": "task-workflow | centre-workflow | email-service",
-    "id": "..."
+  "occurred_at": "...",
+  "published_at": "...",
+  "producer": {
+    "service": "...",
+    "instance_id": "..."
+  },
+  "routing": {
+    "partition_key": "...",
+    "target_agent_id": "..."
   },
   "payload": {}
 }
 ```
 
-`target.kind` 表达目标类型，但不作为权限来源。正式 `executor_refs` 决定 TaskNode 执行关系；Centre Workflow 的订阅配置决定它订阅哪些治理事件；Registry 只提供身份和实例登记事实。
+`routing.target_agent_id` 表达目标 Agent，但不作为权限来源。正式 `executor_refs` 决定 TaskNode 执行关系；Centre Workflow 的订阅配置决定它订阅哪些治理事件；Registry 只提供身份和实例登记事实。
 
-Inbox 中未找到 Workflow 卡片、版本不兼容、加载失败或进程启动失败时，消息保持在 Inbox，不启动下一轮 Worker，不修改正式 Map；记录配置错误并生成 `human_notification_intent`，待 binding 或卡片修复后重新扫描。
+信封的 schema、序列化、校验与构造逻辑落在 `sci-weave/centre-control/shared/message-envelope/`，是纯协议包，不携带 Kafka 客户端。
+
+Inbox 中未找到 Workflow 卡片、版本不兼容、加载失败或进程启动失败时，消息保持在 Inbox，不启动下一轮 Worker，不修改正式 Map；记录配置错误并通过 email-service MCP 提交 `human_notification_intent`，待 binding 或卡片修复后重新扫描。
 
 
 服务启动时不能只扫描 Redpanda，也不能把每条历史消息全部重放。恢复分为三层：
@@ -134,7 +145,7 @@ Inbox 中未找到 Workflow 卡片、版本不兼容、加载失败或进程启�
     → 同一 consumer group 重新收到该消息
 ```
 
-不更换 consumer group，不把恢复逻辑建立在 `latest` 上。业务处理完成后才提交 offset，并通过 `event_id` 或业务键幂等。
+不更换 consumer group，不把恢复逻辑建立在 `latest` 上。业务处理完成后才提交 offset，并通过 `message_id` 或 `dedupe_key` 幂等。
 
 ### 第二层：未完成的 PendingHandoff 和 HandoffDispatch
 
@@ -160,14 +171,27 @@ HandoffDispatch.status ∈ {pending, unknown, retryable}
 ```text
 dispatch_id
 pending_handoff_id
-output_event_id
+output_message_id
 dedupe_key
+message_type
+target_agent_id
 status
 attempt_count
 last_error
 created_at
 completed_at
 ```
+
+重试参数默认值：
+
+```text
+max_attempts       = 5
+backoff_initial    = 1s
+backoff_max        = 60s
+backoff_strategy   = 指数退避（1s, 2s, 4s, 8s, 16s，封顶 60s）
+```
+
+由环境变量配置。`attempt_count` 达到 `max_attempts` 仍未确认发布成功的 dispatch 转入 `dead`，保留记录但不自动重放。
 
 重复发布由 `dedupe_key` 和下游消费者幂等共同保护，不追求跨数据库与消息队列的精确一次事务。
 
@@ -227,8 +251,7 @@ PO 不直接操作 Redpanda。所有候选创建、混合候选、正式化、�
     → 后续正式事件触发重新计算
 
 确认当前没有任何后继
-    → 发送 task_terminal_summary
-    → notification-intent
+    → 经 email-service MCP 提交 task_terminal_summary
     → Project Owner
 ```
 
@@ -255,16 +278,18 @@ sciweave.task-workflow.<mapping_domain_id>.<agent_id>
 
 ```text
 sciweave.dependency-notice
+    → formal_revision_published、task_completed
     → 交接协调服务
 
 sciweave.task-handoff.<agent_id>
+    → task_handoff_ready
     → task-workflow 的 Task Agent subscriber
 
 sciweave.governance-events
+    → candidate_created、candidate_head_updated、formal_revision_published
     → centre-workflow 的可扩展订阅者
-
-sciweave.notification-intent
-    → email-service 或其他人工通知投递服务
 ```
+
+首版没有 `sciweave.notification-intent`。人工通知由交接协调服务通过 email-service 的受鉴权 MCP `send_notification` 提交，不经 Redpanda。
 
 这些是固定物理 topic，不按 TaskNode 或每个 Workflow 动态创建 topic。TaskNode 的逻辑频道通过消息中的目标节点引用和分区键表达；Centre Workflow 通过独立订阅声明和消费者组扩展。

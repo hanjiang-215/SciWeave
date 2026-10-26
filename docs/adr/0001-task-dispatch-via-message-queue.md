@@ -24,4 +24,5 @@ accepted（2026-10-22）
 - 形态与组件划分：`docs/data-flow/work-agent.md`
 - 通道分工的推翻过程：`.tickets/ai4-dhpv.md`
 - 端侧归属：`.tickets/ai4-we38.md`
-- 消息语义（主题、分区、offset）：`.tickets/ai4-te1v.md`，待定
+- 消息语义（主题、分区、offset）：`.tickets/ai4-te1v.md`
+- 消息链路设计：`docs/data-flow/message-queue.md`、`docs/data-flow/message-delivery-recovery.md`

@@ -18,14 +18,18 @@ tags: [wayfinder:grilling]
 
 ## Acceptance Criteria
 
-- [ ] 明确逻辑 topic 家族与物理 topic 的关系，不按 TaskNode 或 Workflow 实例动态创建 topic。
-- [ ] 明确 `dependency-notice`、`task-handoff`、`governance-events` 的物理 topic、消息类型和消费者关系。
-- [ ] 明确首版不消费 Redpanda `notification-intent`，通知通过 email-service MCP 传递。
-- [ ] 明确 `task_handoff_ready` 的 Agent 路由、`target_node_id` 分区键和消费者组命名。
-- [ ] 明确统一消息信封、schema 版本、幂等键和核心业务载荷。
-- [ ] 明确至少一次投递、业务完成后提交 offset、重复投递幂等和失败处置。
-- [ ] 明确队列短期恢复、端侧 Inbox、协调记录和消息过期补偿的三层恢复边界。
-- [ ] 形成可供真实 Redpanda producer/consumer 和 `deploy-task-agent` subscriber 实现票引用的协议；本票不选择具体 Python 客户端。
+- [x] 明确逻辑 topic 家族与物理 topic 的关系，不按 TaskNode 或 Workflow 实例动态创建 topic。
+- [x] 明确 `dependency-notice`、`task-handoff`、`governance-events` 的物理 topic、消息类型和消费者关系。
+- [x] 明确首版不消费 Redpanda `notification-intent`，通知通过 email-service MCP 传递。
+- [x] 明确 `task_handoff_ready` 的 Agent 路由、`target_node_id` 分区键和消费者组命名。
+- [x] 明确统一消息信封、schema 版本、幂等键和核心业务载荷。
+- [x] 明确至少一次投递、业务完成后提交 offset、重复投递幂等和失败处置。
+- [x] 明确队列短期恢复、端侧 Inbox、协调记录和消息过期补偿的三层恢复边界。
+- [x] 明确消息信封的归属：中央多项目共用的纯协议包 `sci-weave/centre-control/shared/message-envelope/`，不含任何 Kafka 客户端。
+- [x] 明确 Python 客户端选型为 `confluent-kafka`，版本约束与锁文件要求见下文「依赖边界」。
+- [x] 明确 `dependency_kind` 四种取值在首版的处理口径。
+- [x] 明确 `HandoffDispatch` 的重试上限与退避参数。
+- [x] 明确 `task_completed` 的发布时点与返修后是否重发的规则。
 
 ## Current design boundary
 
@@ -90,6 +94,57 @@ tags: [wayfinder:grilling]
 - 依赖暂时不可用、连接超时等可恢复故障进入可重试状态并采用退避；消息格式错误、未知主版本、错误目标 Agent 或正式版本校验失败进入可观察的永久 Inbox 状态，不静默丢弃。
 - offset 提交失败允许消息重放；`dedupe_key` 防止重复业务执行。
 - `result_unknown`、可重试失败和未绑定 Workflow 的消息由启动扫描恢复；已过期队列消息由正式 Mapping 和本地事实补偿发现。
+
+### 消息信封归属与依赖边界
+
+消息信封是中央多个独立项目共用的协议代码，按 `docs/TECH_STACK.md` 的共享代码规则落在：
+
+```text
+sci-weave/centre-control/shared/message-envelope/
+```
+
+该包是**纯协议包**：只做 schema 定义、序列化、反序列化、信封构造与校验，不依赖任何 Kafka 客户端，不持有连接、不启动消费者、不含重试循环。各角色自行接入客户端：
+
+- handoff coordinator 需要 producer（发布 `task_handoff_ready`）、consumer（消费 `dependency-notice`）与 admin（topic 保障）。
+- 领域管理流程只需要 producer（发布治理事件与 `dependency-notice`）。
+- Task Agent subscriber 只需要 consumer（消费 `sciweave.task-handoff.<agent_id>`）。
+
+客户端选型：Python 侧统一使用 `confluent-kafka`（Apache 2.0，同时覆盖 producer、consumer 与 admin）。版本约束、许可证记录、锁文件与验证命令由各自引入该依赖的实现票单独登记，并按 `docs/DEPENDENCIES.md` 要求写入 `pyproject.toml` 与 `uv.lock`。
+
+### dependency_kind 的首版处理口径
+
+`dependency_kind` 取值由 `ai4-r3so` 与 `ai4-t5zl` 定义，本票只规定消息侧如何处置：
+
+- `blocking`：按 `blocks_until` 与 `required_outputs` 判定，条件满足且执行者可用才发布 `task_handoff_ready`。
+- `information`：产生通知事实与 `PendingHandoff`，但不单独触发执行。是否触发由目标任务定义决定。
+- `conditional`：`activation_condition` 能自动判定时按判定结果处理；**不能判定时不得自动放行**，写入 `PendingHandoff(status=waiting, waiting_reason=activation_condition_unknown)` 并生成 `human_notification_intent`，由人工判断或补充信息。
+- `alternative`：按 `alternative_group_id` 归组记录候选路径，**不允许 Agent 自行选择路线**；同组内没有可判定的激活条件时进入与 `conditional` 相同的人工等待路径。
+
+不允许把任何 `dependency_kind` 一律当作「全部上游完成即放行」。当前 `coordinator` 的 Fake ports 实现只按上游完成事实判定，缺少 `dependency_kind`、`activation_condition`、`required_outputs` 与 `blocks_until` 字段，由后续实现票补齐。
+
+### 重试上限与退避
+
+`HandoffDispatch` 的重试参数默认值：
+
+```text
+max_attempts       = 5
+backoff_initial    = 1s
+backoff_max        = 60s
+backoff_strategy   = exponential（1s, 2s, 4s, 8s, 16s，封顶 60s）
+```
+
+参数通过环境变量配置，默认值如上。`attempt_count` 达到 `max_attempts` 仍未确认发布成功的 dispatch 转入 `dead`，只保留可观察记录，**不自动重放**，由人工经运维查询处理。`result_unknown` 与 `failed` 之间的区分保持不变：`result_unknown` 表示可能已发出，`failed` 表示确定未发出。
+
+### task_completed 的发布时点
+
+`task_completed` 在 Task Agent Worker 把草稿写入草稿箱成功、且 ExecutionRecord 保存 `completed` 与 `draft_id` 之后立即发布，不等任何审核结论。
+
+草稿后续被要求返修时，产生的是 `revision_of` 关联的**新一轮执行**，不是同一 ExecutionRecord 的重试。新一轮执行完成时是否再次发布 `task_completed`，取决于它是否形成了新的 `completed` 执行记录：
+
+- 新一轮执行完成并写出新草稿：发布一条新的 `task_completed`，其 `execution_id` 与 `draft_id` 是新值。
+- 同一 ExecutionRecord 不重复发布 `task_completed`。
+
+协调器只消费 `task_completed` 解除下游依赖条件，不判断草稿是否通过审核。审核与正式化由后续 `formal_revision_published` 承担。
 
 ## Notes
 
@@ -200,4 +255,15 @@ tags: [wayfinder:grilling]
 - 首版消息类型、唯一生产者、统一消息信封、核心 payload、`target_node_id` 分区键和 consumer group 命名已确定。
 - 消息采用至少一次投递，业务完成后提交 offset，重复消息按 `dedupe_key` 幂等；未知类型、版本不兼容、目标错误和正式版本校验失败必须进入可观察 Inbox 状态。
 - 队列保留期只提供短期离线恢复窗口；恢复依靠 consumer group、端侧 Inbox、协调记录和正式 Mapping 补偿，不新增独立死信 topic。
-- 本票只定义协议，不选择或引入具体 Python Redpanda 客户端；真实 producer/consumer、coordinator 适配和 `deploy-task-agent` subscriber 由后续实现票承接。
+
+**2026-10-26 第二轮收敛（Frank Qi）**
+
+> 修订：上一条「本票只定义协议，不选择或引入具体 Python Redpanda 客户端」已作废。本轮确认客户端选型属于协议可落地性的一部分，在本票定死；真实适配代码仍由实现票承接。
+
+本轮补记：
+
+- 消息信封落在 `sci-weave/centre-control/shared/message-envelope/`，是纯协议包，不含 Kafka 客户端、连接或重试循环。
+- Python 客户端统一为 `confluent-kafka`（Apache 2.0，覆盖 producer、consumer、admin）。版本、许可证、锁文件和验证命令由各自实现票登记。
+- `dependency_kind` 四种取值分别处置：`blocking` 按条件放行；`information` 只产生通知事实；`conditional` 条件不可判定时进人工等待，不得自动放行；`alternative` 按组记录，不允许 Agent 自选路线。
+- `HandoffDispatch` 重试默认 `max_attempts=5`、指数退避 1s 起、封顶 60s；达上限转 `dead`，记录保留但不自动重放。
+- `task_completed` 在草稿写入成功且 ExecutionRecord 保存 `completed` 与 `draft_id` 后立即发布；同一 ExecutionRecord 不重复发布，返修产生新执行时发布新的 `task_completed`。
