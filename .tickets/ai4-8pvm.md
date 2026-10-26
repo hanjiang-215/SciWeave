@@ -33,13 +33,14 @@ tags: [implementation, centre-control, shared, message-queue, ready-for-agent]
 
 ## Verification
 
-- 提交：`a8f5c6e` 建包，`de31ef6`、`8447f83`、`6fc3ef9`、`6358cd2`、`390a37d` 补校验与测试
+- 提交：`a8f5c6e` 建包，`de31ef6`、`8447f83`、`6fc3ef9`、`6358cd2`、`390a37d`、`77b4719` 补校验与测试
 - 命令：`cd sci-weave/centre-control/shared/message-envelope && UV_CACHE_DIR=/tmp/uvcache uv run --extra test pytest -q`
-- 结果：`46 passed in 0.07s`
-- 覆盖率：`--cov=src/message_envelope` → 138 语句 / 100%，0 未覆盖
+- 结果：`59 passed in 0.08s`
+- 覆盖率：`--cov=src/message_envelope` → 127 语句 / 100%，0 未覆盖
 - 编译检查：`uv run python -m compileall -q src tests` → 通过
-- 边界断言：`tests/test_no_kafka.py` 用 AST 扫描包内全部 `.py` 的 `import` / `from ... import` / 字符串实参调用，确认无 `confluent_kafka` / `kafka` / `aiokafka`，且无 `socket` / `ssl` / `http` / `urllib` / `requests` / `threading` / `subprocess` / `asyncio`。文件内另有一条自检，确认该扫描能识别 `__import__('socket')` 这类动态导入。
-- 变异验证：逐个删除版本校验、类型校验、时区校验、时间格式校验、`payload` 缺键校验、`payload` 形状校验、`instance_id` / `target_agent_id` 序列化，每一项都至少使一条测试失败。
+- 边界断言：`tests/test_no_kafka.py` 用 AST 扫描包内全部 `.py` 的 `import`、`from ... import`，以及 `__import__(...)` / `import_module(...)` 的字符串实参，确认无 `confluent_kafka` / `kafka` / `aiokafka`，且无 `socket` / `ssl` / `http` / `urllib` / `requests` / `threading` / `subprocess` / `asyncio`。另有两条反向自检：`__import__('socket')` 与 `from threading import Thread` 都能被检出，而普通调用里的字符串（如 `body.get("socket")`）不会被误报。
+- 变异验证：逐个删除或放宽版本校验、类型校验、时区校验、时间格式校验、`payload` 缺键校验、`payload` 形状校验（`decode` 侧与 `validate` 侧分别验）、可选字段省略、`allow_nan=False`、`decode` 的入参类型检查，每一项都至少使一条测试失败。
+- 审查：`code-review` 两条轴（Standards / Spec）均无 blocking，本票已按审查结论补齐被散文守着而非被测试守着的几处：`decode` 里的 `validate()` 调用、`MESSAGE_TYPES` 目录、`PayloadError` 与 `EnvelopeFormatError` 的兄弟关系、边界扫描的误报与自检。
 
 ### 与父票 AC 的一处出入
 
