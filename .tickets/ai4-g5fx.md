@@ -26,14 +26,14 @@ tags: [implementation, centre-control, handoff, prefactor]
   - 依据：`PrincipalState` 三值 `ACTIVE`/`ABSENT`/`UNKNOWN`，`PrincipalDirectoryPort.state_of()`，`UnverifiablePrincipalDirectory` 恒返 `UNKNOWN`。
 - [x] `CoordinatorService` 构造函数接受该端口，缺省为不校验的实现，现有调用点无需修改。
   - 依据：`principals: PrincipalDirectoryPort | None = None`，缺省落到 `UnverifiablePrincipalDirectory()`；`test_service_without_a_directory_still_constructs` 用四个参数构造成功。
-- [x] `HandoffReadyMessage` 补齐 `upstream_source_refs`、`dependency_edge_version_refs`、`executor_ref_snapshot` 三个字段，与 `ai4-te1v` 的载荷要求一致。
-  - 依据：三字段均为尾部带默认值的元组，`test_handoff_ready_message_carries_protocol_payload_fields` 逐字段断言。
+- [x] `HandoffReadyMessage` 补齐 `upstream_source_refs`、`dependency_edge_version_refs`、`executor_ref_snapshot` 三个字段，**类型上可承载** `ai4-te1v` 的载荷要求（字段名与元素形状对齐，本票不负责填值）。
+  - 依据：三字段均为尾部带默认值的元组，`test_handoff_ready_message_carries_protocol_payload_fields` 逐字段断言。实际发布仍带空元组，填值见「遗留」第 1 条。
 - [x] `dependency_edge_version_refs` 为元组/数组，单元素时仍是数组。
-  - 依据：`tuple[tuple[str, str], ...]`；`test_dependency_edge_version_refs_stays_a_sequence_with_one_element` 断言 `isinstance(..., tuple)` 且单元素不退化。
+  - 依据：`tuple[tuple[str, str], ...]`；`test_edge_refs_stay_a_sequence_not_a_bare_element` 直接读注解，断言外层是 `tuple` 且第二实参是 `Ellipsis`。不看构造出来的值——dataclass 不做转换，值断言在旧注解下同样通过。
 - [x] 现有 9 项测试不改断言、全部通过。
-  - 依据：`git diff e66d28c HEAD -- tests/test_coordinator.py` 为空；`pytest -q` 20 passed（原 9 项 + 新 11 项）。
+  - 依据：`git diff e66d28c HEAD -- tests/test_coordinator.py` 为空；`pytest -q` 21 passed（原 9 项 + 新 12 项）。
 - [x] 新增测试：`FormalSnapshot` 带 `latest_published_by` 时可构造；`PrincipalDirectoryPort` 的三种结果（存在且 active、不存在、无法判断）各有覆盖。
-  - 依据：`tests/test_ports.py` 11 项，含三值各一例、经 `CoordinatorService` 注入的一例，以及边/源引用同形状的一例。
+  - 依据：`tests/test_ports.py` 12 项，含三值各一例、经 `CoordinatorService` 注入的一例，以及边/源引用同形状的一例。
 - [x] 在 fer 记录验证命令、结果和提交哈希。
   - 依据：见 `## Resolution`。
 
@@ -52,29 +52,35 @@ tags: [implementation, centre-control, handoff, prefactor]
 
 - `98cd86e` `feat(coordinator): widen ports and payloads with no behaviour change`
 - `ec58ad5` `test(coordinator): cover all three principal directory outcomes`
-- 后续修正 `dependency_edge_version_refs` 的元素形状（见下方「实现中的三处判断」第 3 条）
+- `2a4ff00` `fix(coordinator): give edge refs the same shape as source refs`（见下方「实现中的三处判断」第 3 条）
+- `622fb19` `fix(coordinator): keep a falsy-but-present principal directory`（见第 4 条）
+- `582a97d` `test(coordinator): pin the ref shapes the annotation actually declares`（见第 5 条）
+- `b9f6078` `docs(coordinator): trim port comments to the non-obvious why`
 
 验证命令与结果：
 
 ```text
 $ cd sci-weave/centre-control/coordinator
 $ UV_CACHE_DIR=/tmp/uvcache uv run --env-file .env.example pytest -q
-20 passed in 0.02s
+21 passed in 0.02s
 
 $ UV_CACHE_DIR=/tmp/uvcache uv run --env-file .env.example python -m compileall -q src tests
 compile-ok
 ```
 
-`20 = 原 9 项 + 新增 11 项`；`tests/test_coordinator.py` 在本次改动中零差异。
+`21 = 原 9 项 + 新增 12 项`；`tests/test_coordinator.py` 在本次改动中零差异。
 
-实现中的三处判断：
+实现中的五处判断：
 
 1. **`PrincipalState` 用三值枚举而不是 `bool`。** 验收只要求「能表达无法判断」，但返回 `bool` 时 `UNKNOWN` 只能折成 `False`，而 `False` 的下游语义是「这个 principal 不存在」——一个读不到的注册中心会被当成「此人已注销」，从而静默吞掉真实通知。三值让 fail-open 与 fail-closed 在类型上就分得开。
 2. **缺省实现恒返 `UNKNOWN` 而不是 `ACTIVE`。** 两者都让前置校验变成空操作，但 `UNKNOWN` 表达的是「我没接适配器，判断不了」，与真实适配器返回的「此人确实存在」区分得开；用 `ACTIVE` 会让「没接线」和「校验通过」混为一谈。
-3. **`dependency_edge_version_refs` 的元素是 `(logical_id, version_id)` 二元组，不是裸 `edge_id`。** 初版写成了 `tuple[str, ...]`，与同结构里的 `upstream_source_refs` 不一致，也与 `docs/data-flow/message-queue.md` 第 318 行的 `{logical_id, version_id}` 数组不一致。两者回答的是同一个问题（「这条交接依据哪几个正式版本」），形状必须相同，否则消费方要写两套解析。已改为 `tuple[tuple[str, str], ...]` 并加 `test_edge_and_source_refs_share_one_shape` 固定住。
+3. **`dependency_edge_version_refs` 的元素是 `(logical_id, version_id)` 二元组，不是裸 `edge_id`。** 初版写成了 `tuple[str, ...]`，与同结构里的 `upstream_source_refs` 不一致，也与 `docs/data-flow/message-queue.md` 第 318 行的 `{logical_id, version_id}` 数组不一致。两者回答的是同一个问题（「这条交接依据哪几个正式版本」），形状必须相同，否则消费方要写两套解析。已改为 `tuple[tuple[str, str], ...]`，由 `test_source_and_edge_refs_declare_the_same_element_type` 与 `test_edge_refs_stay_a_sequence_not_a_bare_element` 固定住。
+4. **缺省端口用 `is not None` 判断，不用 `or`。** 初版写 `principals or UnverifiablePrincipalDirectory()`。以映射为底的目录在映射为空时是 falsy，而「还没有人注册」是正常状态——那一刻前置校验会被静默关掉，恰好是本该开始起作用的时候。`principals if principals is not None else ...` 保住真实适配器，由 `test_a_falsy_directory_adapter_is_still_used` 固定住。
+5. **形状测试读注解，不读构造出来的值。** dataclass 不做类型转换，`HandoffReadyMessage(dependency_edge_version_refs=(("e","v"),))` 在注解写成 `tuple[str, ...]` 时同样通过；`get_origin(...) is tuple` 对裸二元组 `tuple[str, str]` 也成立，正好放过要防的那种退化。三条形状测试因此改为 `typing.get_type_hints` + 断言第二实参是 `Ellipsis`，并在改回旧注解时验证过确实会红。
 
 遗留：
 
 - `DependencyEdgeDoc` 仍只有 5 个扁平字段，缺 `dependency_kind`、`activation_condition`、`required_outputs`、`blocks_until`。这属于判定逻辑扩充，规格已明确不在本票范围，需要独立决策票。
 - `PrincipalDirectoryPort` 尚无真实 Registry 适配器，`state_of` 的三种取值目前只有测试覆盖。
 - `DependencyEdgeDoc` 的 `edge_id` 是单值，没有独立的 `edge logical_id + version_id`。因此 `dependency_edge_version_refs` 目前只能承载 `(edge_id, ?)`；真实版本号要等投影扩展（与上一条同一张后续票）。
+- **`upstream_source_refs` 与 `dependency_edge_version_refs` 的填值没有归属票。** `executor_ref_snapshot` 由 `ai4-7uxz` 的验收覆盖，另外两个字段在 `ai4-10ja` 与六张修复票的验收里都没出现，`service.py` 两处构造仍只传 6 个旧字段，发出去的消息携带空元组。补一张填值票，或把两条验收挂进 `ai4-7cmr`／`ai4-7uxz`，二者选一，不要留空。
