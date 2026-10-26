@@ -68,6 +68,22 @@ tags: [wayfinder:grilling, centre-control, message-queue, handoff]
 
 ## Notes
 
+**2026-10-26 真实适配器落地（hanjiang）**
+
+身份核对：本票 assignee 为 hanjiang，当前分支 `feature/hanjiang`、`git config user.name=hanjiang`，一致。
+
+`ai4-2982`（正式快照查询接口）已 closed 且 `get_formal_mapping_at_revision` 已在 research-map 落地；`ai4-1y6q`（协调核心）已 closed。本轮把协调服务从「Fake ports 验证」推进到「真实中央适配器」，提交 `be62fde`、`574bbd0`：
+
+- **正式快照**：`adapter_snapshot.py` 经 research-map 管理 MCP `get_formal_mapping_at_revision`（ai4-2982 契约）读取一致快照，投影为 `FormalSnapshot`；`no_such_revision`/`inconsistent`/`unavailable` 按稳定错误分层映射（`NoSuchRevisionError`/`SnapshotInconsistentError`/`SnapshotUnavailableError`）。
+- **派发发布**：`adapter_publisher.py` 用 kafka-python 向固定物理 topic `sciweave.task-handoff.<agent_id>` 发布 `task_handoff_ready`（消息交接恢复契约）；未配置目标 agent 时可选静默（由协调器保留等待事实）。
+- **执行者可用性**：`adapter_registry.py` 经 Registry MCP `get_agent_registration` 查询；仅 `active` 且有 `online` 实例视为可用，Registry 事实不构成执行授权（符合决策基线第 6 条）。
+- **人工通知**：`adapter_email.py` 经 email-service MCP `send_notification` 提交通知意图；未配置时降级为保留等待事实（符合「邮件成功不等于任务完成」边界）。
+- `src/main.py` 汇总启动：环境变量驱动端点/令牌，启动扫描 + 非终态派发轮询重试。新增依赖 `kafka-python>=3.0.11,<4`（uv.lock 已锁）。
+
+验证：coordinator 17 项单元/适配器测试全绿（进程内 MCP stub 覆盖快照投影、稳定错误分层、Registry 可用性判定、通知载荷）；新增真实 TerminusDB 集成测试（`test_terminus_integration.py`，显式 `SCIWEAVE_RUN_TERMINUSDB_INTEGRATION=1`）本机实测通过——临时库种正式 T1→T2 路线 + DependencyEdge，经真实管理 MCP 由 `ResearchMapMcpSnapshotPort` 读回，节点/executor_refs/owner/边投影全部正确。真实读取暴露并修复了字段形态差异：TerminusDB 把 `source/target_node_version_ref` 存为 JSON 文本而非内联 dict，`_parse_ref` 兼容两种形态。
+
+仍在决策票之外待接线：`formal_revision_published` 事件的 Redpanda 订阅消费（coordinator 的 `on_formal_revision_published` 入站）属于 centre-control 部署层，未并入本子项目。
+
 **2026-10-25 转交（hanjiang）**
 
 身份核对：本票 assignee 已由 Frank Qi 改为 hanjiang；当前分支 `feature/hanjiang`、`git config user.name=hanjiang`，一致。转交原因：Frank Qi 暂时无法继续推进项目，经其本人授权，由 hanjiang 接手本票后续推进与收口。原负责人 Frank Qi，转交时间 2026-10-25T12:41:00Z。转交只变更归属并记录，不改写正文与验收标准。
