@@ -18,6 +18,8 @@ import sys
 from dataclasses import dataclass
 from typing import Any, Protocol
 
+from .service import GovernanceEnvelopeError
+
 from .domain_mcp import BufferMGatewayMCPClient
 from .service import CentreGovernanceConsumer, SqliteProcessedKeyStore
 
@@ -40,7 +42,7 @@ class QueueMessage(Protocol):
 class QueueClient(Protocol):
     def subscribe(self, topics: list[str]) -> None: ...
     def poll(self, timeout_ms: int) -> list[QueueMessage]: ...
-    def commit(self) -> None: ...
+    def commit(self, message: QueueMessage | None = None) -> None: ...
     def close(self) -> None: ...
 
 
@@ -50,6 +52,7 @@ class FakeQueue:
     def __init__(self) -> None:
         self.messages: list[QueueMessage] = []
         self.committed = False
+        self.commits: list[Any] = []
 
     def subscribe(self, topics: list[str]) -> None:
         return
@@ -58,8 +61,9 @@ class FakeQueue:
         batch, self.messages = self.messages, []
         return batch
 
-    def commit(self) -> None:
+    def commit(self, message: QueueMessage | None = None) -> None:
         self.committed = True
+        self.commits.append(None if message is None else (message.topic, message.partition, message.offset))
 
     def close(self) -> None:
         self.messages = []
@@ -98,8 +102,25 @@ class KafkaQueueClient:
                 )
         return batch
 
-    def commit(self) -> None:
-        self.consumer.commit()
+    def commit(self, message: QueueMessage | None = None) -> None:
+        """Commit one record's offset, not the whole polled batch.
+
+        `consumer.commit()` commits the consumer position, which is the end
+        of the batch: crashing after the first of 100 records would mark the
+        other 99 consumed and lose them.
+        """
+        if message is None:
+            self.consumer.commit()
+            return
+        from kafka import OffsetAndMetadata, TopicPartition
+
+        self.consumer.commit(
+            {
+                TopicPartition(message.topic, message.partition): OffsetAndMetadata(
+                    message.offset + 1, None
+                )
+            }
+        )
 
     def close(self) -> None:
         self.consumer.close()
@@ -137,9 +158,11 @@ def run_loop(
 ) -> int:
     """Run the ingest loop: poll -> consume -> commit.
 
-    Returns the number of messages consumed.  The offset is committed only
-    after the consumer handled the message; a crash replays the message and
-    the dedupe_key blocks the duplicate.
+    Returns the number of messages consumed.  Each record's offset is committed
+    on its own after the consumer handled it, so a crash mid-batch replays only
+    the unhandled records.  A malformed envelope is a permanent property of
+    that record: it is recorded by the consumer, committed past, and does not
+    stop the loop -- otherwise one bad event pins the partition forever.
     """
     consumed = 0
     while max_messages is None or consumed < max_messages:
@@ -150,8 +173,13 @@ def run_loop(
             continue
         for message in batch:
             envelope = message.payload if isinstance(message.payload, dict) else {}
-            consumer.consume(envelope)
-            queue.commit()
+            try:
+                consumer.consume(envelope)
+            except GovernanceEnvelopeError:
+                queue.commit(message)
+                consumed += 1
+                continue
+            queue.commit(message)
             consumed += 1
     return consumed
 

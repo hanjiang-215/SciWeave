@@ -153,3 +153,54 @@ class EnvelopeAndStoreTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+class IngestLoopTests(unittest.TestCase):
+    """ai4-9k0m: one bad record must not stall the partition, and each offset commits alone."""
+
+    def _consumer(self):
+        mcp = RecordingDomainMCPClient([candidate("sub-1", "head-1", "rev-1")])
+        return CentreGovernanceConsumer(mcp, MemoryProcessedKeyStore())
+
+    def test_bad_envelope_is_committed_past_and_the_loop_continues(self) -> None:
+        from gateway_ingest.cli import FakeQueue, _RawMessage, run_loop
+
+        queue = FakeQueue()
+        queue.messages = [
+            _RawMessage(topic="sciweave.governance-events", partition=0, offset=10, key=None, payload={"event_type": "bogus"}),
+            _RawMessage(
+                topic="sciweave.governance-events",
+                partition=0,
+                offset=11,
+                key=None,
+                payload=make_event_body(
+                    event_type="candidate_created",
+                    domain_id="map-1",
+                    dedupe_key="map-1:sub-1:head-1",
+                    payload={"candidate_id": "sub-1", "candidate_head": "head-1"},
+                ),
+            ),
+        ]
+
+        consumed = run_loop(self._consumer(), queue, poll_timeout_ms=0, max_messages=2)
+
+        self.assertEqual(consumed, 2)
+        # Both records were committed individually: offset+1, per record.
+        self.assertEqual(
+            queue.commits,
+            [
+                ("sciweave.governance-events", 0, 10),
+                ("sciweave.governance-events", 0, 11),
+            ],
+        )
+
+    def test_commit_targets_the_record_not_the_batch(self) -> None:
+        from gateway_ingest.cli import FakeQueue, _RawMessage, run_loop
+
+        queue = FakeQueue()
+        queue.messages = [
+            _RawMessage(topic="t", partition=3, offset=99, key=None, payload={"event_type": "bogus"}),
+        ]
+
+        run_loop(self._consumer(), queue, poll_timeout_ms=0, max_messages=1)
+
+        self.assertEqual(queue.commits, [("t", 3, 99)])

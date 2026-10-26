@@ -70,7 +70,7 @@ def run_loop(
             service.handle_message(message)
             for target in service.queued_targets():
                 runner.run_once(target)
-            queue.commit()
+            queue.commit(message)
             processed += 1
     return processed
 

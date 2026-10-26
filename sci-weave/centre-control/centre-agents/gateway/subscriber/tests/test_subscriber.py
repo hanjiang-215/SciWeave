@@ -296,3 +296,51 @@ class SubscriberTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+class PerRecordCommitTests(unittest.TestCase):
+    """ai4-9k0m: commit the handled record, not the whole polled batch."""
+
+    def test_fake_queue_records_the_committed_record(self) -> None:
+        from gateway_subscriber.queue import FakeQueueClient
+
+        queue = FakeQueueClient()
+        first = queue.publish("sciweave.governance-events", "k1", {"a": 1})
+        second = queue.publish("sciweave.governance-events", "k2", {"a": 2})
+
+        queue.commit(first)
+        queue.commit(second)
+
+        self.assertEqual(
+            queue.commits,
+            [
+                ("sciweave.governance-events", 0, first.offset),
+                ("sciweave.governance-events", 0, second.offset),
+            ],
+        )
+
+    def test_run_loop_commits_each_handled_record(self) -> None:
+        from gateway_subscriber import cli
+        from gateway_subscriber.queue import FakeQueueClient
+
+        handled: list[Any] = []
+
+        class _Service:
+            def handle_message(self, message):
+                handled.append(message.key)
+
+            def queued_targets(self):
+                return []
+
+        class _Runner:
+            def run_once(self, target):
+                raise AssertionError("no queued target expected")
+
+        queue = FakeQueueClient()
+        queue.publish("sciweave.governance-events", "k1", {"a": 1})
+        queue.publish("sciweave.governance-events", "k2", {"a": 2})
+
+        processed = cli.run_loop(_Service(), _Runner(), queue, poll_timeout_ms=0, max_messages=2)
+
+        self.assertEqual(processed, 2)
+        self.assertEqual(handled, ["k1", "k2"])
+        self.assertEqual([entry[2] for entry in queue.commits], [0, 1])
