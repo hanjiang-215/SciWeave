@@ -114,16 +114,16 @@ def test_handoff_ready_message_carries_protocol_payload_fields():
         pending_handoff_id="p-1",
         trigger_revision_id="rev-1",
         upstream_source_refs=(("T0", "v0"),),
-        dependency_edge_version_refs=("e-1",),
+        dependency_edge_version_refs=(("e-1", "ev-1"),),
         executor_ref_snapshot=("agent-1", "agent-2"),
     )
     assert message.upstream_source_refs == (("T0", "v0"),)
-    assert message.dependency_edge_version_refs == ("e-1",)
+    assert message.dependency_edge_version_refs == (("e-1", "ev-1"),)
     assert message.executor_ref_snapshot == ("agent-1", "agent-2")
 
 
 def test_dependency_edge_version_refs_stays_a_sequence_with_one_element():
-    """One edge must not degrade to a bare string.
+    """One edge must not degrade to a bare pair.
 
     A shape that changes with cardinality forces every consumer to branch on
     length before it can iterate.
@@ -135,10 +135,31 @@ def test_dependency_edge_version_refs_stays_a_sequence_with_one_element():
         target_agent_id="agent-1",
         pending_handoff_id="p-1",
         trigger_revision_id="rev-1",
-        dependency_edge_version_refs=("e-only",),
+        dependency_edge_version_refs=(("e-only", "ev-only"),),
     )
     assert isinstance(message.dependency_edge_version_refs, tuple)
-    assert message.dependency_edge_version_refs == ("e-only",)
+    assert message.dependency_edge_version_refs == (("e-only", "ev-only"),)
+
+
+def test_edge_and_source_refs_share_one_shape():
+    """Both answer "which versions is this built on"; one shape keeps them comparable.
+
+    docs/data-flow/message-queue.md renders both as arrays of
+    {logical_id, version_id}; a flat string for edges would make the two
+    fields unreadable by the same code.
+    """
+    message = HandoffReadyMessage(
+        mapping_domain_id="map-1",
+        task_node_id="T1",
+        target_node_version_ref="v1",
+        target_agent_id="agent-1",
+        pending_handoff_id="p-1",
+        trigger_revision_id="rev-1",
+        upstream_source_refs=(("T0", "v0"),),
+        dependency_edge_version_refs=(("e-1", "ev-1"),),
+    )
+    assert message.upstream_source_refs[0].__class__ is message.dependency_edge_version_refs[0].__class__
+    assert len(message.upstream_source_refs[0]) == len(message.dependency_edge_version_refs[0])
 
 
 def test_new_payload_fields_default_to_empty():

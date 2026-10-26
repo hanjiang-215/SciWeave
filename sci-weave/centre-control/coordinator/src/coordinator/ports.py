@@ -93,13 +93,14 @@ class HandoffReadyMessage:
     pending_handoff_id: str
     trigger_revision_id: str
     # upstream_source_refs answers "which formal versions is this handoff
-    # built on". dependency_edge_version_refs is the same question for the
-    # edges, kept as a sequence even with one element so consumers never
-    # branch on cardinality. executor_ref_snapshot is audit only: it records
-    # who was visible at dispatch time and never replaces a check against the
-    # current formal map.
+    # built on", as (logical_id, version_id) pairs. dependency_edge_version_refs
+    # is the same question for the edges and carries the same pair shape, kept
+    # as a sequence even with one element so consumers never branch on
+    # cardinality. executor_ref_snapshot is audit only: it records who was
+    # visible at dispatch time and never replaces a check against the current
+    # formal map.
     upstream_source_refs: tuple[tuple[str, str], ...] = ()
-    dependency_edge_version_refs: tuple[str, ...] = ()
+    dependency_edge_version_refs: tuple[tuple[str, str], ...] = ()
     executor_ref_snapshot: tuple[str, ...] = ()
 
 
