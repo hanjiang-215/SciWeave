@@ -172,3 +172,52 @@ def test_routing_target_agent_id_survives_a_round_trip():
     restored = decode(encode(original))
 
     assert restored.routing.target_agent_id == "agent-7"
+
+
+@pytest.mark.parametrize(
+    "override",
+    [
+        pytest.param({"message_id": ""}, id="empty-message_id"),
+        pytest.param({"message_id": 7}, id="non-string-message_id"),
+        pytest.param({"dedupe_key": ""}, id="empty-dedupe_key"),
+        pytest.param({"producer": "coordinator"}, id="producer-is-a-string"),
+        pytest.param({"producer": {"service": ""}}, id="empty-producer-service"),
+        pytest.param({"producer": {"service": 1}}, id="non-string-producer-service"),
+        pytest.param({"producer": {"service": "c", "instance_id": 2}}, id="non-string-instance_id"),
+        pytest.param({"routing": "task:T1"}, id="routing-is-a-string"),
+        pytest.param({"routing": {"partition_key": ""}}, id="empty-partition_key"),
+        pytest.param({"routing": {"partition_key": "k", "target_agent_id": 3}}, id="non-string-target_agent_id"),
+        pytest.param({"schema_version": "1"}, id="string-schema_version"),
+    ],
+)
+def test_structurally_malformed_envelope_is_a_format_error(override):
+    # These arrive from a topic, so they are untrusted input rather than a
+    # programming mistake: a producer on an older build, or a hand-edited
+    # message. Each must fail as a format error, not crash with TypeError.
+    with pytest.raises(EnvelopeFormatError):
+        decode(raw_body(**override))
+
+
+@pytest.mark.parametrize(
+    "override",
+    [
+        pytest.param({"message_id": ""}, id="empty-message_id"),
+        pytest.param({"dedupe_key": ""}, id="empty-dedupe_key"),
+        pytest.param({"producer": Producer(service="")}, id="empty-producer-service"),
+        pytest.param({"routing": Routing(partition_key="")}, id="empty-partition_key"),
+    ],
+)
+def test_validate_rejects_blank_fields_on_a_hand_built_envelope(override):
+    # encode() runs validate(), so a producer that builds an Envelope in
+    # memory gets stopped here rather than publishing a message the
+    # consumer would reject.
+    with pytest.raises(EnvelopeFormatError):
+        encode(sample(**override))
+
+
+@pytest.mark.parametrize("field", ["occurred_at", "published_at"])
+def test_validate_rejects_a_missing_timestamp(field):
+    # decode() catches a blank timestamp as a missing string first; this
+    # covers the same guard on a hand-built envelope that skipped decode.
+    with pytest.raises(EnvelopeFormatError):
+        encode(sample(**{field: ""}))
