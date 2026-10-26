@@ -1,1 +1,1 @@
-"""Gateway ingest package."""
+"""Gateway ingest package: Centre Agent governance-event consumer."""
