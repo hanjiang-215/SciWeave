@@ -1,25 +1,50 @@
-"""Researcher-side disposition MCP: not implemented yet (ai4-58d0).
+"""Researcher-side disposition MCP: the six tools of the work-agent flow.
 
-The role is described in docs/data-flow/work-agent.md (query_execution,
-list_pending, cancel_execution, answer_question, review_execution, health).
-Until it exists this entry point fails fast: a launcher that prints "ready"
-and then serves nothing is worse than one that refuses to start, because the
-operator believes the disposition surface is up.
+Serves ``health``, ``query_execution``, ``list_pending``, ``cancel_execution``,
+``answer_question`` and ``review_execution`` over ``POST /mcp`` against the
+durable execution store written by ``gateway/subscriber``. The role runs in its
+own process, which is why the store is SQLite rather than in-memory.
+
+Configuration comes entirely from the environment; a missing store path or
+token fails fast instead of serving an empty surface.
 """
 
 from __future__ import annotations
 
-from work_agent_runtime import WorkAgentRuntime
+import logging
+import os
 
-runtime = WorkAgentRuntime()
+from work_agent_runtime import SqliteExecutionStore
+from work_agent_runtime.disposition_mcp import create_disposition_server
+
+
+def required(name: str) -> str:
+    value = os.environ.get(name)
+    if not value or not value.strip():
+        raise SystemExit(f"{name} must be configured through the environment")
+    return value.strip()
 
 
 def main() -> int:
-    raise SystemExit(
-        "gateway/mcp is not implemented yet: the disposition tools listed in "
-        "docs/data-flow/work-agent.md have no handler. Do not enable "
-        "sciweave-task-agent-mcp.service until this role lands (ai4-58d0)."
+    logging.basicConfig(level=logging.INFO)
+    store = SqliteExecutionStore(required("DATABASE_PATH"))
+    server = create_disposition_server(
+        os.environ.get("DISPOSITION_MCP_HOST", "127.0.0.1").strip() or "127.0.0.1",
+        int(os.environ.get("DISPOSITION_MCP_PORT", "8790")),
+        store,
+        required("DISPOSITION_MCP_TOKEN"),
     )
+    logging.info(
+        "disposition MCP listening on %s:%s", server.server_address[0], server.server_address[1]
+    )
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        logging.info("disposition MCP stopped")
+    finally:
+        server.server_close()
+        store.close()
+    return 0
 
 
 if __name__ == "__main__":

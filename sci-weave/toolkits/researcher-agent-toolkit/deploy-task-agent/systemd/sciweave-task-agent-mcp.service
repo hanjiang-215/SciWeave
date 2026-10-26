@@ -1,8 +1,5 @@
-# NOT IMPLEMENTED (ai4-58d0): the disposition tools in docs/data-flow/work-agent.md
-# have no handler yet; start-mcp fails fast on purpose. Do not enable this unit.
-
 [Unit]
-Description=SciWeave researcher-owned Work Agent MCP gateway
+Description=SciWeave researcher-owned Work Agent disposition MCP
 After=network-online.target
 
 [Service]
