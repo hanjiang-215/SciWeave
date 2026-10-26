@@ -54,11 +54,9 @@ class FormalSnapshot:
     formal_revision_id: str
     nodes: tuple[TaskNodeDoc, ...] = ()
     edges: tuple[DependencyEdgeDoc, ...] = ()
-    # The principal who approved this formal revision, taken from
-    # formal_mapping_revision.published_by. It answers "who approved most
-    # recently", not "who was appointed project owner" -- those usually
-    # coincide, but after A approves r1 and B approves r2 the answer is B.
-    # Outwardly this still means "notify the project owner".
+    # Who approved this revision most recently, not who was appointed project
+    # owner: after A approves r1 and B approves r2 the answer is B. Outwardly
+    # this still means "notify the project owner".
     # See docs/adr/0004-po-recipient-from-latest-approver.md.
     latest_published_by: str | None = None
 
@@ -92,13 +90,11 @@ class HandoffReadyMessage:
     target_agent_id: str
     pending_handoff_id: str
     trigger_revision_id: str
-    # upstream_source_refs answers "which formal versions is this handoff
-    # built on", as (logical_id, version_id) pairs. dependency_edge_version_refs
-    # is the same question for the edges and carries the same pair shape, kept
-    # as a sequence even with one element so consumers never branch on
-    # cardinality. executor_ref_snapshot is audit only: it records who was
-    # visible at dispatch time and never replaces a check against the current
-    # formal map.
+    # Both ref fields answer "which formal versions is this handoff built on",
+    # as (logical_id, version_id) pairs, and stay sequences even at one element
+    # so consumers never branch on cardinality. executor_ref_snapshot is audit
+    # only: who was visible at dispatch time, never a substitute for checking
+    # the current formal map.
     upstream_source_refs: tuple[tuple[str, str], ...] = ()
     dependency_edge_version_refs: tuple[tuple[str, str], ...] = ()
     executor_ref_snapshot: tuple[str, ...] = ()
