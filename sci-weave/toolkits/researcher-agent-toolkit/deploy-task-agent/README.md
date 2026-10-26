@@ -3,7 +3,7 @@
 研究员端 Task Agent 套件，按目标交付结构组织：
 
 - `runtime/`：状态记录、Worker Lease、配置模型、资源注册表和单 Worker 多 Agent 工作流。
-- `service-template/`：`gateway/mcp`、`gateway/subscriber`、`worker` 三个启动壳。
+- `service-template/`：`gateway/subscriber` 是已实现的常驻消费者；`gateway/mcp`（研究员处置面）与 `worker`（一次性执行壳）仍是占位，启动即 fail fast 并说明原因，见 `ai4-58d0`。
 - `agent-definitions/`：兼容入口的 Agent 定义、schema；可复用 Workflow 资源位于 `libs/workflow-libs/`。
 - `libs/agent-libs/`：纯 YAML/JSON/Markdown Agent 行为资源，由 runtime 加载。
 - `libs/mcp-libs/`：纯 JSON/YAML MCP 工具描述资源，由 runtime 加载。

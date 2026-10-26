@@ -56,7 +56,7 @@ class WorkflowExecutor:
             return WorkflowRunResult.failed(failure.code, failure.agent)
         try:
             final = self._call(workflow.final_writer, self._render(intermediate))
-            draft_id = self.drafts.create_draft(target_id, final)
+            draft_id = self.drafts.write(target_id=target_id, payload=final)
         except Exception:
             return WorkflowRunResult.failed("final_writer_failed", workflow.final_writer)
         return WorkflowRunResult("completed", final, draft_id)

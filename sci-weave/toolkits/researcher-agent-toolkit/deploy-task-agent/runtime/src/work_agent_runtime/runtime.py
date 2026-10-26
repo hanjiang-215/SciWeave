@@ -3,7 +3,7 @@ from __future__ import annotations
 import threading
 import uuid
 from dataclasses import dataclass
-from typing import Callable
+from typing import Callable, Protocol
 
 
 @dataclass(frozen=True)
@@ -101,8 +101,19 @@ class WorkerLease:
             self._targets.discard(target_id)
 
 
+class DraftBox(Protocol):
+    """Where a finished run leaves its draft.
+
+    One shape only: ``write`` keyword arguments. The real writer
+    (``BufferMCPDraftWriter``) and the in-memory double both implement it, so
+    the runtime cannot be wired to a collaborator that lacks the method.
+    """
+
+    def write(self, *, target_id: str, payload: str) -> str: ...
+
+
 class FakeDraftBox:
-    def create_draft(self, target_id: str, payload: str) -> str:
+    def write(self, *, target_id: str, payload: str) -> str:
         return f"draft-{target_id}-{uuid.uuid4().hex[:8]}"
 
 
@@ -118,13 +129,13 @@ class WorkAgentRuntime:
 
     def __init__(
         self,
-        drafts: FakeDraftBox | None = None,
+        drafts: DraftBox | None = None,
         inbox: object | None = None,
         binding_resolver: Callable[[str], bool] | None = None,
     ) -> None:
         self.store = ExecutionStore()
         self.lease = WorkerLease()
-        self.drafts = drafts or FakeDraftBox()
+        self.drafts: DraftBox = drafts or FakeDraftBox()
         self.inbox = inbox
         self.binding_resolver = binding_resolver
 
@@ -154,9 +165,14 @@ class WorkAgentRuntime:
             # Duplicate delivery after a restart: never re-run a processed row.
             return ExecutionRecord(dedupe_key, target_id, "processed")
         try:
-            return run_one(self.store, self.lease, self.drafts, target_id, event_id, agent_definition)
-        finally:
-            self.inbox.mark_processed(dedupe_key)
+            record = run_one(self.store, self.lease, self.drafts, target_id, event_id, agent_definition)
+        except Exception:
+            # The row stays ``queued``: a crashed or failed run must be
+            # replayable by drain_queued() after a restart. Marking it here
+            # would swallow the message for good.
+            raise
+        self.inbox.mark_processed(dedupe_key)
+        return record
 
     def bind(self, dedupe_key: str) -> ExecutionRecord | None:
         """Establish a workflow binding: ``awaiting_workflow_binding`` -> ``queued`` and run."""
@@ -199,7 +215,7 @@ class WorkAgentRuntime:
 def run_one(
     store: ExecutionStore,
     lease: WorkerLease,
-    drafts: FakeDraftBox,
+    drafts: DraftBox,
     target_id: str,
     event_id: str,
     agent_definition: str,
@@ -210,7 +226,7 @@ def run_one(
     try:
         if not store.start(execution):
             return execution
-        draft_id = drafts.create_draft(target_id, f"{agent_definition}:{event_id}")
+        draft_id = drafts.write(target_id=target_id, payload=f"{agent_definition}:{event_id}")
         return store.complete(store.get(execution.execution_id) or execution, draft_id)
     finally:
         lease.release(target_id)

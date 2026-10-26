@@ -113,3 +113,59 @@ class InboxCompatTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+class DraftBoxFailureTests(unittest.TestCase):
+    """ai4-58d0: a failed run must stay replayable, and one draft shape only."""
+
+    def setUp(self) -> None:
+        self.dir = tempfile.TemporaryDirectory()
+        self.db = str(Path(self.dir.name) / "inbox.sqlite")
+
+    def tearDown(self) -> None:
+        self.dir.cleanup()
+
+    def test_failed_draft_write_keeps_the_row_queued(self) -> None:
+        class _BrokenDraftBox:
+            def write(self, *, target_id, payload):
+                raise RuntimeError("draft box down")
+
+        inbox = InboxStore(self.db)
+        try:
+            runtime = WorkAgentRuntime(inbox=inbox, drafts=_BrokenDraftBox())
+            with self.assertRaises(RuntimeError):
+                runtime.handle_inbound("task-node", "handoff-1")
+            row = inbox.get("task-node:handoff-1")
+            self.assertEqual(row["status"], "queued")
+        finally:
+            inbox.close()
+
+    def test_replay_after_a_restart_completes_the_row(self) -> None:
+        class _BrokenDraftBox:
+            def write(self, *, target_id, payload):
+                raise RuntimeError("draft box down")
+
+        inbox = InboxStore(self.db)
+        try:
+            with self.assertRaises(RuntimeError):
+                WorkAgentRuntime(inbox=inbox, drafts=_BrokenDraftBox()).handle_inbound(
+                    "task-node", "handoff-1"
+                )
+            self.assertEqual(inbox.get("task-node:handoff-1")["status"], "queued")
+
+            # A restarted process has a fresh in-memory execution store, so the
+            # queued row is the only surviving fact and must still be runnable.
+            restarted = WorkAgentRuntime(inbox=inbox, drafts=FakeDraftBox())
+            records = restarted.drain_queued()
+
+            self.assertEqual([record.status for record in records], ["completed"])
+            self.assertEqual(inbox.get("task-node:handoff-1")["status"], "processed")
+        finally:
+            inbox.close()
+
+    def test_runtime_and_real_writer_share_one_draft_shape(self) -> None:
+        from work_agent_runtime.draft_writer import BufferMCPDraftWriter
+
+        self.assertTrue(callable(getattr(BufferMCPDraftWriter, "write", None)))
+        self.assertFalse(hasattr(BufferMCPDraftWriter, "create_draft"))
+        self.assertTrue(callable(getattr(FakeDraftBox, "write", None)))
+        self.assertFalse(hasattr(FakeDraftBox, "create_draft"))
