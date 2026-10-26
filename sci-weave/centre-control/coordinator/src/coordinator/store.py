@@ -139,6 +139,13 @@ class CoordinatorStore:
               latest_formal_revision_id TEXT NOT NULL,
               updated_at TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS snapshot_failure (
+              mapping_domain_id TEXT NOT NULL,
+              formal_revision_id TEXT NOT NULL,
+              reason TEXT NOT NULL,
+              recorded_at TEXT NOT NULL,
+              PRIMARY KEY (mapping_domain_id, formal_revision_id)
+            );
             """
         )
         self.conn.commit()
@@ -320,6 +327,39 @@ class CoordinatorStore:
     def list_domains(self) -> list[str]:
         rows = self.conn.execute("SELECT mapping_domain_id FROM domain_state ORDER BY mapping_domain_id").fetchall()
         return [row["mapping_domain_id"] for row in rows]
+
+    def record_snapshot_failure(
+        self, mapping_domain_id: str, formal_revision_id: str, reason: str
+    ) -> None:
+        """Record that a formal snapshot could not be read (ai4-98ye).
+
+        One row per (domain, revision): the point is that the fact is
+        observable, not that every retry is counted. Without it a silent skip
+        is indistinguishable from "this domain had nothing to dispatch".
+        """
+        self.conn.execute(
+            """
+            INSERT INTO snapshot_failure (mapping_domain_id, formal_revision_id, reason, recorded_at)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT (mapping_domain_id, formal_revision_id)
+            DO UPDATE SET reason = excluded.reason, recorded_at = excluded.recorded_at
+            """,
+            (mapping_domain_id, formal_revision_id, reason, now_iso()),
+        )
+        self.conn.commit()
+
+    def list_snapshot_failures(self) -> list[dict[str, str]]:
+        rows = self.conn.execute(
+            "SELECT * FROM snapshot_failure ORDER BY mapping_domain_id, formal_revision_id"
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+    def clear_snapshot_failure(self, mapping_domain_id: str, formal_revision_id: str) -> None:
+        self.conn.execute(
+            "DELETE FROM snapshot_failure WHERE mapping_domain_id = ? AND formal_revision_id = ?",
+            (mapping_domain_id, formal_revision_id),
+        )
+        self.conn.commit()
 
     def create_dispatch(
         self,

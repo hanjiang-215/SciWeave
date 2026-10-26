@@ -14,6 +14,7 @@ from .ports import (
     PrincipalState,
     SnapshotInconsistentError,
     SnapshotUnavailableError,
+    TaskNodeDoc,
     UnverifiablePrincipalDirectory,
 )
 from .store import (
@@ -93,10 +94,10 @@ class CoordinatorService:
             snapshot = self.snapshot_port.get_formal_mapping_at_revision(
                 mapping_domain_id, formal_revision_id
             )
-        except (SnapshotUnavailableError, SnapshotInconsistentError, NoSuchRevisionError):
-            # 快照不可读：保持既有事实，等待下次事件或启动扫描重试；
-            # 不可恢复错误也不在此污染状态，交由人工路径处置。
+        except (SnapshotUnavailableError, SnapshotInconsistentError, NoSuchRevisionError) as exc:
+            self._handle_unreadable_snapshot(mapping_domain_id, formal_revision_id, exc)
             return
+        self.store.clear_snapshot_failure(mapping_domain_id, formal_revision_id)
         self.store.set_latest_revision(mapping_domain_id, formal_revision_id)
         self._evaluate_snapshot(snapshot, trigger_revision_id=formal_revision_id)
 
@@ -118,13 +119,31 @@ class CoordinatorService:
                 continue
             try:
                 snapshot = self.snapshot_port.get_formal_mapping_at_revision(mapping_domain_id, latest)
-            except (SnapshotUnavailableError, SnapshotInconsistentError, NoSuchRevisionError):
+            except (SnapshotUnavailableError, SnapshotInconsistentError, NoSuchRevisionError) as exc:
+                # Same rule as the event path: keep the facts, leave a trace.
+                self._handle_unreadable_snapshot(mapping_domain_id, latest, exc)
                 continue
+            self.store.clear_snapshot_failure(mapping_domain_id, latest)
             self._evaluate_snapshot(snapshot, trigger_revision_id=latest)
         for dispatch in self.store.list_dispatches(
             statuses=(DISPATCH_RESULT_UNKNOWN, DISPATCH_FAILED)
         ):
             self._retry_dispatch(dispatch.dispatch_id)
+
+    def _handle_unreadable_snapshot(
+        self, mapping_domain_id: str, formal_revision_id: str, exc: Exception
+    ) -> None:
+        """The single rule for "the snapshot could not be read" (ai4-98ye).
+
+        Both entry points call this instead of writing their own ``except``:
+        unavailable, inconsistent and no-such-revision are retryable, so the
+        existing facts stay untouched and the failure becomes observable
+        rather than a silent skip. A definite dispatch failure is a different
+        state -- ``failed`` means the code has done everything it can.
+        """
+        self.store.record_snapshot_failure(
+            mapping_domain_id, formal_revision_id, f"{type(exc).__name__}: {exc}"
+        )
 
     # ------------------------------------------------------------------ core
 
@@ -135,7 +154,11 @@ class CoordinatorService:
             # ai4-te1v: root nodes (zero inbound edges) are never auto
             # dispatched on a formal-revision event. all([]) is NOT a truthy
             # condition here; only PO's dispatch_root_task may publish them.
+            # ai4-hgq6: record the waiting fact anyway, so "waiting for the
+            # PO" is observable instead of looking like a node that was never
+            # considered.
             if not incoming:
+                self._record_root_waiting(snapshot, node, trigger_revision_id)
                 continue
             upstream_refs = tuple(
                 (edge.source_node_id, edge.source_version_id) for edge in incoming
@@ -178,6 +201,33 @@ class CoordinatorService:
                 self._dispatch_terminal_summary(
                     snapshot, node.task_node_id, trigger_revision_id
                 )
+
+    def _record_root_waiting(
+        self, snapshot: FormalSnapshot, node: TaskNodeDoc, trigger_revision_id: str
+    ) -> None:
+        """Leave a waiting fact for a root node without dispatching it.
+
+        Terminal states are left untouched: a root that was dispatched and
+        completed must not reappear as waiting on the next formal revision.
+        """
+        existing = self.store.get_pending_handoff(
+            snapshot.mapping_domain_id, node.task_node_id, node.version_id
+        )
+        if existing is not None and existing.status in (
+            PENDING_DONE,
+            PENDING_SUPERSEDED,
+            PENDING_FAILED,
+        ):
+            return
+        self.store.upsert_pending_handoff(
+            snapshot.mapping_domain_id,
+            node.task_node_id,
+            node.version_id,
+            (),
+            node.executor_refs,
+            PENDING_WAITING,
+            trigger_revision_id,
+        )
 
     def _recompute_downstream(self, snapshot: FormalSnapshot, completed_node_id: str) -> None:
         """Re-evaluate nodes that depend on the just-completed node."""
@@ -349,6 +399,11 @@ class CoordinatorService:
                     target_agent_id=executor_agent_id,
                     pending_handoff_id=pending.pending_handoff_id,
                     trigger_revision_id=trigger,
+                    upstream_source_refs=pending.upstream_source_refs,
+                    # ai4-7uxz: the full list, so a later review can tell
+                    # "nobody else was configured" from "someone was, and the
+                    # wrong one was picked". Audit only, never authorization.
+                    executor_ref_snapshot=pending.executor_refs,
                 )
             )
         except Exception as exc:  # transient publish failures are retried
@@ -561,6 +616,9 @@ class CoordinatorService:
         except (SnapshotUnavailableError, SnapshotInconsistentError, NoSuchRevisionError) as exc:
             # ai4-te1v: unavailable/inconsistent are retryable - keep the
             # fact and wait; only a definite unrecoverable state becomes failed.
+            # The trace is the same one the startup scan leaves, so the two
+            # entry points cannot disagree about what happened (ai4-98ye).
+            self._handle_unreadable_snapshot(pending.mapping_domain_id, latest_revision_id, exc)
             self.store.set_dispatch_status(
                 dispatch.dispatch_id, DISPATCH_RESULT_UNKNOWN, str(exc), attempt_count=attempt_count
             )
@@ -584,6 +642,8 @@ class CoordinatorService:
                         target_agent_id=dispatch.target_agent_id or "",
                         pending_handoff_id=pending.pending_handoff_id,
                         trigger_revision_id=dispatch.dedupe_key,
+                        upstream_source_refs=pending.upstream_source_refs,
+                        executor_ref_snapshot=pending.executor_refs,
                     )
                 )
             except Exception as exc:

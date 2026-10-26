@@ -13,7 +13,24 @@
 
 - **正式快照**：`adapter_snapshot.py` 经 research-map 管理 MCP `get_formal_mapping_at_revision` 读取一致快照（ai4-2982 契约）；`no_such_revision`/`inconsistent`/`unavailable` 按稳定错误分层映射。
 - **派发发布**：`adapter_publisher.py` 用 kafka-python 向 `sciweave.task-handoff.<agent_id>` 发布 `task_handoff_ready`（消息交接恢复契约的固定物理 topic）。
-- **执行者可用性**：`adapter_registry.py` 经 Registry MCP `get_agent_registration` 查询；仅 `active` + 有 `online` 实例视为可用，Registry 事实不构成执行授权。
+- **执行者可用性**：`adapter_registry.py` 经 Registry MCP `get_agent_registration` 查询，返回 `AgentState`：`active` 且有 `online` 实例为 `available`；注册存在但不可运行为 `unavailable`；Registry 明确回 `agent_not_found` 才是 `unregistered`；查询不到（超时、拒绝、存储故障）为 `unknown`，不据此断言执行者已不存在。Registry 事实不构成执行授权。
+
+## 人工通知的三类原因
+
+执行者不可用时保留 `waiting` 并生成一条 `human_notification_intent`，`notification_kind` 取决定收件人下一步动作的那一种：
+
+| 场景 | `notification_kind` | 收件人 |
+| --- | --- | --- |
+| `executor_refs` 为空 | `workflow_binding_required` | 该节点 `task_owner_id` |
+| `executor_refs` 指向未登记的 `agent_id` | `workflow_load_failed` | 该节点 `task_owner_id` |
+| 已注销、无可用实例、或只配置人工处理 | `agent_unavailable` | 该节点 `task_owner_id` |
+| 派发成功的节点无后继 | `task_terminal_summary` | `FormalSnapshot.latest_published_by` |
+
+发送前经 `PrincipalDirectoryPort` 校验收件人：`absent` 不发送、保留 `waiting` 并记录 `recipient_unresolved:principal_absent`；`unknown`（目录查不到）fail-open 照发——Registry 不可用时静默丢掉全部通知比偶尔误发更糟。
+
+## 快照不可读
+
+`SnapshotUnavailableError` / `SnapshotInconsistentError` / `NoSuchRevisionError` 在事件入口与启动扫描共用 `_handle_unreadable_snapshot`：保留既有事实、写入 `snapshot_failure`（按 domain + revision 去重，读通后清除），派发状态维持 `result_unknown`。`failed` 只表示「代码能做的都做完了」，不当作「这次没读出来」的垃圾桶。
 - **人工通知**：`adapter_email.py` 经 email-service MCP `send_notification` 提交通知意图；未配置时降级为保留等待事实。
 - **治理事件消费**：`adapter_events.py` 订阅 `sciweave.governance-events`，把 `formal_revision_published` 路由进 `on_formal_revision_published`；候选事件忽略（归 Centre Agent 预审 Workflow）。`KafkaGovernanceEventConsumer` 持消费者组，offset 在整批处理后提交，重放由 PendingHandoff 幂等键挡住。
 

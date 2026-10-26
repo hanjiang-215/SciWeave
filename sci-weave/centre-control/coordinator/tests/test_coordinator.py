@@ -18,6 +18,7 @@ from coordinator.ports import (
     NoSuchRevisionError,
     NotificationIntent,
     PrincipalState,
+    SnapshotInconsistentError,
     SnapshotUnavailableError,
     TaskNodeDoc,
 )
@@ -350,6 +351,9 @@ def test_executor_refs_selects_first_available():
     service.store.set_latest_revision("map-1", "rev-1")
     assert service.dispatch_root_task("map-1", "T1", "v1", trigger_revision_id="rev-1") is True
     assert publisher.published[0].target_agent_id == "agent-a2"
+    # The snapshot keeps the whole list: "nobody else was configured" and
+    # "the wrong one was picked" must stay distinguishable after the fact.
+    assert publisher.published[0].executor_ref_snapshot == ("agent-a1", "agent-a2")
     assert [i.notification_kind for i in notifications.published] == ["task_terminal_summary"]
     connection.close()
 
@@ -643,3 +647,178 @@ def test_each_notification_kind_states_a_different_next_step():
         bodies.add(notifications.published[0].body)
         connection.close()
     assert len(bodies) == 3
+
+# --------------------------------------- snapshot failures and root facts (ai4-98ye / ai4-hgq6)
+
+def test_startup_scan_records_an_unreadable_snapshot_instead_of_skipping_it():
+    connection = sqlite3.connect(":memory:")
+    snapshot_port = FakeSnapshotPort()
+    snapshot_port.fail_revision("map-1", "rev-1", SnapshotUnavailableError())
+    service = make_service(
+        connection, snapshot_port, FakeHandoffPublisher(), FakeNotificationPublisher(), FakeAgentAvailability(set())
+    )
+    service.store.set_latest_revision("map-1", "rev-1")
+
+    service.startup_scan()
+
+    failures = service.store.list_snapshot_failures()
+    assert [(f["mapping_domain_id"], f["formal_revision_id"]) for f in failures] == [("map-1", "rev-1")]
+    assert "SnapshotUnavailableError" in failures[0]["reason"]
+    connection.close()
+
+
+def test_a_readable_snapshot_clears_the_recorded_failure():
+    connection = sqlite3.connect(":memory:")
+    snapshot_port = FakeSnapshotPort()
+    snapshot_port.fail_revision("map-1", "rev-1", SnapshotInconsistentError())
+    service = make_service(
+        connection, snapshot_port, FakeHandoffPublisher(), FakeNotificationPublisher(), FakeAgentAvailability(set())
+    )
+    service.store.set_latest_revision("map-1", "rev-1")
+    service.startup_scan()
+    assert service.store.list_snapshot_failures()
+
+    snapshot_port.set("map-1", "rev-1", FormalSnapshot(mapping_domain_id="map-1", formal_revision_id="rev-1"))
+    service.startup_scan()
+
+    assert service.store.list_snapshot_failures() == []
+    connection.close()
+
+
+def test_retry_keeps_result_unknown_for_the_same_snapshot_errors():
+    """ai4-98ye: unreadable and definitely-failed must stay different states."""
+    connection = sqlite3.connect(":memory:")
+    snapshot_port = FakeSnapshotPort()
+    snapshot = FormalSnapshot(
+        mapping_domain_id="map-1",
+        formal_revision_id="rev-1",
+        nodes=(node("T1", "v1", ("agent-1",), task_owner_id="owner-1"),),
+        latest_published_by="owner-1",
+    )
+    snapshot_port.set("map-1", "rev-1", snapshot)
+    publisher = FakeHandoffPublisher()
+    publisher.fail_next = 1
+    service = make_service(
+        connection, snapshot_port, publisher, FakeNotificationPublisher(), FakeAgentAvailability({"agent-1"})
+    )
+    service.store.set_latest_revision("map-1", "rev-1")
+    service.dispatch_root_task("map-1", "T1", "v1", trigger_revision_id="rev-1")
+    assert [d.status for d in service.store.list_dispatches()] == [DISPATCH_RESULT_UNKNOWN]
+
+    snapshot_port.fail_revision("map-1", "rev-1", NoSuchRevisionError())
+    service.startup_scan()
+
+    assert [d.status for d in service.store.list_dispatches()] == [DISPATCH_RESULT_UNKNOWN]
+    assert [f["formal_revision_id"] for f in service.store.list_snapshot_failures()] == ["rev-1"]
+    connection.close()
+
+
+def test_root_node_leaves_a_waiting_fact_after_publication():
+    """ai4-hgq6: not dispatching a root must not mean not recording it."""
+    connection = sqlite3.connect(":memory:")
+    snapshot_port = FakeSnapshotPort()
+    snapshot = FormalSnapshot(
+        mapping_domain_id="map-1",
+        formal_revision_id="rev-1",
+        nodes=(node("T1", "v1", ("agent-1",), task_owner_id="owner-1"),),
+        latest_published_by="owner-1",
+    )
+    snapshot_port.set("map-1", "rev-1", snapshot)
+    publisher = FakeHandoffPublisher()
+    service = make_service(
+        connection, snapshot_port, publisher, FakeNotificationPublisher(), FakeAgentAvailability({"agent-1"})
+    )
+
+    service.on_formal_revision_published("map-1", "rev-1")
+
+    pending = service.store.get_pending_handoff("map-1", "T1", "v1")
+    assert pending.status == PENDING_WAITING
+    assert publisher.published == []
+    connection.close()
+
+
+def test_a_completed_root_does_not_return_to_waiting_on_the_next_revision():
+    connection = sqlite3.connect(":memory:")
+    snapshot_port = FakeSnapshotPort()
+    root = node("T1", "v1", ("agent-1",), task_owner_id="owner-1")
+    snapshot_port.set(
+        "map-1", "rev-1",
+        FormalSnapshot(mapping_domain_id="map-1", formal_revision_id="rev-1", nodes=(root,), latest_published_by="owner-1"),
+    )
+    snapshot_port.set(
+        "map-1", "rev-2",
+        FormalSnapshot(mapping_domain_id="map-1", formal_revision_id="rev-2", nodes=(root,), latest_published_by="owner-1"),
+    )
+    service = make_service(
+        connection, snapshot_port, FakeHandoffPublisher(), FakeNotificationPublisher(), FakeAgentAvailability({"agent-1"})
+    )
+    service.store.set_latest_revision("map-1", "rev-1")
+    service.dispatch_root_task("map-1", "T1", "v1", trigger_revision_id="rev-1")
+    assert service.store.get_pending_handoff("map-1", "T1", "v1").status == PENDING_DONE
+
+    service.on_formal_revision_published("map-1", "rev-2")
+
+    assert service.store.get_pending_handoff("map-1", "T1", "v1").status == PENDING_DONE
+    connection.close()
+
+@pytest.mark.parametrize(
+    "error_type", [SnapshotUnavailableError, SnapshotInconsistentError, NoSuchRevisionError]
+)
+def test_both_entry_points_treat_the_same_snapshot_error_alike(error_type):
+    """ai4-98ye: one policy, so the two entry points cannot disagree."""
+    event_connection = sqlite3.connect(":memory:")
+    event_port = FakeSnapshotPort()
+    event_port.fail_revision("map-1", "rev-1", error_type())
+    event_service = make_service(
+        event_connection, event_port, FakeHandoffPublisher(), FakeNotificationPublisher(), FakeAgentAvailability(set())
+    )
+    event_service.on_formal_revision_published("map-1", "rev-1")
+
+    scan_connection = sqlite3.connect(":memory:")
+    scan_port = FakeSnapshotPort()
+    scan_port.fail_revision("map-1", "rev-1", error_type())
+    scan_service = make_service(
+        scan_connection, scan_port, FakeHandoffPublisher(), FakeNotificationPublisher(), FakeAgentAvailability(set())
+    )
+    scan_service.store.set_latest_revision("map-1", "rev-1")
+    scan_service.startup_scan()
+
+    event_failures = event_service.store.list_snapshot_failures()
+    scan_failures = scan_service.store.list_snapshot_failures()
+    assert [f["reason"] for f in event_failures] == [f["reason"] for f in scan_failures]
+    assert event_failures[0]["reason"].startswith(error_type.__name__)
+    # Retryable means "keep the facts", not "record a failure against them".
+    assert event_service.store.list_pending_handoffs() == []
+    assert scan_service.store.list_pending_handoffs() == []
+    event_connection.close()
+    scan_connection.close()
+
+
+def test_downstream_handoff_carries_upstream_refs_and_executor_snapshot():
+    connection = sqlite3.connect(":memory:")
+    snapshot_port = FakeSnapshotPort()
+    snapshot = FormalSnapshot(
+        mapping_domain_id="map-1",
+        formal_revision_id="rev-1",
+        nodes=(
+            node("T1", "v1", ("agent-1",), task_owner_id="owner-1"),
+            node("T2", "v2", ("agent-2",), task_owner_id="owner-1"),
+        ),
+        edges=(edge("e1", "T1", "T2", "v1", "v2"),),
+        latest_published_by="owner-1",
+    )
+    snapshot_port.set("map-1", "rev-1", snapshot)
+    publisher = FakeHandoffPublisher()
+    service = make_service(
+        connection, snapshot_port, publisher, FakeNotificationPublisher(), FakeAgentAvailability({"agent-1", "agent-2"})
+    )
+    service.store.set_latest_revision("map-1", "rev-1")
+    service.dispatch_root_task("map-1", "T1", "v1", trigger_revision_id="rev-1")
+
+    service.on_task_completed("map-1", "T1", "v1")
+
+    downstream = [m for m in publisher.published if m.task_node_id == "T2"]
+    assert len(downstream) == 1
+    assert downstream[0].upstream_source_refs == (("T1", "v1"),)
+    assert downstream[0].executor_ref_snapshot == ("agent-2",)
+    connection.close()
