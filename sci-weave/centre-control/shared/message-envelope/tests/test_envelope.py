@@ -121,3 +121,26 @@ def test_non_object_body_is_rejected():
 def test_non_utf8_bytes_are_rejected():
     with pytest.raises(EnvelopeFormatError):
         decode(b"\xff\xfe{}")
+
+
+def raw_body(**overrides) -> bytes:
+    body = {
+        "message_id": "msg-1",
+        "message_type": "task_completed",
+        "schema_version": 1,
+        "dedupe_key": "map-1:T1:v1:task_completed",
+        "occurred_at": "2026-10-26T08:00:00Z",
+        "published_at": "2026-10-26T08:00:01Z",
+        "producer": {"service": "coordinator"},
+        "routing": {"partition_key": "task:T1"},
+        "payload": {"mapping_domain_id": "map-1"},
+    }
+    body.update(overrides)
+    return json.dumps(body).encode("utf-8")
+
+
+def test_payload_that_is_not_an_object_is_rejected_on_the_decode_side():
+    # encode() validates too, so going through it would test the encoder
+    # and leave the consumer's own guard unexercised.
+    with pytest.raises(PayloadError):
+        decode(raw_body(payload=[1, 2]))
