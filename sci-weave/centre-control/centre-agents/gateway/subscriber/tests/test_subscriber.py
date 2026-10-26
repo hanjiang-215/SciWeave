@@ -386,3 +386,45 @@ class RuntimeSelectionTests(unittest.TestCase):
             os.environ.pop("SCIWEAVE_GATEWAY_PASSTHROUGH_RUNTIME", None)
 
         self.assertIsInstance(runtime, FastAgentPassthroughRuntime)
+
+class CancelGuardTests(unittest.TestCase):
+    """ai4-k6m2: a cancel that lands mid-run must survive the terminal write."""
+
+    def setUp(self) -> None:
+        from gateway_subscriber.queue import QueueMessage
+
+        self.temp = tempfile.TemporaryDirectory()
+        self.store = ExecutionStore(str(Path(self.temp.name) / "centre.sqlite3"))
+        self.service = SubscriberService(self.store, agent_id="agent-1")
+        self.runner = SubscriberWorkerRunner(self.store, self.service, DeterministicRuntime())
+        self.message = QueueMessage(
+            topic="sciweave.task-handoff.agent-1",
+            partition=0,
+            offset=0,
+            key="event-1",
+            payload=task_handoff("node-1", "event-1"),
+        )
+
+    def tearDown(self) -> None:
+        self.store.close()
+        self.temp.cleanup()
+
+    def test_cancelled_record_is_not_overwritten_by_completion(self) -> None:
+        self.service.handle_message(self.message)
+        claimed = self.runner._claim("node-1")
+        self.assertIsNotNone(claimed)
+        with self.store.transaction() as connection:
+            connection.execute(
+                "UPDATE execution_records SET status = 'cancelled' WHERE execution_id = ?",
+                (claimed["execution_id"],),
+            )
+
+        result = self.runner._persist(claimed, "completed", result_summary="done")
+
+        self.assertEqual(result["status"], "cancelled")
+        stored = self.store.get_execution(claimed["execution_id"])
+        self.assertEqual(stored["execution_status"], "cancelled")
+        self.assertIsNone(stored["result_summary"])
+        with self.store.transaction() as connection:
+            leases = connection.execute("SELECT COUNT(*) FROM worker_leases").fetchone()[0]
+        self.assertEqual(leases, 0)

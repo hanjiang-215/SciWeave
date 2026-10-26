@@ -262,7 +262,14 @@ class GatewayApplication:
             return {"execution_id": execution_id, "execution_status": "cancelled", "accepted": True}
 
     def list_pending(self, task_node_id: str | None = None) -> list[dict[str, Any]]:
-        statuses = ("queued", "running", "waiting", "completed", "failed", "cancelled")
+        """Executions that still need a human decision (ai4-k6m2).
+
+        Terminal states (completed/failed/cancelled) are read through
+        ``query_execution``; listing them here made the disposition surface
+        return finished work while hiding the records that actually wait for a
+        reviewer (needs_revision, human_takeover).
+        """
+        statuses = ("queued", "running", "waiting", "needs_revision", "human_takeover")
         placeholders = ", ".join("?" for _ in statuses)
         query = f"""SELECT execution_id, task_node_id, session_id, status AS execution_status,
                          result_summary, error_summary, created_at, updated_at

@@ -166,3 +166,43 @@ class RuntimeConfigurationVisibilityTests(unittest.TestCase):
         self.app.enable_test_runtime()
 
         self.assertEqual(self.app.health()["components"]["worker_runtime"], "ready")
+
+class PendingDispositionTests(unittest.TestCase):
+    """ai4-k6m2: list_pending is the reviewer queue, not the whole history."""
+
+    def setUp(self) -> None:
+        self.temp = tempfile.TemporaryDirectory()
+        self.app = create_app(
+            str(Path(self.temp.name) / "centre.sqlite3"), "test-token", "centre-agent"
+        )
+
+    def tearDown(self) -> None:
+        self.app.store.close()
+        self.temp.cleanup()
+
+    def _insert(self, execution_id: str, status: str) -> None:
+        with self.app.store.transaction() as connection:
+            connection.execute(
+                """INSERT INTO execution_records
+                   (execution_id, task_node_id, session_id, status, created_at, updated_at)
+                   VALUES (?, 'node-1', 'session-1', ?, '2026-10-27T00:00:00', '2026-10-27T00:00:00')""",
+                (execution_id, status),
+            )
+
+    def test_terminal_executions_are_not_pending(self) -> None:
+        for index, status in enumerate(
+            ["queued", "running", "waiting", "needs_revision", "human_takeover", "completed", "failed", "cancelled"]
+        ):
+            self._insert(f"exec-{index}", status)
+
+        pending = {item["execution_status"] for item in self.app.list_pending()}
+
+        self.assertEqual(
+            pending, {"queued", "running", "waiting", "needs_revision", "human_takeover"}
+        )
+
+    def test_task_node_filter_still_applies(self) -> None:
+        self._insert("exec-1", "queued")
+
+        self.assertEqual(self.app.list_pending("node-1")[0]["execution_id"], "exec-1")
+        self.assertEqual(self.app.list_pending("node-2"), [])
