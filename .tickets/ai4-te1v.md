@@ -451,8 +451,8 @@ HandoffDispatch.status
 
 ## Decisions so far
 
-- [Agent 注册、Map 执行关系与消息订阅边界](ai4-0s02)：`TaskNode.executor_refs` 直接引用 Workflow Agent 的稳定 `agent_id`，是正式任务分配和消息路由依据；Registry 只登记主体、Workflow Agent 和运行实例的基本事实，不保存 TaskNode 关系，Agent 离线或注销不自动修改 Map。
-- [email-service 通知意图协议与投递状态规格](ai4-f985)：首版只走受鉴权 MCP，不消费通知 topic；投递状态独立保存，邮件成败不改变领域事实。
+- [Agent 注册、Map 执行关系与消息订阅边界](ai4-0s02.md)：`TaskNode.executor_refs` 直接引用 Workflow Agent 的稳定 `agent_id`，是正式任务分配和消息路由依据；Registry 只登记主体、Workflow Agent 和运行实例的基本事实，不保存 TaskNode 关系，Agent 离线或注销不自动修改 Map。
+- [email-service 通知意图协议与投递状态规格](ai4-f985.md)：首版只走受鉴权 MCP，不消费通知 topic；投递状态独立保存，邮件成败不改变领域事实。
 - 首版任务下发使用 Redpanda；首版通知使用 email-service 受鉴权 MCP，不消费通知 topic。
 - 任务交接使用 `sciweave.task-handoff.<agent_id>`，同一逻辑 Agent 的多个实例共享派生 consumer group。
 - 消息至少一次投递，业务完成后提交 offset，重复消息按 `dedupe_key` 幂等处理。

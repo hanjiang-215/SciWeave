@@ -23,7 +23,7 @@ tags: [toolkit, task-agent, researcher]
 
 `researcher-agent-toolkit/deploy-task-agent` 是一份可打包发给研究员的套件，包含三部分：模板、初始化脚本、使用说明。
 
-> 修订（2026-10-22）：上句保留作过程记录。现行组成是 skill、服务模板、libs，见文末同日修订与 [ADR-0002](../../docs/adr/0002-work-agent-two-codebases.md)。平台不在这个目录启动服务。
+> 修订（2026-10-22）：上句保留作过程记录。现行组成是 skill、服务模板、libs，见文末同日修订与 [ADR-0002](../docs/adr/0002-work-agent-two-codebases.md)。平台不在这个目录启动服务。
 
 ## Design
 

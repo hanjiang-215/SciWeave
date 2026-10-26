@@ -12,7 +12,7 @@ tags: [spec, work-agent, task-agent, fast-agent, ready-for-agent]
 ---
 # 最小 Work Agent 实现规格
 
-> **改写（2026-10-22）：本票已按端侧自持与 Work Agent 统一架构重写。** 原名《最小 Task Agent 项目组实现规格》，原正文描述的「中央项目组、中央 Gateway 拉起 Worker、Owner 命令下发」形态已作废。现行形态依据 [`docs/data-flow/work-agent.md`](../../docs/data-flow/work-agent.md) 与 [ADR-0001](../../docs/adr/0001-task-dispatch-via-message-queue.md)。重写要点见文末 Notes 的 2026-10-22 条。
+> **改写（2026-10-22）：本票已按端侧自持与 Work Agent 统一架构重写。** 原名《最小 Task Agent 项目组实现规格》，原正文描述的「中央项目组、中央 Gateway 拉起 Worker、Owner 命令下发」形态已作废。现行形态依据 [`docs/data-flow/work-agent.md`](../docs/data-flow/work-agent.md) 与 [ADR-0001](../docs/adr/0001-task-dispatch-via-message-queue.md)。重写要点见文末 Notes 的 2026-10-22 条。
 
 将 Work Agent 的统一架构收敛为一个可交付的实现规格：三个组件、一份本地 SQLite、一套 Execution Record 状态机、一个只承接处置的 MCP 面。Task Agent 与 Centre Agent 共用本架构，本规格以 Task Agent 为主要实例描述，Centre Agent 的差异在独立一节列出。
 
@@ -152,7 +152,7 @@ running ├→ waiting            （Worker 提问，本轮终止；回答创建
 
 ### 源码放置（2026-10-22）
 
-上文「一个项目组、三个子项目」描述的是**每一份** Work Agent 的进程形状，不是仓库里只有一棵源码树。放置以 [ADR-0002](../../docs/adr/0002-work-agent-two-codebases.md) 为准，本节约定实现必须同时满足的边界：
+上文「一个项目组、三个子项目」描述的是**每一份** Work Agent 的进程形状，不是仓库里只有一棵源码树。放置以 [ADR-0002](../docs/adr/0002-work-agent-two-codebases.md) 为准，本节约定实现必须同时满足的边界：
 
 - 两份源码，禁止互相 path 依赖，也不抽顶层共享包。状态机、Worker Lease、处置面工具改动必须两处一起改。Agent 定义允许不同。
 - Centre Agent 的家是 `sci-weave/centre-control/centre-agents`。它是中央服务器上的预审服务，Agent 定义写死，不做成给研究员安装的库。进程仍是两个常驻 gateway 再拉起 `fast-agent-mcp` 子进程。
@@ -196,7 +196,7 @@ running ├→ waiting            （Worker 提问，本轮终止；回答创建
 - [x] 健康状态、未配置组件、降级与不可用状态均可从规定的 MCP 或最小 HTTP 接缝观察
 - [x] 全部测试决策所列行为均有自动化验证，且不依赖真实模型凭据、固定端口或真实队列
 
-> 增补（2026-10-22）：上面的验收仍描述**一份**运行时的行为。放置另见「源码放置」与 [ADR-0002](../../docs/adr/0002-work-agent-two-codebases.md)。实现时 Centre Agent 与研究员套件各有一份源码，行为都要满足上列验收；套件的组成与启动方式在「建立新 Task Agent 的套件」(ai4-za77)。
+> 增补（2026-10-22）：上面的验收仍描述**一份**运行时的行为。放置另见「源码放置」与 [ADR-0002](../docs/adr/0002-work-agent-two-codebases.md)。实现时 Centre Agent 与研究员套件各有一份源码，行为都要满足上列验收；套件的组成与启动方式在「建立新 Task Agent 的套件」(ai4-za77)。
 
 ## Notes
 
@@ -251,7 +251,7 @@ assignee 由 Frank Qi 转交为 hanjiang。转交原因：按赛程推进安排�
 
 **2026-10-22T09:10:00Z**
 
-2026-10-22 重写。依据 `docs/data-flow/work-agent.md`、[ADR-0001](../../docs/adr/0001-task-dispatch-via-message-queue.md) 与 Project Owner 2026-10-22 的裁决。逐条对照旧正文：
+2026-10-22 重写。依据 `docs/data-flow/work-agent.md`、[ADR-0001](../docs/adr/0001-task-dispatch-via-message-queue.md) 与 Project Owner 2026-10-22 的裁决。逐条对照旧正文：
 
 | 旧表述 | 现表述 |
 | --- | --- |

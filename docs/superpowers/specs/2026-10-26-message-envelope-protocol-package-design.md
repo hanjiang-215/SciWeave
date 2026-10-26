@@ -7,7 +7,9 @@
 
 ## 目的与边界
 
-`sci-weave/centre-control/shared/message-envelope/` 至今不存在。`ai4-te1v` 把统一信封定在这个路径，`HandoffPublisherPort` 的实现等它，但没有任何一张票承建。
+`sci-weave/centre-control/shared/message-envelope/` 在本规格撰写时还不存在。`ai4-te1v` 把统一信封定在这个路径，`HandoffPublisherPort` 的实现等它，当时没有任何一张票承建。
+
+> 落地说明（2026-10-27）：该包已经落地在 `sci-weave/centre-control/shared/message-envelope/`，承接票 `ai4-3zxu`、`ai4-sv1u` 均已关闭。下文保留为设计记录。
 
 本规格把 `ai4-te1v` 已定的协议落成一个可实现的库：**只做** schema 定义、序列化、反序列化、信封构造与校验。
 
@@ -41,12 +43,13 @@
 
 | topic | `message_type` | 载荷必填字段 |
 | --- | --- | --- |
-| `sciweave.dependency-notice` | `formal_revision_published` | `mapping_domain_id`、`formal_revision_id` |
-| `sciweave.dependency-notice` | `task_completed` | `mapping_domain_id`、`task_node_id`、`completed_version_ref`、`execution_id`、`draft_id`、`completed_at`、`result_ref` |
 | `sciweave.task-handoff.<agent_id>` | `task_handoff_ready` | `mapping_domain_id`、`task_node_id`、`target_node_version_ref`、`target_agent_id`、`pending_handoff_id`、`trigger_revision_id`、`upstream_source_refs`、`dependency_edge_version_refs`、`executor_ref_snapshot` |
 | `sciweave.governance-events` | `candidate_created` | `mapping_domain_id`、`candidate_id` |
 | `sciweave.governance-events` | `candidate_head_updated` | `mapping_domain_id`、`candidate_id` |
 | `sciweave.governance-events` | `formal_revision_published` | `mapping_domain_id`、`formal_revision_id` |
+| `sciweave.governance-events` | `task_completed` | `mapping_domain_id`、`task_node_id`、`completed_version_ref`、`execution_id`、`draft_id`、`completed_at`、`result_ref` |
+
+`sciweave.dependency-notice` 是保留 topic：目前没有任何生产者或消费者，`formal_revision_published` 与 `task_completed` 都由交接协调服务从 `sciweave.governance-events` 订阅。
 
 `dependency_edge_version_refs` 与 `upstream_source_refs` 一起回答「这条交接依据的是哪几个正式版本」。只有一个入边时仍用数组，不退化为单值——形状随边数变化会让消费方写出两套分支。
 

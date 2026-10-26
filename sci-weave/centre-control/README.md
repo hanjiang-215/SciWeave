@@ -7,8 +7,8 @@
 | `research-map` | Research Mapping，领域服务 + 管理 MCP 已实现 |
 | `research-wiki` | LLM-Wiki，领域服务 + 管理 MCP 已实现 |
 | `buffer` | 中央草稿箱，MCP 服务已实现（Streamable HTTP + stdio） |
-| `centre-agents` | 中央协调 Agent；gateway/mcp 处置面已实现，预审与注册表待实现 |
-| `registery` | 主体与端侧 Agent 的登记表，尚未实现 |
+| `centre-agents` | 中央协调 Agent；gateway/{ingest,mcp,subscriber} 与预审已实现 |
+| `registry` | 主体与端侧 Agent 的登记表，已实现（见 `registry/README.md`） |
 | `dashboard-api` | Web 看板只读聚合 API，已实现 |
 | `web-ui` | Web 看板前端，已实现 |
 | `shared/audit-trail` | 中央留痕工具，接口层调用账本；多个中央项目共用的代码，不是独立部署单元 |

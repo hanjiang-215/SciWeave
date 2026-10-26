@@ -9,7 +9,9 @@
 
 `sci-weave/centre-control/coordinator` 的核心状态机有七个已复现的缺陷。`ai4-1y6q` 的 9 项测试全部通过，但没有覆盖这些场景，所以它们在测试绿的情况下依然存在。
 
-本规格只改 `coordinator` 子项目。不改 `shared/message-envelope/`（尚未实现），不写任何真实适配器，不动 Redpanda 与 email-service 的调用实现。
+本规格只改 `coordinator` 子项目。不改 `shared/message-envelope/`（当时尚未实现），不写任何真实适配器，不动 Redpanda 与 email-service 的调用实现。
+
+> 落地说明（2026-10-27）：`shared/message-envelope/` 已经落地在 `sci-weave/centre-control/shared/message-envelope/`，承接票 `ai4-3zxu`、`ai4-sv1u` 均已关闭。下文保留为设计记录。
 
 ## 为什么测试绿着还坏着
 

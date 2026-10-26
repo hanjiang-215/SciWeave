@@ -13,10 +13,10 @@
 交接协调服务可以根据同一份正式 Mapping 判断多个下游目标，但不把三类目标压成同一种 `task_handoff_ready`：
 
 ```text
-sciweave.dependency-notice
-    → 交接协调服务统一重算正式依赖
+sciweave.governance-events
+    → 交接协调服务统一重算正式依赖（formal_revision_published、task_completed）
         ├── task-workflow    → sciweave.task-handoff.<agent_id> → task_handoff_ready
-        ├── centre-workflow  → sciweave.governance-events → 治理事件
+        ├── centre-workflow  → 订阅同一 topic 的治理事件
         └── email-service    → 受鉴权 MCP send_notification → human_notification_intent
 ```
 
@@ -103,9 +103,10 @@ schema_version
 | `workflow_binding_required` | 目标节点 `executor_refs` 为空 | 该节点的 TaskNode Owner | `TaskNode.task_owner_id` |
 | `workflow_load_failed` | `executor_refs` 指向未登记的 `agent_id` | 该节点的 TaskNode Owner | `TaskNode.task_owner_id` |
 | `agent_unavailable` | 执行者已注销、无可用实例，或该节点只配置人工处理 | 该节点的 TaskNode Owner | `TaskNode.task_owner_id` |
+| `dependency_condition_hold` | 入边带 `activation_condition`，协调服务无法自动判定 | 该节点的 TaskNode Owner | `TaskNode.task_owner_id` |
 | `task_terminal_summary` | 派发成功的节点无后继 | 项目负责人 | `formal_mapping_revision.published_by`（见 [ADR-0004](../adr/0004-po-recipient-from-latest-approver.md)） |
 
-前三种指向「把这个任务跑起来」，要建 Workflow、修 `agent_id` 或接管执行；第四种指向「这条路线到头了，接下来做什么」，是项目负责人的决策。因此不存在把两者合并成一个 `notification_kind` 的做法。
+前三种指向「把这个任务跑起来」，要建 Workflow、修 `agent_id` 或接管执行；`dependency_condition_hold` 指向「条件待判定」，要人判断或补充信息；最后一种指向「这条路线到头了，接下来做什么」，是项目负责人的决策。因此不存在把它们合并成一个 `notification_kind` 的做法。`dependency_condition_hold` 的来源见 [消息队列协作模型分支](../../.tickets/ai4-te1v.md) 的「2026-10-27 修订」。
 
 `task_owner_id` 是 TaskNode 文档的必填字段，缺失表示数据损坏而非正常分支。此时不猜测收件人、不生成通知，保留 `PendingHandoff(status=waiting)` 并记录 `recipient_unresolved:task_owner_id_missing`，由人工修数据。
 
@@ -233,7 +234,7 @@ Redpanda 暂时不可用
     → 不新建独立死信 topic
 
 正式 Mapping 条件不满足
-    → 保存 PendingHandoff，提交 dependency-notice offset
+    → 保存 PendingHandoff，提交 governance-events offset
 
 交接事件发送结果未知
     → 保存 HandoffDispatch(status=result_unknown)，启动时重试
@@ -296,16 +297,15 @@ sciweave.task-workflow.<mapping_domain_id>.<agent_id>
 
 ```text
 sciweave.dependency-notice
-    → formal_revision_published、task_completed
-    → 交接协调服务
+    → 保留 topic，目前没有任何生产者或消费者（未实现）
 
 sciweave.task-handoff.<agent_id>
     → task_handoff_ready
     → task-workflow 的 Task Agent subscriber
 
 sciweave.governance-events
-    → candidate_created、candidate_head_updated、formal_revision_published
-    → centre-workflow 的可扩展订阅者
+    → candidate_created、candidate_head_updated、formal_revision_published、task_completed
+    → 交接协调服务（formal_revision_published、task_completed）与 centre-workflow 的可扩展订阅者
 ```
 
 首版没有 `sciweave.notification-intent`。人工通知由交接协调服务通过 email-service 的受鉴权 MCP `send_notification` 提交，不经 Redpanda。

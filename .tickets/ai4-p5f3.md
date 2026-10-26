@@ -41,7 +41,7 @@ tags: [wayfinder:grilling, centre-control, message-queue, handoff]
 - 混合候选不可行时，PO 可以指派负责人组织返修，也可以通过高权限 PO MCP 创建新的混合候选；正式版本不可原地修改，Mapping 与 Wiki 仍分别治理。
 - 无后续 TaskNode 时发送 `task_terminal_summary` 通知 PO；PO 通过 MCP 创建后续任务/依赖候选，不直接操作队列。
 - 已新增 email-service spec；首版唯一入口是受鉴权的 MCP `send_notification`，不消费 Redpanda notification topic；统一公共邮箱发件，调用方提交主题、正文、notification_kind、收件人和稳定关联引用；通知投递不修改业务事实。
-- [email-service 通知意图协议与投递状态规格](ai4-f985) 已关闭。邮件 MCP 的协议不再是未决项；[实现 email-service 通知意图 MCP 与投递状态](ai4-m1d1) 可以开工，不拆更多决策票。真实 Registry 适配不在这张实现票里。
+- [email-service 通知意图协议与投递状态规格](ai4-f985.md) 已关闭。邮件 MCP 的协议不再是未决项；[实现 email-service 通知意图 MCP 与投递状态](ai4-m1d1.md) 可以开工，不拆更多决策票。真实 Registry 适配不在这张实现票里。
 
 ## Acceptance Criteria
 
