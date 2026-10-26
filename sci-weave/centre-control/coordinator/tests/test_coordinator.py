@@ -11,11 +11,13 @@ import sqlite3
 import pytest
 
 from coordinator.ports import (
+    AgentState,
     DependencyEdgeDoc,
     FormalSnapshot,
     HandoffReadyMessage,
     NoSuchRevisionError,
     NotificationIntent,
+    PrincipalState,
     SnapshotUnavailableError,
     TaskNodeDoc,
 )
@@ -83,11 +85,23 @@ class FakeNotificationPublisher:
 
 
 class FakeAgentAvailability:
-    def __init__(self, available: set[str]) -> None:
-        self.available = available
+    """Registry stand-in keyed by the three states the coordinator acts on.
 
-    def is_available(self, agent_id: str) -> bool:
-        return agent_id in self.available
+    `unregistered` is separate from the default (registered but unusable)
+    because the notification kind, and therefore the owner's next step,
+    depends on the difference.
+    """
+
+    def __init__(self, available: set[str], unregistered: set[str] | None = None) -> None:
+        self.available = available
+        self.unregistered = unregistered or set()
+
+    def state_of(self, agent_id: str) -> AgentState:
+        if agent_id in self.available:
+            return AgentState.AVAILABLE
+        if agent_id in self.unregistered:
+            return AgentState.UNREGISTERED
+        return AgentState.UNAVAILABLE
 
 
 def make_service(connection, snapshot_port, publisher, notifications, agents, **kwargs) -> CoordinatorService:
@@ -523,3 +537,109 @@ def test_terminal_summary_goes_to_latest_publisher():
     assert terminal[0].recipients == ("po-principal-1",)
     assert terminal[0].related["task_node_id"] == "T3"
     connection.close()
+
+# ------------------------------------------------- notification kinds (ai4-xkbd)
+
+class _StubDirectory:
+    """Principal directory stand-in: unknown ids are ABSENT unless unreachable."""
+
+    def __init__(self, known: dict[str, PrincipalState], reachable: bool = True) -> None:
+        self.known = known
+        self.reachable = reachable
+
+    def state_of(self, principal_id: str) -> PrincipalState:
+        if not self.reachable:
+            return PrincipalState.UNKNOWN
+        return self.known.get(principal_id, PrincipalState.ABSENT)
+
+
+def _root_dispatch(executor_refs, agents, *, principals=None):
+    connection = sqlite3.connect(":memory:")
+    snapshot_port = FakeSnapshotPort()
+    snapshot = FormalSnapshot(
+        mapping_domain_id="map-1",
+        formal_revision_id="rev-1",
+        nodes=(node("T1", "v1", executor_refs, task_owner_id="owner-1"),),
+        latest_published_by="owner-1",
+    )
+    snapshot_port.set("map-1", "rev-1", snapshot)
+    notifications = FakeNotificationPublisher()
+    kwargs = {} if principals is None else {"principals": principals}
+    service = make_service(
+        connection, snapshot_port, FakeHandoffPublisher(), notifications, agents, **kwargs
+    )
+    service.store.set_latest_revision("map-1", "rev-1")
+    service.dispatch_root_task("map-1", "T1", "v1", trigger_revision_id="rev-1")
+    return connection, service, notifications
+
+
+def test_empty_executor_refs_ask_the_owner_to_bind_a_workflow():
+    connection, service, notifications = _root_dispatch((), FakeAgentAvailability(set()))
+    assert [i.notification_kind for i in notifications.published] == ["workflow_binding_required"]
+    assert notifications.published[0].recipients == ("owner-1",)
+    assert "executor_refs 为空" in notifications.published[0].body
+    connection.close()
+
+
+def test_unregistered_executor_refs_ask_the_owner_to_fix_the_mapping():
+    connection, service, notifications = _root_dispatch(
+        ("agent-typo",), FakeAgentAvailability(set(), unregistered={"agent-typo"})
+    )
+    assert [i.notification_kind for i in notifications.published] == ["workflow_load_failed"]
+    assert notifications.published[0].recipients == ("owner-1",)
+    assert "agent-typo" in notifications.published[0].body
+    connection.close()
+
+
+def test_registered_but_offline_executor_reports_agent_unavailable():
+    connection, service, notifications = _root_dispatch(("agent-1",), FakeAgentAvailability(set()))
+    assert [i.notification_kind for i in notifications.published] == ["agent_unavailable"]
+    connection.close()
+
+
+def test_a_mix_of_unregistered_and_offline_refs_reports_agent_unavailable():
+    # At least one ref exists as an agent, so the workflow is real and the
+    # problem is availability; sending the owner to fix ids would be wrong.
+    connection, service, notifications = _root_dispatch(
+        ("agent-typo", "agent-offline"),
+        FakeAgentAvailability(set(), unregistered={"agent-typo"}),
+    )
+    assert [i.notification_kind for i in notifications.published] == ["agent_unavailable"]
+    connection.close()
+
+
+def test_absent_recipient_principal_suppresses_the_send_and_keeps_waiting():
+    connection, service, notifications = _root_dispatch(
+        ("agent-1",),
+        FakeAgentAvailability(set()),
+        principals=_StubDirectory({"owner-1": PrincipalState.ABSENT}),
+    )
+    assert notifications.published == []
+    pending = service.store.get_pending_handoff("map-1", "T1", "v1")
+    assert pending.status == PENDING_WAITING
+    failed = [d for d in service.store.list_dispatches() if d.status == DISPATCH_FAILED]
+    assert [d.error_summary for d in failed] == ["recipient_unresolved:principal_absent"]
+    connection.close()
+
+
+def test_unreachable_principal_directory_fails_open_and_still_sends():
+    connection, service, notifications = _root_dispatch(
+        ("agent-1",),
+        FakeAgentAvailability(set()),
+        principals=_StubDirectory({}, reachable=False),
+    )
+    assert [i.notification_kind for i in notifications.published] == ["agent_unavailable"]
+    connection.close()
+
+
+def test_each_notification_kind_states_a_different_next_step():
+    bodies = set()
+    for refs, agents in (
+        ((), FakeAgentAvailability(set())),
+        (("agent-typo",), FakeAgentAvailability(set(), unregistered={"agent-typo"})),
+        (("agent-1",), FakeAgentAvailability(set())),
+    ):
+        connection, _service, notifications = _root_dispatch(refs, agents)
+        bodies.add(notifications.published[0].body)
+        connection.close()
+    assert len(bodies) == 3

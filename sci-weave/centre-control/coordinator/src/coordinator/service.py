@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from .ports import (
     AgentAvailabilityPort,
+    AgentState,
     FormalSnapshotPort,
     FormalSnapshot,
     HandoffPublisherPort,
@@ -10,6 +11,7 @@ from .ports import (
     NotificationIntent,
     NotificationPublisherPort,
     PrincipalDirectoryPort,
+    PrincipalState,
     SnapshotInconsistentError,
     SnapshotUnavailableError,
     UnverifiablePrincipalDirectory,
@@ -36,6 +38,14 @@ from .store import (
 
 class PublisherUnavailableError(Exception):
     """Transient failure publishing a message; the dispatch may be retried."""
+
+
+# ai4-te1v / ai4-xkbd: the three "no usable executor" cases carry different
+# next steps for the task owner, so they are three kinds rather than one.
+NOTIFY_WORKFLOW_BINDING_REQUIRED = "workflow_binding_required"
+NOTIFY_WORKFLOW_LOAD_FAILED = "workflow_load_failed"
+NOTIFY_AGENT_UNAVAILABLE = "agent_unavailable"
+NOTIFY_TERMINAL_SUMMARY = "task_terminal_summary"
 
 
 class CoordinatorService:
@@ -132,7 +142,7 @@ class CoordinatorService:
             )
             upstream_ids = {ref[0] for ref in upstream_refs}
             executor_refs = node.executor_refs
-            executor_agent_id = self._select_executor(executor_refs)
+            executor_agent_id, notify_kind = self._select_executor(executor_refs)
             # A node is structurally ready when every upstream exists in this
             # snapshot and has a recorded completion fact.
             conditions_met = all(
@@ -162,7 +172,7 @@ class CoordinatorService:
                 trigger_revision_id,
             )
             dispatched = self._dispatch_ready(
-                snapshot, node.task_node_id, executor_agent_id, trigger_revision_id
+                snapshot, node.task_node_id, executor_agent_id, notify_kind, trigger_revision_id
             )
             if dispatched and not snapshot.outgoing_edges(node.task_node_id):
                 self._dispatch_terminal_summary(
@@ -189,7 +199,7 @@ class CoordinatorService:
                 for upstream_id in {ref[0] for ref in upstream_refs}
             )
             executor_refs = node.executor_refs
-            executor_agent_id = self._select_executor(executor_refs)
+            executor_agent_id, notify_kind = self._select_executor(executor_refs)
             if not conditions_met:
                 self.store.upsert_pending_handoff(
                     snapshot.mapping_domain_id,
@@ -211,7 +221,9 @@ class CoordinatorService:
                 snapshot.formal_revision_id,
             )
             trigger = f"{completed_node_id}:{snapshot.formal_revision_id}"
-            dispatched = self._dispatch_ready(snapshot, node.task_node_id, executor_agent_id, trigger)
+            dispatched = self._dispatch_ready(
+                snapshot, node.task_node_id, executor_agent_id, notify_kind, trigger
+            )
             if dispatched and not snapshot.outgoing_edges(node.task_node_id):
                 self._dispatch_terminal_summary(snapshot, node.task_node_id, trigger)
 
@@ -222,17 +234,26 @@ class CoordinatorService:
 
     # ---------------------------------------------------------------- dispatch
 
-    def _select_executor(self, executor_refs: tuple[str, ...]) -> str | None:
+    def _select_executor(self, executor_refs: tuple[str, ...]) -> tuple[str | None, str | None]:
         """Pick the first available executor in declared order (ai4-te1v).
 
-        ``executor_refs`` may list a collaboration set; the first currently
-        available agent wins, never blindly ``refs[0]``. Returns None when
-        every ref is unavailable or the list is empty.
+        Returns ``(agent_id, notification_kind)`` with exactly one of the two
+        set. ``executor_refs`` may list a collaboration set; the first
+        currently available agent wins, never blindly ``refs[0]``.
         """
-        for agent_id in executor_refs:
-            if self.agents.is_available(agent_id):
-                return agent_id
-        return None
+        if not executor_refs:
+            return None, NOTIFY_WORKFLOW_BINDING_REQUIRED
+        states = [(ref, self.agents.state_of(ref)) for ref in executor_refs]
+        for agent_id, state in states:
+            if state is AgentState.AVAILABLE:
+                return agent_id, None
+        # Nothing usable. Which kind depends on what the Registry knows: a ref
+        # that was never registered is a mapping typo the owner must fix, a
+        # registered-but-retired or offline agent is an ops problem. Answering
+        # "unavailable" for both would send the owner to fix the wrong thing.
+        if all(state is AgentState.UNREGISTERED for _, state in states):
+            return None, NOTIFY_WORKFLOW_LOAD_FAILED
+        return None, NOTIFY_AGENT_UNAVAILABLE
 
     def dispatch_root_task(
         self,
@@ -264,7 +285,7 @@ class CoordinatorService:
             raise ValueError(
                 f"task {task_node_id} is not a root node; root dispatch is for zero-inbound nodes only"
             )
-        executor_agent_id = self._select_executor(node.executor_refs)
+        executor_agent_id, notify_kind = self._select_executor(node.executor_refs)
         self.store.upsert_pending_handoff(
             mapping_domain_id,
             task_node_id,
@@ -275,7 +296,7 @@ class CoordinatorService:
             trigger_revision_id,
         )
         dispatched = self._dispatch_ready(
-            snapshot, task_node_id, executor_agent_id, trigger_revision_id
+            snapshot, task_node_id, executor_agent_id, notify_kind, trigger_revision_id
         )
         if dispatched and not snapshot.outgoing_edges(task_node_id):
             self._dispatch_terminal_summary(snapshot, task_node_id, trigger_revision_id)
@@ -286,6 +307,7 @@ class CoordinatorService:
         snapshot: FormalSnapshot,
         task_node_id: str,
         executor_agent_id: str | None,
+        notify_kind: str | None,
         trigger: str,
     ) -> bool:
         """Dispatch task_handoff_ready when conditions are met and the executor
@@ -296,8 +318,13 @@ class CoordinatorService:
         )
         if pending is None:
             return False
-        if executor_agent_id is None or not self.agents.is_available(executor_agent_id):
-            self._dispatch_human_notification(snapshot, pending, trigger)
+        if executor_agent_id is None:
+            # `_select_executor` already decided which of the three kinds the
+            # owner needs to hear about; guessing one here would send them to
+            # fix the wrong thing.
+            self._dispatch_human_notification(
+                snapshot, pending, trigger, notify_kind or NOTIFY_AGENT_UNAVAILABLE
+            )
             # The waiting fact is retained: the handoff is not marked ready or
             # done until an executor becomes available.
             self.store.set_pending_handoff_status(
@@ -345,7 +372,11 @@ class CoordinatorService:
         return True
 
     def _dispatch_human_notification(
-        self, snapshot: FormalSnapshot, pending: PendingHandoff, trigger: str
+        self,
+        snapshot: FormalSnapshot,
+        pending: PendingHandoff,
+        trigger: str,
+        notification_kind: str,
     ) -> None:
         node = snapshot.node_by_id(pending.task_node_id)
         recipient = node.task_owner_id if node is not None else None
@@ -359,18 +390,25 @@ class CoordinatorService:
                 pending.target_node_version_ref,
                 PENDING_WAITING,
             )
-            failed_dispatch = self.store.create_dispatch(
-                pending.pending_handoff_id,
-                self._dedupe(snapshot.mapping_domain_id, pending, MSG_HUMAN_NOTIFICATION, trigger),
-                MSG_HUMAN_NOTIFICATION,
-                None,
+            self._record_unresolved_recipient(
+                snapshot, pending, trigger, "recipient_unresolved:task_owner_id_missing"
             )
-            if failed_dispatch is not None:
-                self.store.set_dispatch_status(
-                    failed_dispatch.dispatch_id,
-                    DISPATCH_FAILED,
-                    "recipient_unresolved:task_owner_id_missing",
-                )
+            return
+        # ai4-xkbd: validate the recipient before sending. ABSENT is a fact
+        # (the principal does not exist or is inactive) and suppresses the
+        # send; UNKNOWN means the directory could not be consulted, and
+        # failing closed there would stop every notification whenever the
+        # Registry is down -- a worse outcome than an occasional misdelivery.
+        if self.principals.state_of(recipient) is PrincipalState.ABSENT:
+            self.store.set_pending_handoff_status(
+                snapshot.mapping_domain_id,
+                pending.task_node_id,
+                pending.target_node_version_ref,
+                PENDING_WAITING,
+            )
+            self._record_unresolved_recipient(
+                snapshot, pending, trigger, "recipient_unresolved:principal_absent"
+            )
             return
         dedupe_key = self._dedupe(
             snapshot.mapping_domain_id, pending, MSG_HUMAN_NOTIFICATION, trigger
@@ -380,13 +418,16 @@ class CoordinatorService:
         )
         if dispatch is None or dispatch.status in (DISPATCH_PUBLISHED,):
             return
+        subject, body = self._human_notification_content(
+            notification_kind, pending.task_node_id, node.executor_refs if node else ()
+        )
         try:
             self.notifications.publish(
                 NotificationIntent(
-                    notification_kind="agent_unavailable",
+                    notification_kind=notification_kind,
                     recipients=(recipient,),
-                    subject="任务交接等待人工处理",
-                    body=f"TaskNode {pending.task_node_id} 的执行者不可用，交接事实已保留。",
+                    subject=subject,
+                    body=body,
                     related={
                         "mapping_domain_id": snapshot.mapping_domain_id,
                         "task_node_id": pending.task_node_id,
@@ -400,6 +441,54 @@ class CoordinatorService:
             )
             return
         self.store.set_dispatch_status(dispatch.dispatch_id, DISPATCH_PUBLISHED, attempt_count=1)
+
+    def _record_unresolved_recipient(
+        self, snapshot: FormalSnapshot, pending: PendingHandoff, trigger: str, reason: str
+    ) -> None:
+        """Keep an observable record when no notification could be addressed.
+
+        The dispatch row is what an operator can query; without it a corrupt
+        TaskNode would look identical to a task nobody needed to notify.
+        """
+        failed_dispatch = self.store.create_dispatch(
+            pending.pending_handoff_id,
+            self._dedupe(snapshot.mapping_domain_id, pending, MSG_HUMAN_NOTIFICATION, trigger),
+            MSG_HUMAN_NOTIFICATION,
+            None,
+        )
+        if failed_dispatch is not None:
+            self.store.set_dispatch_status(
+                failed_dispatch.dispatch_id, DISPATCH_FAILED, reason
+            )
+
+    @staticmethod
+    def _human_notification_content(
+        notification_kind: str, task_node_id: str, executor_refs: tuple[str, ...]
+    ) -> tuple[str, str]:
+        """Subject and body for each "no usable executor" case.
+
+        The three kinds exist because the owner's next action differs: bind a
+        workflow, correct an agent id, or restore an instance. A shared body
+        would leave the owner guessing which of those applies.
+        """
+        if notification_kind == NOTIFY_WORKFLOW_BINDING_REQUIRED:
+            return (
+                "任务交接缺少执行者绑定",
+                f"TaskNode {task_node_id} 的 executor_refs 为空，没有可派发的执行者。"
+                "请为该节点登记 Workflow 并补上 executor_refs，或自行接手执行。",
+            )
+        if notification_kind == NOTIFY_WORKFLOW_LOAD_FAILED:
+            listed = "、".join(executor_refs) or "（空）"
+            return (
+                "任务交接指向未登记的执行者",
+                f"TaskNode {task_node_id} 的 executor_refs（{listed}）指向未登记的 agent_id。"
+                "请核对 agent_id 是否拼写错误，或先在 Registry 登记该 Workflow。",
+            )
+        return (
+            "任务交接等待人工处理",
+            f"TaskNode {task_node_id} 的执行者已注销或无可用运行实例。"
+            "请恢复运行实例，或自行接手执行。",
+        )
 
     def _dispatch_terminal_summary(
         self, snapshot: FormalSnapshot, task_node_id: str, trigger: str
@@ -549,13 +638,30 @@ class CoordinatorService:
                 dispatch.dispatch_id, DISPATCH_FAILED, "recipient_unresolved:task_owner_id_missing", attempt_count=attempt_count
             )
             return
+        if self.principals.state_of(recipient) is PrincipalState.ABSENT:
+            # Same gate as the first send: a recipient that has since been
+            # deactivated must not be retried into an inbox that no longer
+            # exists.
+            self.store.set_dispatch_status(
+                dispatch.dispatch_id, DISPATCH_FAILED, "recipient_unresolved:principal_absent", attempt_count=attempt_count
+            )
+            return
+        # The reason is recomputed rather than stored: an agent may have been
+        # registered (or retired) since the first attempt, and the owner
+        # should hear the reason that holds now.
+        _, notification_kind = self._select_executor(node.executor_refs if node else ())
+        subject, body = self._human_notification_content(
+            notification_kind or NOTIFY_AGENT_UNAVAILABLE,
+            pending.task_node_id,
+            node.executor_refs if node else (),
+        )
         try:
             self.notifications.publish(
                 NotificationIntent(
-                    notification_kind="agent_unavailable",
+                    notification_kind=notification_kind or NOTIFY_AGENT_UNAVAILABLE,
                     recipients=(recipient,),
-                    subject="任务交接等待人工处理",
-                    body=f"TaskNode {pending.task_node_id} 的执行者不可用，交接事实已保留。",
+                    subject=subject,
+                    body=body,
                     related={
                         "mapping_domain_id": snapshot.mapping_domain_id,
                         "task_node_id": pending.task_node_id,

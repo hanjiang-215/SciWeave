@@ -125,16 +125,32 @@ class NotificationPublisherPort(Protocol):
         """Submit the notification intent. Raises PublisherUnavailableError on transient failure."""
 
 
+class AgentState(StrEnum):
+    """What the Registry knows about one executor ref (ai4-te1v, ai4-xkbd).
+
+    The four values exist because the coordinator owes the task owner a
+    different next step in each case: bind a workflow (nothing is listed),
+    fix a bad agent id (listed but never registered), restore a retired or
+    offline instance, or admit it could not ask at all.
+    """
+
+    AVAILABLE = "available"
+    UNAVAILABLE = "unavailable"
+    UNREGISTERED = "unregistered"
+    UNKNOWN = "unknown"
+
+
 class AgentAvailabilityPort(Protocol):
     """Read-only view of executor availability from Registry registration facts."""
 
-    def is_available(self, agent_id: str) -> bool:
-        """True when the executor agent is registered and can receive tasks.
+    def state_of(self, agent_id: str) -> AgentState:
+        """Report what the Registry knows about this executor ref.
 
-        Registry facts never authorize execution; the formal mapping executor_refs
-        remains the source of execution eligibility. Return False when the agent
-        is unregistered, retired or offline so the coordinator keeps the waiting
-        fact and notifies a human instead of modifying the formal map.
+        Registry facts never authorize execution; the formal mapping
+        executor_refs remains the source of execution eligibility. UNKNOWN
+        (the Registry could not be consulted) must never be reported as
+        UNREGISTERED -- that would turn an outage into a claim about the
+        agent's existence.
         """
 
 

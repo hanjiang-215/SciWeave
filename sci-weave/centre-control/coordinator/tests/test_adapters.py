@@ -14,6 +14,7 @@ from coordinator.adapter_publisher import KafkaHandoffPublisher
 from coordinator.adapter_registry import RegistryMcpAvailabilityPort
 from coordinator.adapter_snapshot import ResearchMapMcpSnapshotPort
 from coordinator.ports import (
+    AgentState,
     DependencyEdgeDoc,
     FormalSnapshot,
     HandoffReadyMessage,
@@ -81,6 +82,12 @@ def _make_handler(stub: McpStub):
                     handler = stub.responses[tool]
                     if isinstance(handler, Exception):
                         self._reply(200, json.dumps({"error": {"message": str(handler)}}).encode())
+                        return
+                    if isinstance(handler, dict) and "__error__" in handler:
+                        # The Registry reports domain failures as JSON-RPC
+                        # errors carrying a code; the adapter needs that code
+                        # to tell "no such agent" from "could not ask".
+                        self._reply(200, json.dumps({"error": {"code": handler["__error__"]}}).encode())
                         return
                     text = json.dumps(handler, ensure_ascii=False) if not isinstance(handler, str) else handler
                     body = json.dumps(
@@ -199,35 +206,50 @@ def test_snapshot_adapter_unreachable_endpoint_raises_unavailable() -> None:
 
 def test_registry_adapter_requires_active_and_online() -> None:
     with McpStub() as stub:
+        # The Registry nests the registration row and its instances; the
+        # adapter must read that shape, not a flattened one.
         stub.responses["get_agent_registration"] = {
-            "agent_id": "agent-1",
-            "status": "active",
-            "agent_instances": [{"agent_instance_id": "i1", "runtime_status": "online"}],
+            "agent": {"agent_id": "agent-1", "status": "active"},
+            "instances": [{"agent_instance_id": "i1", "runtime_status": "online"}],
         }
         port = RegistryMcpAvailabilityPort(endpoint=stub.endpoint, token="tok")
+        assert port.state_of("agent-1") is AgentState.AVAILABLE
         assert port.is_available("agent-1") is True
 
         stub.responses["get_agent_registration"] = {
-            "agent_id": "agent-1",
-            "status": "active",
-            "agent_instances": [{"agent_instance_id": "i1", "runtime_status": "offline"}],
+            "agent": {"agent_id": "agent-1", "status": "active"},
+            "instances": [{"agent_instance_id": "i1", "runtime_status": "offline"}],
         }
-        assert port.is_available("agent-1") is False
+        assert port.state_of("agent-1") is AgentState.UNAVAILABLE
 
         stub.responses["get_agent_registration"] = {
-            "agent_id": "agent-1",
-            "status": "revoked",
-            "agent_instances": [{"agent_instance_id": "i1", "runtime_status": "online"}],
+            "agent": {"agent_id": "agent-1", "status": "retired"},
+            "instances": [{"agent_instance_id": "i1", "runtime_status": "online"}],
         }
-        assert port.is_available("agent-1") is False
+        assert port.state_of("agent-1") is AgentState.UNAVAILABLE
+
+
+def test_registry_adapter_separates_unregistered_from_unreachable() -> None:
+    # The coordinator tells the task owner to fix a bad agent id only when the
+    # Registry actually said "no such agent"; an outage must not be reported
+    # as a claim about the agent's existence (ai4-xkbd).
+    with McpStub() as stub:
+        stub.responses["get_agent_registration"] = {"__error__": "agent_not_found"}
+        port = RegistryMcpAvailabilityPort(endpoint=stub.endpoint, token="tok")
+        assert port.state_of("agent-missing") is AgentState.UNREGISTERED
+
+        stub.responses["get_agent_registration"] = {"__error__": "registry_unavailable"}
+        assert port.state_of("agent-1") is AgentState.UNKNOWN
 
 
 def test_registry_adapter_failures_are_conservative() -> None:
     with McpStub() as stub:
         stub.responses["get_agent_registration"] = RuntimeError("registry unavailable")
         port = RegistryMcpAvailabilityPort(endpoint=stub.endpoint, token="tok")
+        assert port.state_of("agent-1") is AgentState.UNKNOWN
         assert port.is_available("agent-1") is False
     port = RegistryMcpAvailabilityPort(endpoint="http://127.0.0.1:1/mcp", token="tok", timeout_seconds=0.2)
+    assert port.state_of("agent-1") is AgentState.UNKNOWN
     assert port.is_available("agent-1") is False
 
 

@@ -6,6 +6,12 @@ never authorizes: an agent is "available" only when its registration is
 ``active`` and at least one instance reports ``online``. The coordinator uses
 this strictly for the routing decision (publish task_handoff_ready vs keep
 waiting and notify a human), never as an execution-rights check.
+
+The four-way answer exists because the task owner is told what to do next
+(ai4-xkbd): an agent the Registry has never heard of means the mapping names
+a bad id, an agent that exists but cannot run means ops work, and a Registry
+we could not reach means we know nothing and must not claim the agent is
+gone.
 """
 
 from __future__ import annotations
@@ -16,10 +22,15 @@ import urllib.request
 import uuid
 from typing import Any
 
+from .ports import AgentState
+
 _MCP_PROTOCOL_VERSION = "2025-03-26"
 
 _ACTIVE = "active"
 _ONLINE = "online"
+#: The Registry's code for "no such workflow_agent row". Only this one is a
+#: statement about the agent; every other failure is a statement about us.
+_AGENT_NOT_FOUND = "agent_not_found"
 
 
 class RegistryMcpAvailabilityPort:
@@ -38,34 +49,53 @@ class RegistryMcpAvailabilityPort:
         self.token = token
         self.timeout_seconds = timeout_seconds
 
-    def is_available(self, agent_id: str) -> bool:
-        """True when the agent is registered active and has an online instance.
+    def state_of(self, agent_id: str) -> AgentState:
+        """What the Registry knows about this executor ref.
 
         Registry facts are authoritative for availability/liveness only;
         execution eligibility still comes from the formal mapping's
-        ``executor_refs``. On any registry failure we answer False so the
-        coordinator keeps the waiting fact and notifies a human instead of
-        dispatching blindly.
+        ``executor_refs``. On any Registry failure we answer UNKNOWN rather
+        than UNREGISTERED: an outage is not evidence about the agent.
         """
         if not agent_id or not agent_id.strip():
-            return False
+            # A blank ref lists nothing usable, which is a mapping defect, not
+            # an agent that went away.
+            return AgentState.UNREGISTERED
         try:
-            registration = self._call("get_agent_registration", {"agent_id": agent_id})
+            registration, error = self._call("get_agent_registration", {"agent_id": agent_id})
         except (urllib.error.URLError, OSError, ValueError):
-            return False
-        if registration is None:
-            return False
-        status = registration.get("status")
-        if status != _ACTIVE:
-            return False
-        instances = registration.get("agent_instances") or []
-        if not isinstance(instances, list):
-            return False
-        return any(
-            isinstance(item, dict) and item.get("runtime_status") == _ONLINE for item in instances
-        )
+            return AgentState.UNKNOWN
+        if error is not None:
+            return AgentState.UNREGISTERED if error == _AGENT_NOT_FOUND else AgentState.UNKNOWN
+        if not isinstance(registration, dict):
+            return AgentState.UNKNOWN
+        # The Registry answers with the registration row and its instances
+        # nested; reading top-level "status"/"agent_instances" silently saw
+        # nothing and reported every agent as unusable.
+        agent = registration.get("agent")
+        instances = registration.get("instances")
+        if not isinstance(agent, dict) or not isinstance(instances, list):
+            return AgentState.UNKNOWN
+        if agent.get("status") != _ACTIVE:
+            return AgentState.UNAVAILABLE
+        if any(
+            isinstance(item, dict) and item.get("runtime_status") == _ONLINE
+            for item in instances
+        ):
+            return AgentState.AVAILABLE
+        return AgentState.UNAVAILABLE
 
-    def _call(self, tool: str, arguments: dict[str, Any]) -> dict | None:
+    def is_available(self, agent_id: str) -> bool:
+        """True when the agent is registered active and has an online instance."""
+        return self.state_of(agent_id) is AgentState.AVAILABLE
+
+    def _call(self, tool: str, arguments: dict[str, Any]) -> tuple[dict | None, str | None]:
+        """Return ``(result, error_code)``; transport failures raise instead.
+
+        Keeping the code lets callers separate "the Registry answered: no such
+        agent" from "we never got an answer", which is the difference between
+        telling an owner their mapping is wrong and telling them nothing.
+        """
         import urllib.error as url_error
         import urllib.request as url_request
 
@@ -119,8 +149,15 @@ class RegistryMcpAvailabilityPort:
                 payload = json.loads(response.read().decode("utf-8"))
         except (url_error.URLError, OSError):
             raise
-        if not isinstance(payload, dict) or payload.get("error"):
-            return None
+        if not isinstance(payload, dict):
+            return None, "malformed_response"
+        error = payload.get("error")
+        if error:
+            # The Registry reports domain failures as JSON-RPC errors, so the
+            # code is the only place "no such agent" can be told apart from
+            # "you are not allowed" or "storage is down".
+            code = error.get("code") if isinstance(error, dict) else None
+            return None, str(code) if code else "error"
         content = (payload.get("result") or {}).get("content") or []
         text = next(
             (block.get("text") for block in content if isinstance(block.get("text"), str)),
@@ -129,5 +166,5 @@ class RegistryMcpAvailabilityPort:
         try:
             result = json.loads(text)
         except json.JSONDecodeError:
-            return None
-        return result if isinstance(result, dict) else None
+            return None, "malformed_response"
+        return (result, None) if isinstance(result, dict) else (None, "malformed_response")

@@ -40,6 +40,7 @@ from coordinator.adapter_events import GovernanceEventConsumer, KafkaGovernanceE
 from coordinator.adapter_publisher import KafkaHandoffPublisher
 from coordinator.adapter_registry import RegistryMcpAvailabilityPort
 from coordinator.adapter_snapshot import ResearchMapMcpSnapshotPort
+from coordinator.ports import AgentState
 from coordinator.service import CoordinatorService
 from coordinator.store import CoordinatorStore
 
@@ -329,8 +330,10 @@ class _StubRegistry:
     def __init__(self, online: set[str]) -> None:
         self.online = online
 
-    def is_available(self, agent_id: str) -> bool:
-        return agent_id in self.online
+    def state_of(self, agent_id: str) -> AgentState:
+        # Ids the stub does not know are registered-but-offline: the e2e path
+        # only cares that they cannot take work.
+        return AgentState.AVAILABLE if agent_id in self.online else AgentState.UNAVAILABLE
 
 
 if __name__ == "__main__":
