@@ -637,5 +637,68 @@ class ReviewableWikiCandidatesToolTestCase(unittest.TestCase):
         self.assertEqual(outcome.error_code, "invalid_arguments")
 
 
+    def test_merged_candidate_rejects_a_source_built_on_another_base(self):
+        """ai4-qstm: merging candidates judged against different bases is unsound."""
+        self._insert_candidate("proposal-1")
+        service = self._merged_service()
+        change = _change()
+        change.pop("base_formal_revision_id", None)
+
+        with self.assertRaises(ValueError) as raised:
+            service.create_merged(
+                wiki_domain_id=DOMAIN, source_proposal_ids=["proposal-1"],
+                base_formal_revision_id="another-base", document_change=change,
+                idempotency_key="key-merged-base",
+            )
+
+        self.assertEqual(str(raised.exception), "source_base_mismatch")
+
+    def test_merged_candidate_rejects_a_conflicting_declared_base(self):
+        self._insert_candidate("proposal-1")
+        change = _change()
+        change["base_formal_revision_id"] = "another-base"
+        service = self._merged_service()
+
+        with self.assertRaises(ValueError) as raised:
+            service.create_merged(
+                wiki_domain_id=DOMAIN, source_proposal_ids=["proposal-1"],
+                base_formal_revision_id=BASE, document_change=change,
+                idempotency_key="key-merged-conflict",
+            )
+
+        self.assertEqual(str(raised.exception), "base_formal_revision_conflict")
+
+    def _merged_service(self, submitter=None):
+        from llm_wiki.merged_candidate import WikiMergedCandidateService
+
+        class _Recorder:
+            def submit(self, merged_change, idempotency_key):
+                if submitter is not None:
+                    submitter.update(merged_change)
+                return type("R", (), {"status": "created", "candidate_head": "c1", "proposal_id": "p"})()
+
+        return WikiMergedCandidateService(self.sqlite, _Recorder(), service_name="wiki-management")
+
+    def test_merged_candidate_stamps_the_requested_base(self):
+        self._insert_candidate("proposal-1")
+        change = _change()
+        change.pop("base_formal_revision_id", None)
+        captured = {}
+
+        class _Recorder:
+            def submit(self, merged_change, idempotency_key):
+                captured.update(merged_change)
+                return type("R", (), {"status": "created", "candidate_head": "c1", "proposal_id": "p"})()
+
+        from llm_wiki.merged_candidate import WikiMergedCandidateService
+
+        service = WikiMergedCandidateService(self.sqlite, _Recorder(), service_name="wiki-management")
+        service.create_merged(
+            wiki_domain_id=DOMAIN, source_proposal_ids=["proposal-1"],
+            base_formal_revision_id=BASE, document_change=change, idempotency_key="k",
+        )
+
+        self.assertEqual(captured["base_formal_revision_id"], BASE)
+
 if __name__ == "__main__":
     unittest.main()
