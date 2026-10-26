@@ -1,0 +1,3 @@
+# ai4-10ja 的索引归属与简介（人工维护）
+module = ["agent", "mapping"]
+summary = "修复 coordinator 的派发幂等、状态回退、执行者选择与 dead 状态落地"
