@@ -344,3 +344,45 @@ class PerRecordCommitTests(unittest.TestCase):
         self.assertEqual(processed, 2)
         self.assertEqual(handled, ["k1", "k2"])
         self.assertEqual([entry[2] for entry in queue.commits], [0, 1])
+
+class RuntimeSelectionTests(unittest.TestCase):
+    """ai4-c61f: the passthrough runtime must be an explicit choice."""
+
+    def _settings(self, api_key: str = ""):
+        from task_agent_worker.config import WorkerSettings
+
+        return WorkerSettings(
+            home=Path(tempfile.mkdtemp()),
+            session_dir="sessions",
+            connection_scope="local",
+            base_url="https://api.example.invalid",
+            model="deepseek-chat",
+            api_key=api_key,
+        )
+
+    def test_missing_api_key_without_the_switch_fails_fast(self) -> None:
+        import os
+
+        from gateway_subscriber.cli import build_runtime
+
+        previous = os.environ.pop("SCIWEAVE_GATEWAY_PASSTHROUGH_RUNTIME", None)
+        try:
+            with self.assertRaises(SystemExit):
+                build_runtime(self._settings())
+        finally:
+            if previous is not None:
+                os.environ["SCIWEAVE_GATEWAY_PASSTHROUGH_RUNTIME"] = previous
+
+    def test_the_switch_enables_the_passthrough_runtime(self) -> None:
+        import os
+
+        from gateway_subscriber.cli import build_runtime
+        from task_agent_worker.runtime import FastAgentPassthroughRuntime
+
+        os.environ["SCIWEAVE_GATEWAY_PASSTHROUGH_RUNTIME"] = "1"
+        try:
+            runtime = build_runtime(self._settings())
+        finally:
+            os.environ.pop("SCIWEAVE_GATEWAY_PASSTHROUGH_RUNTIME", None)
+
+        self.assertIsInstance(runtime, FastAgentPassthroughRuntime)

@@ -131,3 +131,38 @@ class CentreAgentTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RuntimeConfigurationVisibilityTests(unittest.TestCase):
+    """ai4-c61f: a runtime that failed to configure must not look healthy."""
+
+    def setUp(self) -> None:
+        self.temp = tempfile.TemporaryDirectory()
+        self.app = create_app(
+            str(Path(self.temp.name) / "centre.sqlite3"), "test-token", "centre-agent"
+        )
+
+    def tearDown(self) -> None:
+        self.app.store.close()
+        self.temp.cleanup()
+
+    def test_unconfigured_runtime_is_reported_as_misconfigured(self) -> None:
+        self.app.mark_runtime_misconfigured("api_key_missing")
+
+        health = self.app.health()
+
+        self.assertEqual(health["components"]["worker_runtime"], "misconfigured")
+        self.assertIsNone(self.app.runtime)
+        self.assertFalse(self.app.test_runtime_enabled)
+
+    def test_dashboard_component_matches_health(self) -> None:
+        self.app.mark_runtime_misconfigured("worker_settings_invalid: connection scope")
+
+        services = {item["id"]: item["status"] for item in self.app.dashboard_sources()["services"]}
+
+        self.assertEqual(services["worker_runtime"], "misconfigured")
+
+    def test_a_configured_runtime_reports_ready(self) -> None:
+        self.app.enable_test_runtime()
+
+        self.assertEqual(self.app.health()["components"]["worker_runtime"], "ready")

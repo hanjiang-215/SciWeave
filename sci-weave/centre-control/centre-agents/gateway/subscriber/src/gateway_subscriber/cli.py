@@ -32,10 +32,23 @@ def required_environment(name: str) -> str:
 
 
 def build_runtime(settings: WorkerSettings):
-    """Pick the credential-free passthrough runtime or the real model runtime."""
+    """Pick the real model runtime, or the passthrough one when explicitly asked.
+
+    ai4-c61f: the passthrough runtime writes a stub history and reports
+    ``completed``, so falling back to it on a missing key made an unconfigured
+    subscriber look like a working one. It now requires
+    ``SCIWEAVE_GATEWAY_PASSTHROUGH_RUNTIME=1``; otherwise the caller fails fast.
+    """
     if settings.api_key:
         return FastAgentDeepSeekRuntime(settings)
-    return FastAgentPassthroughRuntime(str(settings.home), settings.connection_scope, settings.session_dir)
+    if os.environ.get("SCIWEAVE_GATEWAY_PASSTHROUGH_RUNTIME") == "1":
+        return FastAgentPassthroughRuntime(
+            str(settings.home), settings.connection_scope, settings.session_dir
+        )
+    raise SystemExit(
+        "no Worker runtime: the DeepSeek API key is unset and the passthrough "
+        "runtime is not enabled (SCIWEAVE_GATEWAY_PASSTHROUGH_RUNTIME=1)"
+    )
 
 
 def build_queue(agent_id: str) -> QueueClient:

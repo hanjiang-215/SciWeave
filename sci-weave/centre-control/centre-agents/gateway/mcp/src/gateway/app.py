@@ -134,6 +134,20 @@ class GatewayApplication:
         self.caller_id = caller_id
         self.test_runtime_enabled = False
         self.runtime: RuntimeAdapter | None = None
+        # ai4-c61f: a runtime that failed to configure used to look exactly like
+        # a healthy gateway, so every execution stayed queued with no signal.
+        self.runtime_misconfigured: str | None = None
+
+    def mark_runtime_misconfigured(self, reason: str) -> None:
+        """Record why no Worker runtime could be configured; surfaced by health."""
+        self.runtime_misconfigured = reason or "runtime_not_configured"
+        self.test_runtime_enabled = False
+        self.runtime = None
+
+    def runtime_state(self) -> str:
+        if self.runtime_misconfigured is not None:
+            return "misconfigured"
+        return "ready" if self.test_runtime_enabled else "not_configured"
 
     def enable_test_runtime(self, outcome: str = "success", duration_seconds: float = 0) -> None:
         self.test_runtime_enabled = True
@@ -298,7 +312,7 @@ class GatewayApplication:
         services = [
             {"id": "mcp", "label": "处置面 MCP", "status": "ready", "role": "gateway"},
             {"id": "storage", "label": "执行存储", "status": "ready" if self.store.health() else "unavailable", "role": "gateway"},
-            {"id": "worker_runtime", "label": "Worker 运行时", "status": "ready" if self.test_runtime_enabled else "not_configured", "role": "worker"},
+            {"id": "worker_runtime", "label": "Worker 运行时", "status": self.runtime_state(), "role": "worker"},
             {"id": "subscriber", "label": "消息监听", "status": "not_configured", "role": "listener"},
         ]
         return {
@@ -318,7 +332,7 @@ class GatewayApplication:
                 "mcp": "ready",
                 "storage": storage,
                 "ingest": "not_configured",
-                "worker_runtime": "ready" if self.test_runtime_enabled else "not_configured",
+                "worker_runtime": self.runtime_state(),
             },
         }
 
