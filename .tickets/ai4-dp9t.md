@@ -1,0 +1,89 @@
+---
+id: ai4-dp9t
+status: open
+deps: []
+links: []
+created: 2026-10-26T14:05:42Z
+type: bug
+priority: 1
+assignee: Frank Qi
+parent: ai4-f985
+tags: [registry, email-service, notification]
+---
+# 修正 email-service 对 Registry 联系人错误码的解析
+
+## 问题
+
+`email-service` 的 `RegistryRecipientResolver` 按「错误响应是一个 JSON 负载」来取错误码，而真实 Registry 不是这样返回的。结果是 Registry 明确说出的三个永久错误，全部被压成 `registry_unavailable`。
+
+`registry_client._result_payload` 依次尝试 `structuredContent` 和 `content[*].text` 的 JSON 解析，两条都失败时返回 `None`，`_error_code(None)` 兜底返回 `registry_unavailable`。真实 Registry 的错误响应是：
+
+```
+isError           = True
+structuredContent = None
+content[0].text   = "Error executing tool get_principal_contact: contact_missing"
+```
+
+`text` 是 FastMCP 拼的纯文本，不是 JSON，所以解析必然失败。四个联系人错误码在 `registry_client.py:83` 的 `_stable_error` 里都写好了，只是永远拿不到输入。
+
+## 实测证据（2026-10-26，真实 Registry + 真实 resolver）
+
+启动真实 Registry（临时 SQLite、真实 Streamable HTTP MCP），登记三个 principal，再用 `RegistryRecipientResolver` 解析：
+
+```
+p:ok         -> 解析成功 ok@x.test
+p:noemail    -> EmailServiceError code=registry_unavailable    (Registry 实际说：contact_missing)
+p:dis        -> EmailServiceError code=registry_unavailable    (Registry 实际说：contact_disabled)
+p:missing    -> EmailServiceError code=registry_unavailable    (Registry 实际说：principal_not_found)
+```
+
+同一个探测器直接调 MCP 工具，确认 Registry 侧返回的文本是正确的：`Error executing tool get_principal_contact: contact_missing` 等三条。
+
+## 为什么这是 bug 而不是瑕疵
+
+`service.py:179` 用 `NON_RETRYABLE_RECIPIENT_ERRORS` 分流：命中就记 `permanent_failure` 并落库，不命中就继续往外抛。`registry_unavailable` 不在这四个码里，于是：
+
+1. 收件人不存在、联系人缺失、联系人被停用——这三种「永远不会成功」的情况，被报成「暂时连不上」；
+2. 通知不落库，调用方看到的是暂时故障，会照常重试；
+3. 一个已注销的主体，可以让上游每次补偿扫描都重试一遍，永远不收敛。
+
+`README.md` 承诺的 `contact_missing` / `contact_disabled` / `principal_not_found` 三个工具错误码，目前对真实 Registry 一个都产生不出来。现有测试测不到这个缺口，因为 `tests/test_registry_client.py:87` 用的是自造的 `{"error": {"code": "contact_disabled"}}` 负载，而 Registry 从不产生这种形状。
+
+同一处折叠还会把 `denied`（token 没配 `service_role=email`）报成 `registry_unavailable`，让配置错误看起来像网络抖动。
+
+## 修法
+
+在 `_error_code` 里保留现有 JSON 路径（向前兼容），JSON 取不到时再从文本尾部取码：
+
+1. 取 `text` 最后一个 `": "` 之后的部分；
+2. 只在该后缀命中已知码集合时采用，否则仍返回 `registry_unavailable`；
+3. 已知码集合至少包含 `principal_not_found`、`contact_missing`、`contact_disabled`、`denied`、`forbidden`、`registry_unavailable`、`unauthorized`；
+4. pydantic 参数校验失败（多行文本）自然不命中，落回 `registry_unavailable`。
+
+`missing_required_field` 在 email-service 里实际不可达：`_content_problem` 已经拒绝空 `principal_id`。不新增专用码，命中时按 `registry_unavailable` 处理并在 Note 里说明不可达，避免为不可达分支增加对外契约。
+
+## Acceptance Criteria
+
+- [ ] `_error_code` 能从 `Error executing tool get_principal_contact: <code>` 形式的文本尾部取出码，并映射为 `principal_not_found`、`contact_missing`、`contact_disabled` 三者之一。
+- [ ] `denied` 与 `forbidden` 经文本路径映射为 `registry_denied`，不再落成 `registry_unavailable`。
+- [ ] 未知后缀、多行 pydantic 校验文本、`text` 不是字符串、`content` 为空，四种情况都返回 `registry_unavailable` 且不抛异常。
+- [ ] 现有 `{"error": {"code": ...}}` JSON 负载路径保持不变，既有测试不改。
+- [ ] 新增测试直接喂真实 Registry 的文本形状（不是 JSON），覆盖上面四类错误码。
+- [ ] 新增一个使用真实 Registry 服务的集成测试：登记 `active` 有邮箱、`active` 无邮箱、`disabled` 三种 principal，断言 resolver 分别返回地址、`contact_missing`、`contact_disabled`。
+- [ ] `uv run --locked --env-file .env.example pytest -q` 全绿；`python -m compileall -q src tests` 通过；`git diff --check` 通过。
+
+## Not in Scope
+
+- 不改 Registry 侧的错误返回形状。Registry 返回纯文本是 FastMCP 的既有行为，`ai4-w4su` 已关闭，不为一处解析便利去改另一处已验收的契约。
+- 不新增 `missing_required_field` 的对外错误码。
+- 不改 `address_mismatch` 语义：它由 email-service 自己产生，不来自 Registry。
+
+## Notes
+
+**2026-10-26 立项（Frank Qi）**
+
+身份核对：assignee `Frank Qi`、分支 `feature/frank-qi`、`git config user.name=Frank Qi`，三者一致。
+
+出处：这是在细化「email-service 还差什么」时，用真实 Registry 做端到端探测发现的。探测脚本只读、未改产品代码。
+
+与 `ai4-1kls` 的关系：那张票问的是「Registry 联系人接口是否冻结」。接口形状本身已经可用了，缺的是 email-service 这一侧的解析没跟上真实形状。本票解决 email-service 侧，不要求 Registry 侧任何改动，因此不依赖 `ai4-1kls`。
