@@ -119,8 +119,35 @@ def create_email_server(
             _finish_audit(audit_box["conn"], call_id, None, started)
             return result
 
+    async def audited_async(caller: Caller, tool: str, target_type: str, target_id: str, operation):
+        record = CallRecord(
+            caller_id=caller.caller_id,
+            channel_id="mcp-streamable-http",
+            caller_type="service" if caller.caller_type == "service" else "human",
+            service="email-service",
+            tool=tool,
+            target_object_type=target_type,
+            target_object_id=target_id or None,
+        )
+        with lock:
+            call_id = _begin_audit(audit_box["conn"], record)
+            started = time.monotonic()
+        try:
+            result = await operation()
+        except EmailServiceError as exc:
+            with lock:
+                _finish_audit(audit_box["conn"], call_id, exc.code, started)
+            raise
+        except Exception:
+            with lock:
+                _finish_audit(audit_box["conn"], call_id, "registry_unavailable", started)
+            raise EmailServiceError("registry_unavailable") from None
+        with lock:
+            _finish_audit(audit_box["conn"], call_id, None, started)
+        return result
+
     @server.tool(description="Accept one human_notification_intent for later delivery.")
-    def send_notification(
+    async def send_notification(
         notification_id: str,
         dedupe_key: str,
         notification_kind: str,
@@ -141,13 +168,12 @@ def create_email_server(
             "related": related,
             "schema_version": schema_version,
         }
-        return audited(
+        return await audited_async(
             caller,
             "send_notification",
             "notification",
             notification_id,
             lambda: service.accept(caller, intent),
-            write=True,
         )
 
     @server.tool(description="Read delivery status. Ordinary callers only see their own notifications.")

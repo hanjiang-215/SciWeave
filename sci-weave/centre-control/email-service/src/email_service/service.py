@@ -21,6 +21,7 @@ from .ports import (
     RecipientResolver,
     TransientSenderFailure,
 )
+from .registry_client import resolve_recipient
 
 
 @dataclass(frozen=True)
@@ -147,7 +148,7 @@ class EmailDeliveryService:
             self.conn.execute("ALTER TABLE notification_delivery ADD COLUMN recipient_progress_json TEXT")
         self.conn.commit()
 
-    def accept(self, caller: Caller, intent: dict[str, Any]) -> dict[str, str]:
+    async def accept(self, caller: Caller, intent: dict[str, Any]) -> dict[str, str]:
         try:
             existing = self.conn.execute(
                 """
@@ -170,7 +171,10 @@ class EmailDeliveryService:
             self.record_invalid(caller, intent)
         notification_id = intent["notification_id"]
         try:
-            resolved = [_resolved_recipient(self.resolver, recipient) for recipient in intent["recipients"]]
+            resolved = [
+                await _resolved_recipient(self.resolver, recipient)
+                for recipient in intent["recipients"]
+            ]
         except EmailServiceError as exc:
             if exc.code not in NON_RETRYABLE_RECIPIENT_ERRORS:
                 raise
@@ -357,10 +361,12 @@ class EmailDeliveryService:
                 progress.append(item)
             if item["status"] in ("sent", "permanent_failure"):
                 continue
-            is_final = item["attempt_count"] + 1 >= self.retry.max_attempts
-            item["attempt_count"] += 1
-            item["status"] = "sending"
-            item["error_summary"] = None
+            is_claimed = item["status"] == "sending"
+            is_final = item["attempt_count"] >= self.retry.max_attempts if is_claimed else item["attempt_count"] + 1 >= self.retry.max_attempts
+            if not is_claimed:
+                item["attempt_count"] += 1
+                item["status"] = "sending"
+                item["error_summary"] = None
             self._persist_recipient_progress(notification_id, claim_token, progress)
             try:
                 self.sender.send(
@@ -421,27 +427,47 @@ class EmailDeliveryService:
         self, *, startup: bool, skip: set[str]
     ) -> tuple[str, str, str, str, list, list] | None:
         with self.lock:
-            rows = self.conn.execute(
-                """
-                SELECT notification_id, subject, body, recipients_json, recipient_progress_json,
-                       delivery_status, attempt_count, next_attempt_at, claim_token, created_at, updated_at
-                FROM notification_delivery
-                ORDER BY created_at
-                """
-            ).fetchall()
+            try:
+                rows = self.conn.execute(
+                    """
+                    SELECT notification_id, subject, body, recipients_json, recipient_progress_json,
+                           delivery_status, attempt_count, next_attempt_at, claim_token, created_at, updated_at
+                    FROM notification_delivery
+                    ORDER BY created_at
+                    """
+                ).fetchall()
+            except sqlite3.Error:
+                return None
             now = _now()
             for row in rows:
                 if row["notification_id"] in skip or not self._recoverable(row, now, startup=startup):
                     continue
                 claim_token = uuid.uuid4().hex
+                progress = _load_recipient_progress(row)
+                for item in progress:
+                    if item["status"] not in ("sent", "permanent_failure"):
+                        item["attempt_count"] += 1
+                        item["status"] = "sending"
+                        item["error_summary"] = None
+                        break
+                claim_attempt_count = max((item["attempt_count"] for item in progress), default=0)
                 cursor = self.conn.execute(
                     """
                     UPDATE notification_delivery
                     SET delivery_status = 'sending', claim_token = ?,
-                        next_attempt_at = NULL, updated_at = ?
+                        next_attempt_at = NULL, attempt_count = ?,
+                        recipient_progress_json = ?, updated_at = ?
                     WHERE notification_id = ? AND delivery_status = ? AND updated_at = ?
                     """,
-                    (claim_token, now, row["notification_id"], row["delivery_status"], row["updated_at"]),
+                    (
+                        claim_token,
+                        claim_attempt_count,
+                        json.dumps(progress, ensure_ascii=False),
+                        now,
+                        row["notification_id"],
+                        row["delivery_status"],
+                        row["updated_at"],
+                    ),
                 )
                 self.conn.commit()
                 if cursor.rowcount != 1:
@@ -452,7 +478,7 @@ class EmailDeliveryService:
                     row["subject"],
                     row["body"],
                     json.loads(row["recipients_json"]),
-                    _load_recipient_progress(row),
+                    progress,
                 )
         return None
 
@@ -529,8 +555,8 @@ def _same_notification(row: sqlite3.Row, intent: dict[str, Any]) -> bool:
     )
 
 
-def _resolved_recipient(resolver: RecipientResolver, recipient: dict[str, Any]) -> dict[str, str]:
-    email = resolver.resolve(recipient["principal_id"])
+async def _resolved_recipient(resolver: RecipientResolver, recipient: dict[str, Any]) -> dict[str, str]:
+    email = await resolve_recipient(resolver, recipient["principal_id"])
     claimed = recipient.get("email")
     if isinstance(claimed, str) and claimed.strip() and claimed != email:
         raise EmailServiceError("address_mismatch")

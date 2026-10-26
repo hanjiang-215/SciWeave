@@ -781,6 +781,7 @@ name = "sciweave-email-service"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "httpx" },
     { name = "mcp" },
     { name = "pydantic" },
     { name = "sciweave-audit-trail" },
@@ -789,13 +790,13 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
-    { name = "httpx" },
     { name = "pytest" },
     { name = "uvicorn" },
 ]
 
 [package.metadata]
 requires-dist = [
+    { name = "httpx", specifier = ">=0.28,<1" },
     { name = "mcp", specifier = ">=1.30,<2" },
     { name = "pydantic", specifier = ">=2,<3" },
     { name = "sciweave-audit-trail", editable = "../shared/audit-trail" },
@@ -804,7 +805,6 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "httpx", specifier = ">=0.28,<1" },
     { name = "pytest", specifier = ">=8,<9" },
     { name = "uvicorn", specifier = ">=0.30,<1" },
 ]
