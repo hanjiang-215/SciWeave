@@ -59,17 +59,28 @@ tags: [wayfinder:grilling, centre-control, message-queue, handoff]
 - 明确服务启动恢复未提交 offset、未完成协调记录和消息过期补偿扫描三层边界
 - 形成可供实现票引用的部署、配置、依赖和验证边界
 
-## Not yet specified
+## Next implementation boundary
 
-- [Research Mapping 正式快照查询接口与交接协调服务访问边界](ai4-2982)：交接协调服务如何通过稳定领域接口读取一致的正式 Mapping 快照，仍需裁决传输方式和访问契约。
-- [研究员 Task Agent 动态订阅 task-workflow 交接消息](ai4-nfty)：研究员创建新 Workflow 后，端侧如何发现正式 `executor_refs` 并恢复任务交接订阅。
-- [PO 候选裁决、返修指派与根任务分派 MCP](ai4-9mf8)：收口 PO 高权限决策工具、混合候选返修负责人和无上游根任务分派边界。
-- [handoff coordinator 依赖重算与派发恢复规格](ai4-zc85)：先定义协调服务的输入端口、等待/派发状态和恢复契约，再实现服务。
+本票的架构决策已与 `ai4-te1v` 的最终消息协议对齐。后续真实实现应拆分为独立适配票，不在本票中引入具体 Redpanda Python 客户端。
+
+- `ai4-2982` 已收敛并关闭；coordinator 通过 research-map 管理 MCP 的 `get_formal_mapping_at_revision` 读取正式快照，不直连 SQLite 或 TerminusDB。
+- `ai4-nfty` 已收敛并关闭；Task Agent 按 `agent_id` 订阅 `sciweave.task-handoff.<agent_id>`，按 `mapping_domain_id + agent_id` 派生 consumer group，并维护 Inbox 等待 binding。
+- `ai4-zc85` 已收敛并关闭；协调核心输入、输出、PendingHandoff、HandoffDispatch、重试、死信和三层恢复边界由其承载。
+- `ai4-1y6q` 已完成 Fake ports 协调核心实现，不包含真实 Redpanda 适配。
+- 首版 `human_notification_intent` 通过 email-service MCP，不消费通知 topic；邮件成功不等于任务完成。
+- 真实 Redpanda producer/consumer、handoff coordinator 部署适配和 `deploy-task-agent` subscriber 由后续实现票承接，并必须引用 `ai4-te1v` 的统一消息信封、消息类型、路由键和 offset 语义。
+
+## Decisions so far
+
+- handoff coordinator 是 `dependency-notice` 的主消费者和 `task_handoff_ready` 的唯一生产者；Task Agent、Centre Agent 和 email-service 不直接发布任务交接。
+- `PendingHandoff` 与 `HandoffDispatch` 归 handoff coordinator 自己的持久化边界；Task Agent、Centre Agent 和 email-service 只保存各自执行或投递事实。
+- `TaskNode.executor_refs` 决定执行资格；Registry 只提供身份和实例登记事实，不授予权限。
+- PO 不直接操作 Redpanda、SQLite 或领域存储；根任务通过幂等 `dispatch_root_task` 进入同一任务交接发布路径。
 
 ## Notes
 
 **2026-10-23**：本轮进一步收敛候选和通知边界：取消 `defer`；PO 的候选决策只能是 `formalize`、`request_revision` 或 `reject`。返修必须指定唯一 `repair_owner_id`，由负责人自己的 Task Agent 执行；Centre Agent 只预审，不返修。混合候选不可行时，PO 可以指派负责人组织返修或通过高权限 MCP 创建新混合候选。无后续 TaskNode 时发送 `task_terminal_summary` 通知 PO，PO 通过 MCP 创建后续候选，不直接操作队列。相关 PO 工具边界另见「PO 候选裁决、返修指派与根任务分派 MCP」。
 
-**2026-10-24T05:20:00Z**
+**2026-10-26 消息协议同步（Frank Qi）**
 
-邮件规格已从「未定」移到决策基线。它不再堵住邮件服务实现；本票仍开放，因为交接协调、正式快照查询、动态订阅和协调核心规格还没收敛。
+依据 `ai4-te1v` Grill-with-docs 收敛结果，同步本票：首版不消费 Redpanda notification topic；coordinator 只通过 `dependency-notice` 接收 `formal_revision_published` 与 `task_completed`，通过 `sciweave.task-handoff.<agent_id>` 发布 `task_handoff_ready`；治理事件使用共享 `sciweave.governance-events`。真实 Redpanda 适配和部署实现不回填到本架构票，由后续实现票承接。
