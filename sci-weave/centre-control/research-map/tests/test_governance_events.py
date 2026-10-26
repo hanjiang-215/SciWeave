@@ -10,6 +10,7 @@ from research_mapping.governance_events import (
     NoopGovernanceEventPublisher,
     RecordingGovernanceEventPublisher,
     candidate_event,
+    create_governance_publisher,
     formal_revision_event,
     utc_now,
 )
@@ -62,23 +63,60 @@ class GovernanceEventTests(unittest.TestCase):
         publisher.close()
 
     def test_kafka_publisher_serializes_envelope(self) -> None:
-        # KafkaGovernanceEventPublisher is a thin kafka-python wrapper; verify
-        # its envelope construction without a broker by inspecting the private
-        # serializer path (instantiating it requires a broker only at send time).
+        # Drive the real publisher through an injected producer. The previous
+        # version rebuilt the envelope by hand and asserted on its own literal,
+        # so it would have passed even if publish() sent nothing.
+        sent: list[tuple] = []
+
+        class _Future:
+            def get(self, timeout=None):
+                return None
+
+        class _Producer:
+            def __init__(self, **kwargs):
+                self.kwargs = kwargs
+
+            def send(self, topic, key=None, value=None):
+                sent.append((topic, key, value))
+                return _Future()
+
+            def close(self) -> None:
+                sent.append(("closed", b"", {}))
+
+        publisher = KafkaGovernanceEventPublisher("broker:9092", producer_factory=_Producer)
         event = candidate_event(mapping_domain_id="iris", submission_id="s1", candidate_head="h")
-        envelope = {
-            "event_id": event.event_id,
-            "event_type": event.event_type,
-            "schema_version": event.schema_version,
-            "mapping_domain_id": event.mapping_domain_id,
-            "occurred_at": event.occurred_at,
-            "dedupe_key": event.dedupe_key,
-            "target": event.target,
-            "payload": event.payload,
-        }
-        serialized = json.dumps(envelope, ensure_ascii=False).encode("utf-8")
-        self.assertTrue(serialized)
-        self.assertIn(event.dedupe_key.encode("utf-8"), serialized)
+        publisher.publish(event)
+        publisher.close()
+
+        topic, key, value = sent[0]
+        self.assertEqual(topic, GOVERNANCE_TOPIC)
+        self.assertEqual(key, event.dedupe_key.encode("utf-8"))
+        self.assertEqual(value["event_type"], "candidate_created")
+        self.assertEqual(value["dedupe_key"], event.dedupe_key)
+        self.assertEqual(sent[-1][0], "closed")
+
+    def test_publisher_factory_degrades_only_without_a_broker(self) -> None:
+        # ai4-te1v: an unset broker is a deliberate "no queue" deployment; a
+        # configured broker must not silently become the no-op publisher, or
+        # every downstream consumer goes deaf without a trace.
+        self.assertIsInstance(create_governance_publisher(None), NoopGovernanceEventPublisher)
+        self.assertIsInstance(create_governance_publisher(""), NoopGovernanceEventPublisher)
+        self.assertIsInstance(
+            create_governance_publisher("broker:9092", producer_factory=lambda **_: _NullProducer()),
+            KafkaGovernanceEventPublisher,
+        )
+
+
+class _NullProducer:
+    def send(self, topic, key=None, value=None):
+        class _Future:
+            def get(self, timeout=None):
+                return None
+
+        return _Future()
+
+    def close(self) -> None:
+        return None
 
 
 if __name__ == "__main__":

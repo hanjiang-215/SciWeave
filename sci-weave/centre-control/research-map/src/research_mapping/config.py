@@ -37,6 +37,7 @@ class MappingConfig:
     caller_capabilities: dict[str, frozenset[str]] | None = None
     audit_sqlite_path: str | None = None
     prereview_rules_dir: str | None = None
+    governance_kafka_bootstrap: str | None = None
 
     @classmethod
     def from_environment(
@@ -65,6 +66,7 @@ class MappingConfig:
         caller_capabilities = _parse_capabilities(env.get("SCIWEAVE_MAPPING_CALLER_CAPABILITIES_JSON"))
         audit_sqlite_path = env.get("SCIWEAVE_MAPPING_AUDIT_SQLITE_PATH") or None
         prereview_rules_dir = env.get("SCIWEAVE_MAPPING_PREREVIEW_RULES_DIR") or None
+        governance_kafka_bootstrap = env.get("SCIWEAVE_MAPPING_KAFKA_BOOTSTRAP") or None
         return cls(
             sqlite_path=env["SCIWEAVE_MAPPING_SQLITE_PATH"],
             mapping_domain_id=env["SCIWEAVE_MAPPING_DOMAIN_ID"],

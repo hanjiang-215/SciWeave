@@ -8,6 +8,7 @@ from research_mapping.config import MappingConfig
 from research_mapping.dashboard_source import run_mapping_dashboard_from_environment
 from research_mapping.formal_query import FormalQueryService
 from research_mapping.formalization import MappingFormalizationService
+from research_mapping.governance_events import create_governance_publisher
 from research_mapping.management import MappingManagementService, open_audit_database
 from research_mapping.management_mcp import run_management_server_from_config
 from research_mapping.review import MappingReviewService
@@ -82,6 +83,10 @@ def main() -> int:
             candidate_reader=candidate_reader,
             prereview_log=prereview_log,
             merged_candidate_service=merged_candidate_service,
+            # ai4-te1v: candidate and formal-revision events are how Centre Agent
+            # and the handoff coordinator learn that something happened. Leaving
+            # this as the default no-op silently disconnects both consumers.
+            governance_events=create_governance_publisher(config.governance_kafka_bootstrap),
         )
         return run_management_server_from_config(config, management)
     result = service.get_current(config.mapping_domain_id)
