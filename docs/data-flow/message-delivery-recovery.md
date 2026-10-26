@@ -88,7 +88,6 @@ consumer_group
 notification_id
 notification_kind
 recipient_principal_id
-task_owner_id 或 project_owner_id
 pending_handoff_id
 source_formal_revision_id
 target_task_node_logical_id
@@ -96,6 +95,19 @@ reason
 dedupe_key
 schema_version
 ```
+
+`recipient_principal_id` 只有一个，是**需要动手的那个人**，不是抄送名单。角色由 `notification_kind` 决定，调用方不得自行挑选收件人：
+
+| `notification_kind` | 触发条件 | 收件人角色 | 收件人来源 |
+| --- | --- | --- | --- |
+| `workflow_binding_required` | 目标节点 `executor_refs` 为空 | 该节点的 TaskNode Owner | `TaskNode.task_owner_id` |
+| `workflow_load_failed` | `executor_refs` 指向未登记的 `agent_id` | 该节点的 TaskNode Owner | `TaskNode.task_owner_id` |
+| `agent_unavailable` | 执行者已注销、无可用实例，或该节点只配置人工处理 | 该节点的 TaskNode Owner | `TaskNode.task_owner_id` |
+| `task_terminal_summary` | 派发成功的节点无后继 | 项目负责人 | `formal_mapping_revision.published_by`（见 [ADR-0004](../adr/0004-po-recipient-from-latest-approver.md)） |
+
+前三种指向「把这个任务跑起来」，要建 Workflow、修 `agent_id` 或接管执行；第四种指向「这条路线到头了，接下来做什么」，是项目负责人的决策。因此不存在把两者合并成一个 `notification_kind` 的做法。
+
+`task_owner_id` 是 TaskNode 文档的必填字段，缺失表示数据损坏而非正常分支。此时不猜测收件人、不生成通知，保留 `PendingHandoff(status=waiting)` 并记录 `recipient_unresolved:task_owner_id_missing`，由人工修数据。
 
 首版没有 `sciweave.notification-intent` topic。`task_terminal_summary` 同样走 MCP，不进队列。
 

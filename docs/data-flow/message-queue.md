@@ -356,7 +356,15 @@ sciweave.task-handoff.<agent_id>
 
 则不发布 `task_handoff_ready`。交接协调服务通过 email-service 的受鉴权 MCP `send_notification` 提交一条 `human_notification_intent`，不经 Redpanda。
 
-email-service 根据 `task_owner_id` 经 Registry 解析收件人并发送邮件。邮件说明：
+这四种原因不共用一个 `notification_kind`，因为它们要求的动作不同：
+
+```text
+executor_refs 为空                     → workflow_binding_required
+executor_refs 指向未登记的 agent_id    → workflow_load_failed
+已注销 / 无可用实例 / 只配置人工处理    → agent_unavailable
+```
+
+收件人一律是该节点的 TaskNode Owner，取自 `TaskNode.task_owner_id`；email-service 按这个 `principal_id` 经 Registry 解析邮箱并发送邮件。邮件说明：
 
 ```text
 上游结果已就绪，下游任务已正式化，但目前没有可用的自动执行 Workflow。
