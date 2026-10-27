@@ -57,7 +57,9 @@ python3 -m json.tool iris_input_check.json > /dev/null
 
 当前固定值：`ea110d42c2240c77fd292751dfdc4db00c699fee569528ed33ca270838b6f9f4`
 
-两个脚本共用同一实现；改动其中一处时另一处必须同步，直到 `ai4-3vkc` 把副本合并为单一来源。
+两个脚本各自持有一份 `sha256_of`，是**两份独立副本，必须同步修改**。不把它们抽成共享模块是有意的：两者都要能作为单文件脚本被上传到 SciencePal 沙箱的扁平目录里单独运行，多一个依赖文件就破坏了这一点。`ai4-3vkc` 合并的是 `demo-evidence/` 与 `sciencpal-onboarding/checks/` 之间的副本，跟这两个脚本无关，不要指望任何票据会自动合并它们。
+
+`tests/test_check_iris_input.py` 里有一条一致性测试，断言这个哈希在 `check_iris_input.py`、`run_iris_baseline.py`、本 README、`evidence-card.md`、`sciencpal-onboarding/agent/t2-baseline-agent.md` 五处同时是当前值、且没有一处残留旧值。改哈希时它会失败，这是有意的。
 
 ## 测试
 
@@ -70,10 +72,21 @@ python3 -m unittest discover -s tests -q
 
 ## 判定顺序
 
-T1 与 T2 都**先结构后溯源**：列缺失属于结构性失败，先于哈希比对报告；列齐全但数值被改动的文件由哈希拦下。两类失败各有自己的 `reason_code`：
+T1 与 T2 都是**结构判定在前、溯源判定在后**。这条顺序很关键：任何通过哈希校验的文件必然就是锁定快照，所以哈希若排在最前面，行数、缺失值、类别计数这些更具体的失败就永远不会被报告——它们会全部退化成 `source_hash_mismatch`。
+
+因此哈希检查放在**最后**：结构检查先跑完并各自给出理由码，哈希作为成功前的最后一道门。这既满足「缺列要报 `missing_columns`」，也保住其余四种诊断，而且溯源判定没有被削弱——数值被改动的文件结构全对，最后仍会被哈希拦下。
+
+T1 的理由码：
 
 | `reason_code` | 含义 |
 | --- | --- |
-| `missing_columns` | 必需列缺失，属结构错误 |
-| `source_hash_mismatch` | 内容与固定快照不一致，属溯源错误 |
-| `row_count_mismatch` / `missing_values` / `class_count_mismatch` | 行数、缺失值、类别计数不符 |
+| `missing_columns` | 必需列缺失 |
+| `row_count_mismatch` | 行数不是 150 |
+| `missing_values` | 存在空值或无法解析为数值的特征 |
+| `class_count_mismatch` | 三类计数不是各 50 |
+| `unreadable_input` | 文件不可读或不是合法 UTF-8 |
+| `source_hash_mismatch` | 内容与固定快照不一致 |
+
+T2 只做上游已固定的结构检查，理由码是 `missing_columns`、`invalid_values`、`unreadable_input`、`source_hash_mismatch` 四个——行数与类别计数由 T1 负责，T2 不重复。
+
+两个脚本的任何失败都以结构化 JSON 报告、退出码 1，不会抛出 traceback。漏传文件、误传 UTF-16 副本这类操作失误同样走 `unreadable_input`。

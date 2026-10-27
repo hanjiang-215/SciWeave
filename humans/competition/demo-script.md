@@ -11,7 +11,7 @@
 
 **不使用 Web 看板**（自 `ai4-vyuw` 起）：看板在 `apiUrl` 为空时走 fixture 查询（`sci-weave/centre-control/web-ui/src/App.vue:15`），页面会显示「演示数据模式 / 不代表真实服务状态」的橙色横幅，且 `dashboard-api` 的队列数据来源尚无实现。段 6 的审计追溯改用 TerminusDB 界面或接口层审计账本，两者都是真实数据。这条路不花实现成本，只是不再依赖一个当天可能露馅的窗口。
 
-**不需要公网 MCP 端点**：SciencePal 段（第 2–4 段）只运行两个纯标准库脚本，不调用任何 MCP。`sciencpal-onboarding/docs/deploy-central-mcp.md` 的公网隧道方案仅在走路径 B（skill 内调 MCP）时才需要，本场演示可跳过。
+**不需要公网 MCP 端点**：SciencePal 段（第 2–4 段）只运行两个纯标准库脚本，既不调中央 MCP，也不走 path A / path B 的任何一条。`sciencpal-onboarding/docs/deploy-central-mcp.md` 的公网隧道方案是 `ai4-v869` 的对接预案（SciencePal 若要真正调用中央管理 MCP，无论配原生 MCP 还是封装 skill，都必须先有可达端点），与**本场演示**无关，可整段跳过。这条结论不改变 v869 的预案口径，只划清演示范围与后续对接范围。
 
 ## 脚本正文
 

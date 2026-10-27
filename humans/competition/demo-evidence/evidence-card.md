@@ -1,8 +1,8 @@
 # SciWeave 默认科研示例场景：最小数字证据卡
 
-> 状态：输入快照与 T1 检查已固化（2026-10-23）；T2 分析执行参数已锁定为待运行声明，未声称已运行。SciencePal 实际承载执行仍是赛事硬门槛，见下方「待 SciencePal 补的交割物」。
+> 状态：输入快照与 T1 检查已固化；T2 确定性基线已在本机运行并留证（2026-10-27 复跑）。SciencePal 实际承载执行仍是赛事硬门槛，见下方「待 SciencePal 补的交割物」。
 >
-> 关联工单：`ai4-aaff`（SciWeave 默认科研示例场景与验证证据）
+> 关联工单：`ai4-aaff`（SciWeave 默认科研示例场景与验证证据）、`ai4-483l`（T1 行尾归一化）、`ai4-j7g2`（T2 输入哈希实测）、`ai4-fe3w`（证据编码）
 
 ## 已固化的输入快照
 
@@ -15,19 +15,19 @@
 | 快照文件 | `demo-evidence/iris_data.csv`（仓库内 LF，4,464 字节；官方下载为 CRLF，4,615 字节） |
 | 快照 SHA-256 | `ea110d42c2240c77fd292751dfdc4db00c699fee569528ed33ca270838b6f9f4`（行尾归一化后计算，LF 与 CRLF 两种检出结果一致） |
 
-## T1 数据检查（已运行，2026-10-23）
+## T1 数据检查（已运行，2026-10-27 复跑）
 
-命令：
+命令（在 `humans/competition/demo-evidence/` 下执行）：
 
 ```text
-python humans/competition/demo-evidence/check_iris_input.py humans/competition/demo-evidence/iris_data.csv
+python3 check_iris_input.py iris_data.csv
 ```
 
-结果：`status: ok`，150 行、4 个特征列齐全、3 类各 50 条、无缺失值、快照哈希匹配官方文件。完整 JSON 见 `demo-evidence/iris_input_check.json`。
+结果：`status: ok`，150 行、4 个特征列齐全、3 类各 50 条、无缺失值、快照哈希与锁定值一致。完整 JSON 见 `demo-evidence/iris_input_check.json`。
 
 **失败注入样本**：`demo-evidence/iris_data_failure_inject.csv` 是移除目标列的临时副本，用于演示 T1 拦截。运行同一检查脚本得到 `status: failed`、`reason_code: missing_columns`，退出码 1，不产出后续分析结果；恢复官方输入后重试成功。失败记录见 `demo-evidence/iris_input_failure.json`。这对应演示脚本第 4 段「失败注入 + 普通重试」。
 
-T1 的判定顺序（自 `ai4-483l` 起）是**先结构后溯源**：列缺失是结构性失败，先于哈希比对报告，因此失败注入拿到的是可解释的 `missing_columns`；列齐全但数值被改动的文件仍由哈希拦下，报 `source_hash_mismatch`。两种失败各有自己的 `reason_code`，不共用同一个理由。
+T1 的判定顺序（自 `ai4-483l` 起）是**结构在前、哈希最后**。哈希若排在前面，行数、缺失值、类别计数这三类诊断都会退化成 `source_hash_mismatch`，因为它们的前提是「文件不是锁定快照」——而任何通过哈希的文件必然就是锁定快照，那几个分支就永远不可达。现在每一种结构性失败都有自己的理由码，哈希作为成功前的最后一道门，数值被改动的文件结构全对，最终仍被拦下。理由码清单见 `demo-evidence/README.md`。
 
 ## 最小数字证据卡（首版字段）
 
@@ -57,19 +57,19 @@ T2 采用固定参数的确定性 KNN 基线，本机已用纯标准库运行并
 | 指标 | 准确率 0.955556（43/45）、混淆矩阵（见 `iris_baseline_result.json`） |
 | 输入快照 | `ea110d42...b6f9f4`（与 T1 一致） |
 
-命令：
+命令（在 `humans/competition/demo-evidence/` 下执行）：
 
 ```text
-python humans/competition/demo-evidence/run_iris_baseline.py humans/competition/demo-evidence/iris_data.csv
+python3 run_iris_baseline.py iris_data.csv
 ```
 
 结果文件：`demo-evidence/iris_baseline_result.json`。
 
-T2 在计算前先断言输入哈希（自 `ai4-j7g2` 起）：哈希与固定快照不符时返回 `status: failed` / `reason_code: source_hash_mismatch`、退出码 1，且**不产出准确率与混淆矩阵**；缺列时返回 `missing_columns`。输出里的 `input_snapshot_sha256` 是实测值，不是常量回显，因此分析结果与输入快照之间存在可核验的绑定。
+T2 在计算前先断言输入哈希（自 `ai4-j7g2` 起）：哈希与固定快照不符时返回 `status: failed` / `reason_code: source_hash_mismatch`、退出码 1，且**不产出准确率与混淆矩阵**；缺列返回 `missing_columns`，非数值返回 `invalid_values`，文件不可读返回 `unreadable_input`。输出里的 `input_snapshot_sha256` 是实测值而不是常量回显——测试把期望值临时改成一个假哈希后，输出仍报文件的真实哈希，因此分析结果与输入快照之间存在可核验的绑定。
 
 **SciencePal 硬门槛不变**：以上证明演示闭环在平台外可复现，但赛事要求 SciencePal 实际承接核心数据检查或分析执行。SciencePal 接入后应封装该脚本或同参数实现，并回填真实运行环境的解释器/库版本、输出定位与执行记录；不得以本机结果冒充 SciencePal 实演。
 
-## 平台侧真实治理链路证据（2026-10-24 已运行）
+## 平台侧真实治理链路证据（2026-10-24 首次运行，2026-10-27 在合并后 HEAD 复跑）
 
 不依赖 SciencePal、也不依赖假存储/内存 Store 的完整真实链路：脚本 `run_iris_mapping_pipeline.py` 用**真实 TerminusDB**（本机 `127.0.0.1:6363` admin/root，临时库建库→定义 TaskNode/DependencyEdge schema→种子正式路线 T1→T2→T3），启动真实的 Research Mapping 管理 MCP（Streamable HTTP、Bearer 鉴权、接口层留痕），然后用 MCP JSON-RPC 客户端像真实 agent harness 一样驱动完整闭环：
 
@@ -86,9 +86,19 @@ T2 在计算前先断言输入哈希（自 `ai4-j7g2` 起）：哈希与固定�
 - 不存在的正式基准上的提交 → `{status: rejected, reason_code: base_revision_missing}`（自 `ai4-eex0` 起基准校验前移到写入时门禁，不存在基准在提交即拒绝，不再进入预审；`stale_base` 判定保留给「基准存在但已非当前」的场景）；
 - 驳回审阅 → 审计事件保留，正式图不含被驳回节点。
 
-运行命令（需本机 TerminusDB 已启动，凭据经环境变量提供）：
+运行命令（需本机 TerminusDB 已启动，凭据经环境变量提供）。bash：
 
-```text
+```bash
+export SCIWEAVE_MAPPING_TERMINUSDB_URL="http://127.0.0.1:6363"
+export SCIWEAVE_MAPPING_TERMINUSDB_STORE="admin"
+export SCIWEAVE_MAPPING_TERMINUSDB_USERNAME="admin"
+export SCIWEAVE_MAPPING_TERMINUSDB_PASSWORD="root"
+python3 humans/competition/demo-evidence/run_iris_mapping_pipeline.py
+```
+
+PowerShell：
+
+```powershell
 $env:SCIWEAVE_MAPPING_TERMINUSDB_URL="http://127.0.0.1:6363"
 $env:SCIWEAVE_MAPPING_TERMINUSDB_STORE="admin"
 $env:SCIWEAVE_MAPPING_TERMINUSDB_USERNAME="admin"
@@ -96,7 +106,9 @@ $env:SCIWEAVE_MAPPING_TERMINUSDB_PASSWORD="root"
 python humans/competition/demo-evidence/run_iris_mapping_pipeline.py
 ```
 
-完整证据（每步 MCP 请求/响应与正式的审计时间线）已写入 `demo-evidence/iris_platform_pipeline.json`。本次运行同时暴露并修复了共享留痕包的多线程访问缺陷（`ai4-fmco`），修复前写工具在真实 HTTP 部署下返回 `audit_unavailable`。
+完整证据（每步 MCP 请求/响应与正式的审计时间线）已写入 `demo-evidence/iris_platform_pipeline.json`。首次运行同时暴露并修复了共享留痕包的多线程访问缺陷（`ai4-fmco`），修复前写工具在真实 HTTP 部署下返回 `audit_unavailable`。
+
+**2026-10-27 复跑**（`develop` 合入 `feature/frank-qi`，合并提交 `e54aa92`）：退出码 0、耗时 1.1s，六步时序完整，三条失败路径均返回预期错误码，`result.status: completed`、`formal_mapping_contains_t4: true`。证据文件由该次运行重新生成，并从 UTF-16LE 转为 UTF-8。
 
 **平台链路 vs SciencePal 的分工**：本证据证明 SciWeave 治理闭环（候选→审阅→正式化→查询）在真实存储上可复现；T1 数据检查与 T2 分析执行本身仍由 `check_iris_input.py` / `run_iris_baseline.py` 承担，赛事硬门槛（SciencePal 实际承担核心任务）不变。
 
