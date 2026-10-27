@@ -23,7 +23,7 @@ uv run python -m unittest discover -s tests -v
 ```
 
 Agent、MCP、Workflow libs 是纯配置资源，不单独执行 `uv sync`；由 runtime 通过 `AGENT_LIBS_PATH`、`MCP_LIBS_PATH`、`WORKFLOW_LIBS_PATH` 或显式路径加载。
-包内三对变量一一对应：`AGENT_LIBS_PATH` / `LOCAL_AGENT_LIBS`、`MCP_LIBS_PATH` / `LOCAL_MCP_LIBS`、`WORKFLOW_LIBS_PATH` / `LOCAL_WORKFLOW_LIBS_PATH`。前者指出厂标准目录，后者指研究员自己的目录，同名定义本地覆盖标准。
+包内三对变量一一对应：`AGENT_LIBS_PATH` / `LOCAL_AGENT_LIBS`、`MCP_LIBS_PATH` / `LOCAL_MCP_LIBS`、`WORKFLOW_LIBS_PATH` / `LOCAL_WORKFLOW_LIBS_PATH`。前者指出厂标准目录，后者指研究员自己的目录，同名定义本地覆盖标准；本地目录为空或不设都表示「没有覆盖」，标准目录缺失才报错。
 测试使用内存状态、假上游交接和假草稿箱，不连接真实队列、真实草稿箱或真实模型。真实地址、令牌和本地扩展路径只通过环境变量配置；仓库只提交 `.env.example`。
 
 ## 队列消费启动（subscriber）

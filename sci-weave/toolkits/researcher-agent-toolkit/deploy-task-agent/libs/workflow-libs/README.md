@@ -62,7 +62,7 @@ runtime 先合并目录中的 `*.yaml` 和 `*.yml`，再进行引用校验。**�
 | `WORKFLOW_LIBS_PATH` | 出厂标准目录（本目录） |
 | `LOCAL_WORKFLOW_LIBS_PATH` | 研究员自己的目录，同名定义覆盖标准目录 |
 
-本地目录不存在是正常情况（多数研究员没有），此时只加载标准目录；标准目录不存在才报错。显式传参（`standard_path=` / `local_path=`）优先于环境变量。
+本地目录不存在、或存在但没有 YAML（套件自带的 `libs/local-workflow-libs/` 就是这种，只有一份 README），都视为「没有覆盖」，只加载标准目录；**标准目录不存在或没有 YAML 才报错**。显式传参（`standard_path=` / `local_path=`）优先于环境变量。
 
 ## 其它约束
 

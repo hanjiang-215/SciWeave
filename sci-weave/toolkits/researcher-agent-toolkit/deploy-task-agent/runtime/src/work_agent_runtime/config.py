@@ -148,11 +148,16 @@ def load_config(source: Mapping[str, Any] | str | Path, *, known_mcp_resources: 
     return TaskAgentConfig(dict(agents), dict(workflows), mcp_catalog or {})
 
 
-def _read_documents(source: str | Path) -> list[tuple[Path, Mapping[str, Any]]]:
+def _read_documents(source: str | Path, *, allow_empty: bool = False) -> list[tuple[Path, Mapping[str, Any]]]:
     """Read one Workflow YAML file or every YAML file in a directory."""
     path = Path(source)
     paths = [path] if path.is_file() else sorted((*path.glob("*.yaml"), *path.glob("*.yml")))
     if not paths:
+        if allow_empty:
+            # The shipped `libs/local-workflow-libs/` holds only a README. A researcher
+            # who points LOCAL_WORKFLOW_LIBS_PATH at an empty directory means "no
+            # overrides", not "the kit is broken".
+            return []
         raise ConfigError("config_read_error", str(path), "no YAML files found")
     documents: list[tuple[Path, Mapping[str, Any]]] = []
     for item in paths:
@@ -224,7 +229,10 @@ def load_workflow_libs(*, standard_path: str | Path | None = None, local_path: s
             if is_local:
                 continue
             raise ConfigError("config_read_error", str(root), "no YAML files found")
-        section = _merge_documents(_read_documents(root), str(root))
+        documents = _read_documents(root, allow_empty=is_local)
+        if not documents:
+            continue
+        section = _merge_documents(documents, str(root))
         for name in ("agents", "workflows"):
             merged[name].update(section[name])
     if not merged["agents"] and not merged["workflows"]:

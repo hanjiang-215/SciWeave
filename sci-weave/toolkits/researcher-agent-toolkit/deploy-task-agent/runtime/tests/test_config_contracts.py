@@ -150,6 +150,20 @@ agents:
             with self.assertRaisesRegex(ConfigError, "duplicate_definition"):
                 load_workflow_libs(standard_path=root)
 
+    def test_the_shipped_empty_local_directory_is_not_an_error(self) -> None:
+        """`libs/local-workflow-libs/` holds only a README out of the box."""
+        config = load_workflow_libs(
+            standard_path=WORKFLOW_LIBS,
+            local_path=KIT_ROOT / "libs" / "local-workflow-libs",
+            known_mcp_resources=bundled_mcp_names(),
+        )
+        self.assertEqual(len(config.workflows), 4, "an empty local directory must not remove shipped workflows")
+
+    def test_a_missing_standard_directory_still_fails(self) -> None:
+        with TemporaryDirectory() as directory:
+            with self.assertRaisesRegex(ConfigError, "config_read_error"):
+                load_workflow_libs(standard_path=Path(directory) / "absent")
+
 
 class BundledConfigTests(unittest.TestCase):
     """The config the kit ships must load as one directory, not one file at a time."""
