@@ -33,4 +33,3 @@ tags: [enhancement, ready-for-agent, sciencepal, mapping, agent]
 - 报告缺产物或哈希不符时不得写 completed；失败报告保留 run_id 与错误码。
 - 审计可关联 execution_id、run_id、draft_id、candidate_id、formal_revision_id。
 - 文档明确 L0/L1 边界，不把运行状态写进 TaskNode 版本对象。
-
