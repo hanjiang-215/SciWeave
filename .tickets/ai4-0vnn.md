@@ -19,9 +19,9 @@ Linux 容器实跑 runtime 全量测试的跨平台验证证据：在 python:3.1
 
 ## Acceptance Criteria
 
-- [ ] 记录 Linux 容器复现命令与失败输出（已在 Notes）
-- [ ] 与 ai4-grlc 的第一条缺陷（session_dir 盘符/反斜杠逃逸校验）核对一致
-- [ ] 说明挂载假象（draft-buffer / service-template 两条错误非真实缺陷）
+- [x] 记录 Linux 容器复现命令与失败输出（已在 Notes）
+- [x] 与 ai4-grlc 的第一条缺陷（session_dir 盘符/反斜杠逃逸校验）核对一致
+- [x] 说明挂载假象（draft-buffer / service-template 两条错误非真实缺陷）
 - [ ] 结论进入 ai4-grlc 的处置路径（由 Frank Qi 或转交后修复）
 
 ## Notes
@@ -75,4 +75,8 @@ relative/subdir (合法相对)   → reject=False (accepted)
 ```
 
 **结论**：提议方案在 POSIX 上可正确拦截全部三种逃逸形态、不误伤合法相对子目录，修复路径可行。注意补测试时除 `C:/absolute` 外还应覆盖 `C:\absolute` 与 `..\..\outside` 两种输入（`ai4-grlc` AC 第一条已列）。
+
+**2026-10-28T01:35:00Z**
+
+前三条 AC 已勾（复现命令、与 grlc 第一条核对一致、挂载假象澄清），本票保持 open：第四条「结论进入 ai4-grlc 处置路径」等待 Frank Qi 修复或转交后闭合。
 
