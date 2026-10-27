@@ -1,0 +1,249 @@
+# 中央服务单容器部署单元。
+#
+# 一个服务、一个容器、一个镜像：`sci-weave/centre-control` 下的 12 个进程角色
+# 全部由容器内的 supervisord 托管（清单见 README「进程与端口」）。端侧套件与
+# SciencePal 科研核心不在这里，它们部署在 WorkBuddy / DSH 上，通过下面的 MCP
+# 端口访问本容器。
+#
+# TerminusDB 与 Redpanda 是第三方服务，按既有约定留在
+# `sci-weave/service/<服务名>/`，本栈不重复定义，默认经宿主机地址访问
+# （Linux 上靠 extra_hosts 把 host.docker.internal 指到宿主网关）。
+#
+# 起停与访问路径见 README.md；凭据与令牌见 .env.example。
+
+name: sciweave-centre
+
+# 主服务与一次性引导任务共用同一个构建产物。
+x-centre-build: &centre-build
+  context: ..
+  dockerfile: centre-stack/Dockerfile
+  args:
+    # 受限网络下把基础镜像指向镜像代理；默认走官方地址。
+    PYTHON_IMAGE: ${PYTHON_IMAGE:-python:3.13-slim}
+    NODE_IMAGE: ${NODE_IMAGE:-node:22-slim}
+    # 前端在构建期烤进 bundle：这里必须是浏览器能访问到 dashboard-api 的
+    # 绝对地址。部署到服务器时改成公网/内网地址后再 build。
+    VITE_DASHBOARD_API_URL: ${VITE_DASHBOARD_API_URL:-http://127.0.0.1:8702/}
+
+x-centre-termdb: &centre-termdb
+  SCIWEAVE_MAPPING_TERMINUSDB_URL: ${SCIWEAVE_MAPPING_TERMINUSDB_URL:-http://host.docker.internal:6363}
+  SCIWEAVE_MAPPING_TERMINUSDB_DATABASE: ${SCIWEAVE_MAPPING_TERMINUSDB_DATABASE:-sciweave_mapping}
+  SCIWEAVE_MAPPING_TERMINUSDB_STORE: ${SCIWEAVE_MAPPING_TERMINUSDB_STORE:-admin}
+  SCIWEAVE_MAPPING_TERMINUSDB_USERNAME: ${SCIWEAVE_MAPPING_TERMINUSDB_USERNAME:-admin}
+  SCIWEAVE_MAPPING_TERMINUSDB_PASSWORD: ${SCIWEAVE_MAPPING_TERMINUSDB_PASSWORD:-root}
+  SCIWEAVE_WIKI_TERMINUSDB_URL: ${SCIWEAVE_WIKI_TERMINUSDB_URL:-http://host.docker.internal:6363}
+  SCIWEAVE_WIKI_TERMINUSDB_DATABASE: ${SCIWEAVE_WIKI_TERMINUSDB_DATABASE:-sciweave_wiki}
+  SCIWEAVE_WIKI_TERMINUSDB_STORE: ${SCIWEAVE_WIKI_TERMINUSDB_STORE:-admin}
+  SCIWEAVE_WIKI_TERMINUSDB_USERNAME: ${SCIWEAVE_WIKI_TERMINUSDB_USERNAME:-admin}
+  SCIWEAVE_WIKI_TERMINUSDB_PASSWORD: ${SCIWEAVE_WIKI_TERMINUSDB_PASSWORD:-root}
+  SCIWEAVE_BUFFER_TERMINUSDB_URL: ${SCIWEAVE_BUFFER_TERMINUSDB_URL:-http://host.docker.internal:6363}
+  SCIWEAVE_BUFFER_TERMINUSDB_DATABASE: ${SCIWEAVE_BUFFER_TERMINUSDB_DATABASE:-sciweave_draft_domain}
+  SCIWEAVE_BUFFER_TERMINUSDB_USERNAME: ${SCIWEAVE_BUFFER_TERMINUSDB_USERNAME:-admin}
+  SCIWEAVE_BUFFER_TERMINUSDB_PASSWORD: ${SCIWEAVE_BUFFER_TERMINUSDB_PASSWORD:-root}
+
+services:
+  centre:
+    build: *centre-build
+    image: sciweave/centre:${CENTRE_IMAGE_TAG:-local}
+    container_name: ${CENTRE_CONTAINER_NAME:-sciweave-centre}
+    restart: unless-stopped
+
+    env_file:
+      # 真实 `.env` 不入库；缺失时 compose 不会因为「文件不存在」提前失败，而是
+      # 在下面 `${VAR:?}` 的必填令牌处报出到底缺哪个变量。
+      - path: .env
+        required: false
+
+    environment:
+      # TerminusDB 连接参数与引导任务共用同一份定义（x-centre-termdb）。
+      <<: *centre-termdb
+      # ---------------------------------------------------------------- 全局
+      TZ: ${TZ:-Asia/Shanghai}
+      SCIWEAVE_CENTRE_PUBLIC_ORIGIN: ${SCIWEAVE_CENTRE_PUBLIC_ORIGIN:-http://127.0.0.1:8080}
+
+      # ------------------------------------------------- Research Mapping 领域
+      SCIWEAVE_MAPPING_DOMAIN_ID: ${SCIWEAVE_MAPPING_DOMAIN_ID:-iris-demo}
+      SCIWEAVE_MAPPING_SQLITE_PATH: /data/mapping/mapping.sqlite
+      SCIWEAVE_MAPPING_AUDIT_SQLITE_PATH: /data/audit/mapping.sqlite3
+      # 看板来源与其管理 MCP 是同一个可执行文件的两个进程，端口必须分开。
+      SCIWEAVE_MAPPING_MCP_HOST: 0.0.0.0
+      SCIWEAVE_MAPPING_MCP_PORT: "8710"
+      SCIWEAVE_MAPPING_DASHBOARD_HOST: 0.0.0.0
+      SCIWEAVE_MAPPING_DASHBOARD_PORT: "8711"
+      SCIWEAVE_MAPPING_DASHBOARD_TOKEN: ${CENTRE_TOKEN_DASHBOARD_SOURCE:?set CENTRE_TOKEN_DASHBOARD_SOURCE in .env}
+      # token -> actor_id；键是 Bearer 后的原文，值是能力表里的 actor。
+      SCIWEAVE_MAPPING_MCP_TOKENS_JSON: >-
+        {"${CENTRE_TOKEN_MAP_AGENT:?set CENTRE_TOKEN_MAP_AGENT in .env}":"map-agent",
+        "${CENTRE_TOKEN_MAP_OWNER:?set CENTRE_TOKEN_MAP_OWNER in .env}":"map-owner",
+        "${CENTRE_TOKEN_CENTRE_AGENT:?set CENTRE_TOKEN_CENTRE_AGENT in .env}":"centre-agent"}
+      # actor_id -> 能力档。centre 只解锁 4 个读工具，写工具必须显式授权。
+      SCIWEAVE_MAPPING_CALLER_CAPABILITIES_JSON: >-
+        {"map-agent":["read","candidate_submit"],
+        "map-owner":["read","candidate_review","formalize"],
+        "centre-agent":["centre","prereview_log","merged_candidate"]}
+      # 治理事件：formal_revision_published 是 coordinator 的唯一触发源。
+      SCIWEAVE_MAPPING_KAFKA_BOOTSTRAP: ${SCIWEAVE_CENTRE_KAFKA_BOOTSTRAP:-host.docker.internal:19092}
+
+      # ---------------------------------------------------- LLM-Wiki 领域
+      SCIWEAVE_WIKI_DOMAIN_ID: ${SCIWEAVE_WIKI_DOMAIN_ID:-sciweave-wiki}
+      SCIWEAVE_WIKI_SQLITE_PATH: /data/wiki/wiki.sqlite
+      SCIWEAVE_WIKI_AUDIT_SQLITE_PATH: /data/audit/wiki.sqlite3
+      SCIWEAVE_WIKI_MCP_HOST: 0.0.0.0
+      SCIWEAVE_WIKI_MCP_PORT: "8720"
+      SCIWEAVE_WIKI_DASHBOARD_HOST: 0.0.0.0
+      SCIWEAVE_WIKI_DASHBOARD_PORT: "8721"
+      SCIWEAVE_WIKI_DASHBOARD_TOKEN: ${CENTRE_TOKEN_DASHBOARD_SOURCE:?set CENTRE_TOKEN_DASHBOARD_SOURCE in .env}
+      SCIWEAVE_WIKI_MCP_TOKENS_JSON: >-
+        {"${CENTRE_TOKEN_WIKI_AGENT:?set CENTRE_TOKEN_WIKI_AGENT in .env}":"wiki-agent",
+        "${CENTRE_TOKEN_WIKI_OWNER:?set CENTRE_TOKEN_WIKI_OWNER in .env}":"wiki-owner",
+        "${CENTRE_TOKEN_CENTRE_AGENT:?set CENTRE_TOKEN_CENTRE_AGENT in .env}":"centre-agent"}
+      SCIWEAVE_WIKI_CALLER_CAPABILITIES_JSON: >-
+        {"wiki-agent":["read","candidate_submit"],
+        "wiki-owner":["read","candidate_review","formalize"],
+        "centre-agent":["centre","prereview_log","merged_candidate"]}
+
+      # ---------------------------------------------------------- 中央草稿箱
+      SCIWEAVE_BUFFER_REQUEST_TIMEOUT_SECONDS: ${SCIWEAVE_BUFFER_REQUEST_TIMEOUT_SECONDS:-10}
+      SCIWEAVE_BUFFER_REVIEWERS_JSON: >-
+        {"mapping":["person:mapping-reviewer"],"wiki":["person:wiki-reviewer"]}
+      SCIWEAVE_BUFFER_MCP_HOST: 0.0.0.0
+      SCIWEAVE_BUFFER_MCP_PORT: "8730"
+      SCIWEAVE_BUFFER_MCP_TOKENS_JSON: >-
+        {"${CENTRE_TOKEN_BUFFER:?set CENTRE_TOKEN_BUFFER in .env}":"service:task-agent-1"}
+
+      # ------------------------------------------------------------- Registry
+      SCIWEAVE_REGISTRY_SQLITE_PATH: /data/registry/registry.sqlite3
+      SCIWEAVE_REGISTRY_HOST: 0.0.0.0
+      SCIWEAVE_REGISTRY_PORT: "8740"
+      SCIWEAVE_REGISTRY_ISSUER_URL: ${SCIWEAVE_REGISTRY_ISSUER_URL:-http://127.0.0.1:8740/issuer}
+      SCIWEAVE_REGISTRY_RESOURCE_URL: ${SCIWEAVE_REGISTRY_RESOURCE_URL:-http://127.0.0.1:8740/registry}
+      SCIWEAVE_REGISTRY_TOKENS_JSON: >-
+        {"${CENTRE_TOKEN_REGISTRY_OWNER:?set CENTRE_TOKEN_REGISTRY_OWNER in .env}":{"caller_id":"person:owner","caller_type":"project_owner"},
+        "${CENTRE_TOKEN_REGISTRY_RESEARCHER:?set CENTRE_TOKEN_REGISTRY_RESEARCHER in .env}":{"caller_id":"person:researcher","caller_type":"researcher","principal_id":"person:researcher"},
+        "${CENTRE_TOKEN_REGISTRY_CENTRE:?set CENTRE_TOKEN_REGISTRY_CENTRE in .env}":{"caller_id":"service:centre","caller_type":"service","service_role":"centre"},
+        "${CENTRE_TOKEN_REGISTRY_EMAIL:?set CENTRE_TOKEN_REGISTRY_EMAIL in .env}":{"caller_id":"service:email","caller_type":"service","service_role":"email"}}
+
+      # ------------------------------------------------------- email-service
+      SCIWEAVE_EMAIL_SQLITE_PATH: /data/email/email-delivery.sqlite3
+      SCIWEAVE_EMAIL_HOST: 0.0.0.0
+      SCIWEAVE_EMAIL_PORT: "8750"
+      SCIWEAVE_EMAIL_ISSUER_URL: ${SCIWEAVE_EMAIL_ISSUER_URL:-http://127.0.0.1:8750/issuer}
+      SCIWEAVE_EMAIL_RESOURCE_URL: ${SCIWEAVE_EMAIL_RESOURCE_URL:-http://127.0.0.1:8750/email-service}
+      SCIWEAVE_EMAIL_API_VERSION: "1"
+      SCIWEAVE_EMAIL_FROM_ADDRESS: ${SCIWEAVE_EMAIL_FROM_ADDRESS:?set SCIWEAVE_EMAIL_FROM_ADDRESS in .env}
+      SCIWEAVE_EMAIL_TOKENS_JSON: >-
+        {"${CENTRE_TOKEN_EMAIL_WORKFLOW:?set CENTRE_TOKEN_EMAIL_WORKFLOW in .env}":{"caller_id":"service:centre-workflow","caller_type":"service"},
+        "${CENTRE_TOKEN_EMAIL_OPS:?set CENTRE_TOKEN_EMAIL_OPS in .env}":{"caller_id":"human:oncall","caller_type":"operator"}}
+      SCIWEAVE_EMAIL_RETRY_INITIAL_SECONDS: "1"
+      SCIWEAVE_EMAIL_RETRY_MULTIPLIER: "2"
+      SCIWEAVE_EMAIL_RETRY_MAX_SECONDS: "60"
+      SCIWEAVE_EMAIL_DISPATCH_POLL_SECONDS: "0.2"
+      SCIWEAVE_EMAIL_SENDING_TIMEOUT_SECONDS: "30"
+      SCIWEAVE_EMAIL_MAX_ATTEMPTS: "3"
+      SCIWEAVE_EMAIL_REGISTRY_URL: http://127.0.0.1:8740/mcp
+      SCIWEAVE_EMAIL_REGISTRY_TOKEN: ${CENTRE_TOKEN_REGISTRY_EMAIL:?set CENTRE_TOKEN_REGISTRY_EMAIL in .env}
+      SCIWEAVE_EMAIL_REGISTRY_TIMEOUT_SECONDS: "5"
+      # SMTP 刻意不在这里给默认值：证书/账号属于部署环境配置，且「只配一半」
+      # 会让进程拒绝启动。要么在 .env 里把 SMTP 四项配全，要么全部留空
+      # （此时通知记为 not_configured，进程照常提供状态查询）。
+
+      # --------------------------------------------------------- coordinator
+      SCIWEAVE_COORDINATOR_SQLITE_PATH: /data/coordinator/coordinator.sqlite3
+      SCIWEAVE_COORDINATOR_KAFKA_BOOTSTRAP: ${SCIWEAVE_CENTRE_KAFKA_BOOTSTRAP:-host.docker.internal:19092}
+      SCIWEAVE_COORDINATOR_KAFKA_GROUP_ID: ${SCIWEAVE_COORDINATOR_KAFKA_GROUP_ID:-coordinator}
+      SCIWEAVE_MAPPING_MCP_ENDPOINT: http://127.0.0.1:8710/mcp
+      SCIWEAVE_MAPPING_MCP_TOKEN: ${CENTRE_TOKEN_CENTRE_AGENT:?set CENTRE_TOKEN_CENTRE_AGENT in .env}
+      SCIWEAVE_REGISTRY_MCP_ENDPOINT: http://127.0.0.1:8740/mcp
+      SCIWEAVE_REGISTRY_MCP_TOKEN: ${CENTRE_TOKEN_REGISTRY_CENTRE:?set CENTRE_TOKEN_REGISTRY_CENTRE in .env}
+      SCIWEAVE_EMAIL_MCP_ENDPOINT: http://127.0.0.1:8750/mcp
+      SCIWEAVE_EMAIL_MCP_TOKEN: ${CENTRE_TOKEN_EMAIL_WORKFLOW:?set CENTRE_TOKEN_EMAIL_WORKFLOW in .env}
+      SCIWEAVE_COORDINATOR_RETRY_INITIAL_SECONDS: "1"
+      SCIWEAVE_COORDINATOR_RETRY_MULTIPLIER: "2"
+      SCIWEAVE_COORDINATOR_RETRY_MAX_SECONDS: "60"
+      SCIWEAVE_COORDINATOR_DISPATCH_POLL_SECONDS: "1"
+      SCIWEAVE_COORDINATOR_MAX_ATTEMPTS: "5"
+      SCIWEAVE_COORDINATOR_MCP_HOST: 0.0.0.0
+      SCIWEAVE_COORDINATOR_MCP_PORT: "8762"
+      SCIWEAVE_COORDINATOR_MCP_TOKEN: ${CENTRE_TOKEN_COORDINATOR:?set CENTRE_TOKEN_COORDINATOR in .env}
+
+      # ------------------------------------------------- 中央 Agent（gateway）
+      SCIWEAVE_GATEWAY_TOKEN: ${CENTRE_TOKEN_GATEWAY:?set CENTRE_TOKEN_GATEWAY in .env}
+      SCIWEAVE_GATEWAY_CALLER_ID: ${SCIWEAVE_GATEWAY_CALLER_ID:-person:owner}
+      SCIWEAVE_GATEWAY_DB: /data/centre-agents/centre.sqlite3
+      SCIWEAVE_GATEWAY_HOST: 0.0.0.0
+      SCIWEAVE_GATEWAY_PORT: "8760"
+      # 没有模型凭据时显式关掉 passthrough，宁可报 misconfigured 也不写桩历史。
+      SCIWEAVE_GATEWAY_PASSTHROUGH_RUNTIME: ${SCIWEAVE_GATEWAY_PASSTHROUGH_RUNTIME:-0}
+      SCIWEAVE_AGENT_ID: ${SCIWEAVE_AGENT_ID:-task-agent-1}
+      SCIWEAVE_SUBSCRIBER_TOPICS: ${SCIWEAVE_SUBSCRIBER_TOPICS:-sciweave.task-handoff.task-agent-1}
+      SCIWEAVE_QUEUE_BOOTSTRAP_SERVERS: ${SCIWEAVE_CENTRE_KAFKA_BOOTSTRAP:-host.docker.internal:19092}
+      SCIWEAVE_QUEUE_GROUP_ID: ${SCIWEAVE_QUEUE_GROUP_ID:-sciweave.task-workflow.task-agent-1}
+      SCIWEAVE_SUBSCRIBER_DASHBOARD_HOST: 0.0.0.0
+      SCIWEAVE_SUBSCRIBER_DASHBOARD_PORT: "8761"
+      SCIWEAVE_SUBSCRIBER_DASHBOARD_TOKEN: ${CENTRE_TOKEN_DASHBOARD_SOURCE:?set CENTRE_TOKEN_DASHBOARD_SOURCE in .env}
+      SCIWEAVE_DRAFT_BUFFER_ENDPOINT: http://127.0.0.1:8730/mcp
+      SCIWEAVE_DRAFT_BUFFER_TOKEN: ${CENTRE_TOKEN_BUFFER:?set CENTRE_TOKEN_BUFFER in .env}
+      SCIWEAVE_DRAFT_BUFFER_NAMESPACE: ${SCIWEAVE_DRAFT_BUFFER_NAMESPACE:-mapping}
+      SCIWEAVE_DRAFT_BUFFER_SUBMITTER_ID: service:task-agent-1
+      SCIWEAVE_WORKER_HOME: /data/centre-agents/worker-home
+      SCIWEAVE_WORKER_SESSION_DIR: sessions
+      SCIWEAVE_WORKER_CONNECTION_SCOPE: ${SCIWEAVE_WORKER_CONNECTION_SCOPE:-centre-agent}
+      SCIWEAVE_WORKER_MODEL: ${SCIWEAVE_WORKER_MODEL:-deepseek-chat}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      DEEPSEEK_BASE_URL: ${DEEPSEEK_BASE_URL:-https://api.deepseek.com}
+
+      # ------------------------------------------------------------ 看板 API
+      SCIWEAVE_DASHBOARD_HOST: 0.0.0.0
+      SCIWEAVE_DASHBOARD_PORT: "8702"
+      SCIWEAVE_DASHBOARD_CORS_ORIGIN: ${SCIWEAVE_CENTRE_PUBLIC_ORIGIN:-http://127.0.0.1:8080}
+      SCIWEAVE_DASHBOARD_SOURCE_TIMEOUT_SECONDS: "5"
+      SCIWEAVE_DASHBOARD_SOURCE_MAX_BYTES: "1048576"
+      SCIWEAVE_DASHBOARD_SOURCE_MAPPING_URL: http://127.0.0.1:8711/api/dashboard/source/mapping
+      SCIWEAVE_DASHBOARD_SOURCE_MAPPING_TOKEN: ${CENTRE_TOKEN_DASHBOARD_SOURCE:?set CENTRE_TOKEN_DASHBOARD_SOURCE in .env}
+      SCIWEAVE_DASHBOARD_SOURCE_WIKI_URL: http://127.0.0.1:8721/api/dashboard/source/wiki
+      SCIWEAVE_DASHBOARD_SOURCE_WIKI_TOKEN: ${CENTRE_TOKEN_DASHBOARD_SOURCE:?set CENTRE_TOKEN_DASHBOARD_SOURCE in .env}
+      SCIWEAVE_DASHBOARD_SOURCE_GATEWAY_URL: http://127.0.0.1:8760/sources
+      SCIWEAVE_DASHBOARD_SOURCE_GATEWAY_TOKEN: ${CENTRE_TOKEN_GATEWAY:?set CENTRE_TOKEN_GATEWAY in .env}
+      SCIWEAVE_DASHBOARD_SOURCE_QUEUE_URL: http://127.0.0.1:8761/api/dashboard/source/queue
+      SCIWEAVE_DASHBOARD_SOURCE_QUEUE_TOKEN: ${CENTRE_TOKEN_DASHBOARD_SOURCE:?set CENTRE_TOKEN_DASHBOARD_SOURCE in .env}
+
+      # ------------------------------------------------------- web-ui 静态站
+      SCIWEAVE_WEB_UI_STATIC_HOST: 0.0.0.0
+      SCIWEAVE_WEB_UI_STATIC_PORT: "8080"
+
+    extra_hosts:
+      # Linux 上 host.docker.internal 需要显式声明，否则连不到宿主机上的
+      # TerminusDB / Redpanda。
+      - host.docker.internal:host-gateway
+
+    volumes:
+      - centre-data:/data
+
+    ports:
+      # 对端侧 harness（WorkBuddy / DSH）与浏览器开放。宿主机端口可用环境变量改。
+      - "${CENTRE_WEB_UI_HOST_PORT:-8080}:8080"
+      - "${CENTRE_DASHBOARD_API_HOST_PORT:-8702}:8702"
+      - "${CENTRE_MAPPING_MCP_HOST_PORT:-8710}:8710"
+      - "${CENTRE_WIKI_MCP_HOST_PORT:-8720}:8720"
+      - "${CENTRE_BUFFER_MCP_HOST_PORT:-8730}:8730"
+      - "${CENTRE_REGISTRY_MCP_HOST_PORT:-8740}:8740"
+      - "${CENTRE_EMAIL_MCP_HOST_PORT:-8750}:8750"
+      - "${CENTRE_GATEWAY_MCP_HOST_PORT:-8760}:8760"
+      - "${CENTRE_COORDINATOR_MCP_HOST_PORT:-8762}:8762"
+
+  # 一次性引导任务：三个领域库必须先在 TerminusDB 里存在，否则草稿箱直接退出、
+  # 看板的 mapping / wiki 来源恒为 unavailable。幂等，重复跑没有副作用。
+  #   docker compose --env-file .env run --rm bootstrap
+  bootstrap:
+    profiles: ["tools"]
+    build: *centre-build
+    image: sciweave/centre:${CENTRE_IMAGE_TAG:-local}
+    entrypoint: ["/usr/local/bin/python", "/opt/centre/bin/bootstrap_terminusdb.py"]
+    environment:
+      <<: *centre-termdb
+    extra_hosts:
+      - host.docker.internal:host-gateway
+
+volumes:
+  centre-data:
+    name: ${CENTRE_DATA_VOLUME:-sciweave-centre-data}
