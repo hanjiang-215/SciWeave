@@ -2,7 +2,7 @@
 id: ai4-ced7
 status: closed
 deps: []
-links: [ai4-iebi, ai4-s2nb, ai4-cdia]
+links: [ai4-iebi, ai4-s2nb, ai4-cdia, ai4-grlc]
 created: 2026-10-25T09:20:00Z
 type: feature
 priority: 3

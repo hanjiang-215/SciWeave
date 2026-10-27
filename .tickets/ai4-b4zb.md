@@ -2,7 +2,7 @@
 id: ai4-b4zb
 status: closed
 deps: []
-links: []
+links: [ai4-grlc]
 created: 2026-10-26T18:38:15Z
 type: bug
 priority: 2

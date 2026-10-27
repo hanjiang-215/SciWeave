@@ -2,7 +2,7 @@
 id: ai4-gvan
 status: closed
 deps: []
-links: [ai4-tg3v, ai4-dybh, ai4-jnkn]
+links: [ai4-tg3v, ai4-dybh, ai4-jnkn, ai4-bp6v]
 created: 2026-10-22T05:20:54Z
 type: feature
 priority: 1
