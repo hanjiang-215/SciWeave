@@ -112,6 +112,8 @@ runtime 用 `json.loads` 解析（容忍代码块围栏）并校验是规范 UUI
 
 通知同理，由写作者通过 `email-service` 发，但三个字段是 runtime 的账、由 `notifications.notification_brief()` 原样交给它：`dedupe_key`（`draft-ready:<execution_id>`，重放只发一次）、`related`（含 `execution_id` / `task_node_id`）、`schema_version`（**字符串** `"1"`，整数会被服务端拒绝）。`recipients` 的 `principal_id` 用 agent 从映射里读到的 `task_owner_id`——runtime 不知道谁是负责人，编一个就是把邮件发给陌生人。`notification_kind` 只有 `draft_ready` 可用（`CONFIGURED_NOTIFICATION_KINDS` 是封闭的 13 个值，没有 `task_agent_run_finished`）。
 
+通知失败**不让整轮失败**：写作者同时持有两张卡，通知失败发生在草稿写成之后，为了一封没发出去的邮件丢掉一份已经写好的草稿不划算。错误码由 agent 放进回答的可选字段 `notification_error`，runtime 转述到 worker 的 stdout 行里。它和 `draft_id_source` 一样是转述，不是 runtime 亲自确认过的事实。
+
 `notifications.notification_problem()` 在本地按 `_content_problem` 的四条硬规则（长度、HTML、控制字符、`related` 是对象）预检一遍，只是为了让研究员看到「subject 超了 40 个字」而不是服务端一句 `invalid`；服务端仍是权威，这个预检不能用来跳过调用。
 
 ## 本地验证
