@@ -28,6 +28,10 @@ class _RecordingService:
         self.completions: list[tuple[str, str, str]] = []
         self.explode_on = explode_on
         self.retried = 0
+        self.scanned = 0
+
+    def startup_scan(self) -> None:
+        self.scanned += 1
 
     def on_formal_revision_published(self, mapping_domain_id: str, formal_revision_id: str) -> None:
         if self.explode_on == formal_revision_id:
@@ -126,3 +130,64 @@ def test_poll_once_retries_non_terminal_dispatches():
     runtime.poll_once()
 
     assert service.retried == 1
+
+
+class _OutageEvents:
+    """Broker is unreachable for the first N polls, then stops the loop."""
+
+    def __init__(self, failures: int = 3) -> None:
+        self.failures = failures
+        self.polls = 0
+        self.closed = False
+        self.runtime: object | None = None
+
+    def poll(self, timeout_ms: int = 100) -> list[dict]:
+        self.polls += 1
+        if self.polls <= self.failures:
+            raise RuntimeError("kafka: broker is not available")
+        if self.runtime is not None:
+            self.runtime._running = False  # type: ignore[attr-defined]
+        return []
+
+    def commit(self) -> None:
+        return None
+
+    def close(self) -> None:
+        self.closed = True
+
+
+class _FakeConnection:
+    def close(self) -> None:
+        return None
+
+
+def test_a_broker_outage_does_not_kill_the_loop():
+    """ai4-xncm: one unreachable-broker poll used to terminate the process.
+
+    supervisord then restarted it into the same outage, so the handoff chain
+    stood still for as long as the broker was down. The loop must keep going.
+    """
+    import threading
+
+    service = _RecordingService()
+    events = _OutageEvents(failures=3)
+    runtime = CoordinatorRuntime(
+        service=service,
+        publisher=_FakePublisher(),
+        connection=_FakeConnection(),
+        poll_seconds=0.0,
+        events=events,
+        event_router=GovernanceEventConsumer(service),
+        max_poll_backoff_seconds=0.01,
+    )
+    events.runtime = runtime
+    runtime._running = True
+
+    thread = threading.Thread(target=runtime.serve_forever, daemon=True)
+    thread.start()
+    thread.join(timeout=10)
+
+    assert not thread.is_alive(), "the loop did not stop when asked"
+    assert events.polls >= 4, "the loop gave up after the first poll failure"
+    assert service.scanned == 1
+    assert events.closed is True

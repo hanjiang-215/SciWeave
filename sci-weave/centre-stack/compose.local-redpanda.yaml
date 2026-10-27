@@ -1,17 +1,18 @@
-# ???????? Redpanda ???????????
+# 本地复用仓库自带 Redpanda 时的覆盖文件（可选）。
 #
-# `sci-weave/service/redpanda/compose.yaml` ? external ?? advertise ?
-# `localhost:19092`????? localhost ??????Kafka ???????????
-# ????? 19092??? coordinator / subscriber ???????????
+# `sci-weave/service/redpanda/compose.yaml` 把 external 监听 advertise 成
+# `localhost:19092`。容器里的 localhost 是容器自己，Kafka 客户端拿到这份元数据后
+# 会去连自己的 19092，于是 coordinator 连不上、subscriber 永远收不到消息。绕法两个：
 #
-#   1) ?????? Redpanda ? docker ???????? `redpanda:9092`??????
-#   2) ? Redpanda ????????? advertise ?????????????
+#   1) 让本容器接入 Redpanda 的 docker 网络，走它内部的 `redpanda:9092`（本文件）；
+#   2) 给 Redpanda 换上容器可解析的 advertise 地址（生产环境应当如此）。
 #
-# ???
+# 用法：
 #   docker compose --env-file .env -f compose.yaml -f compose.local-redpanda.yaml up -d
 #
-# ????????????? SCIWEAVE_CENTRE_KAFKA_BOOTSTRAP ?? broker ???
-# ??????? advertised.listeners ?????????
+# 注意这里必须逐个覆盖各角色自己的 bootstrap 变量：compose 的环境变量插值发生在
+# 解析阶段，只写 SCIWEAVE_CENTRE_KAFKA_BOOTSTRAP 不会影响已经用 `${...}` 展开过
+# 的那些值。生产部署不需要本文件，把各 bootstrap 指向真实可达的 broker 即可。
 
 services:
   centre:
@@ -19,7 +20,10 @@ services:
       - default
       - redpanda
     environment:
-      SCIWEAVE_CENTRE_KAFKA_BOOTSTRAP: redpanda:9092
+      SCIWEAVE_MAPPING_KAFKA_BOOTSTRAP: redpanda:9092
+      SCIWEAVE_WIKI_KAFKA_BOOTSTRAP: redpanda:9092
+      SCIWEAVE_COORDINATOR_KAFKA_BOOTSTRAP: redpanda:9092
+      SCIWEAVE_QUEUE_BOOTSTRAP_SERVERS: redpanda:9092
 
 networks:
   redpanda:
