@@ -4,6 +4,33 @@
 
 **它不持有 Kafka 客户端、不建连接、不起消费者、不含重试循环。** 各角色自行接入 `confluent-kafka`，只把构造好的字节交给客户端。这条边界由 `tests/test_no_kafka.py` 断言。
 
+## 当前状态：没有生产调用方（有意延后，见 `ai4-4bxp`）
+
+本包目前**只被自己的测试引用**：
+
+```bash
+git grep -n message_envelope -- '*.py' ':!*/tests/*'    # 无命中
+```
+
+线上仍在用扁平 dict：`coordinator/src/coordinator/adapter_publisher.py` 直接发 `{"message_type": "task_handoff_ready", ...}`，`centre-agents/gateway/ingest` 与 `toolkits/.../service-template` 同样各自手搓。读代码时不要把本包当成「已经生效的协议约束」——**它是待接线的契约**。
+
+接线不是换一个 `import`。当前线格式与 `Envelope` 不兼容：
+
+| 差异 | 现状（扁平 dict） | 本包（信封） |
+| --- | --- | --- |
+| 信封头 | 无 | `message_id`、`schema_version`、`dedupe_key`、`occurred_at`、`published_at`、`producer`、`routing` |
+| `task_handoff_ready` 载荷 | 7 字段 | 9 字段（多 `upstream_source_refs`、`dependency_edge_version_refs`、`executor_ref_snapshot`） |
+| 去重键 | 消费方各自拼 | 生产方写进 `dedupe_key` |
+
+接线的前置条件与建议顺序：
+
+1. 先把 `task_handoff_ready` 缺的三个引用字段补齐（`ai4-9wji` / `ai4-br61` 的线），否则生产方一接就会被自己的 `validate_payload` 拒。
+2. 再定 `dedupe_key` 的唯一来源，避免生产方与消费方各拼一套。
+3. 然后改端侧 `subscriber` 的解析（它同时要能读旧扁平消息，需要一个兼容窗口）。
+4. 最后切生产方，`payloads.py` 的必填清单随之与 `ai4-te1v` 的表对齐。
+
+顺序颠倒会把「协议不兼容」和「字段没补齐」两个失败混在一起，排查成本翻倍。
+
 ## 使用
 
 ```python
