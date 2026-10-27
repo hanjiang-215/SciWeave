@@ -1,6 +1,6 @@
 ---
 id: ai4-3vkc
-status: open
+status: closed
 deps: []
 links: []
 created: 2026-10-27T01:01:48Z
@@ -34,10 +34,10 @@ tags: [chore, demo, evidence]
 
 ## Acceptance Criteria
 
-- [ ] 仓库内 `check_iris_input.py` / `run_iris_baseline.py` / `iris_data.csv` / `iris_data_failure_inject.csv` 各只有一份。
-- [ ] `sciencpal-onboarding` 的 README 与 SKILL 改为引用 `demo-evidence/` 的路径。
-- [ ] 沙箱上传步骤在新的引用下仍然可执行（给出上传后的目标目录结构）。
-- [ ] `grep -rn "checks/" humans/competition/` 不再指向已删除的副本。
+- [x] 仓库内 `check_iris_input.py` / `run_iris_baseline.py` / `iris_data.csv` / `iris_data_failure_inject.csv` 各只有一份。
+- [x] `sciencpal-onboarding` 的 README 与 SKILL 改为引用 `demo-evidence/` 的路径。
+- [x] 沙箱上传步骤在新的引用下仍然可执行（给出上传后的目标目录结构）。
+- [x] `grep -rn "checks/" humans/competition/` 不再指向已删除的副本。
 
 ## Notes
 
@@ -46,3 +46,35 @@ tags: [chore, demo, evidence]
 身份核对：本票 assignee 为 Frank Qi，当前分支 `feature/frank-qi`、`git config user.name=Frank Qi`，一致。
 
 优先级低于 `ai4-483l` / `ai4-j7g2`：那两票改脚本时必须两份同改，去重完成前以「两份同改」为临时约定。
+
+**2026-10-27 实现与验证（Frank Qi）**
+
+提交：`bbac3e9`（删除副本 + 重指向）、`f556dba`（补上传后的目标目录结构）。
+
+验证：
+
+```text
+$ find humans/competition -name "check_iris_input.py" -o -name "run_iris_baseline.py" \
+      -o -name "iris_data.csv" -o -name "iris_data_failure_inject.csv"
+humans/competition/demo-evidence/check_iris_input.py
+humans/competition/demo-evidence/iris_data.csv
+humans/competition/demo-evidence/iris_data_failure_inject.csv
+humans/competition/demo-evidence/run_iris_baseline.py        # 各一份
+
+$ grep -rn "checks/" humans/competition/
+（仅剩两条说明性文字，无任何活引用）
+```
+
+**执行顺序按票里的临时约定走了**：先按 `ai4-483l` / `ai4-j7g2` 两份同改（`5fe4810`、`c514752` 时两份 sha256 分别相同），确认两份一致后才在 `bbac3e9` 整体删除。这样任何单个提交检出都是自洽的，不会出现「本机通过、沙箱跑旧逻辑」的中间态。
+
+**上传后目录结构**如实写在 `skills/minimal-probe/SKILL.md`：
+
+```text
+<沙箱工作目录>/
+├── check_iris_input.py
+└── iris_data.csv
+```
+
+同时说明：脚本对漏传文件现在返回 `reason_code: unreadable_input` 的结构化失败，看到 traceback 说明上传结构不对。
+
+**遗留**：`demo-evidence/README.md:60` 明确写了「两个脚本各自持有一份 `sha256_of`，必须同步修改」，并指出本票合并的是 `demo-evidence/` 与 `checks/` 之间的副本、与这两个脚本无关——避免后人误以为存在某张票会自动合并它们。评审曾建议把 `sha256_of` 抽成共享模块，未采纳：两个脚本都要能作为单文件单独上传到沙箱扁平目录，多一个依赖文件就破坏这一点。改用一致性测试兜底（见 `ai4-483l`）。
