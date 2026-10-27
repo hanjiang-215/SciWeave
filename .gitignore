@@ -32,6 +32,9 @@ htmlcov/
 **/.fast-agent/sessions/
 **/var/
 
+# DSH 技能副本（由 .cursor/skills 派生，供 DSH 自动加载，可再生成）
+.dsh/
+
 # 工单索引生成物（运行 ticket-index render 生成，不提交）
 docs/tickets/INDEX.md
 docs/tickets/modules/
