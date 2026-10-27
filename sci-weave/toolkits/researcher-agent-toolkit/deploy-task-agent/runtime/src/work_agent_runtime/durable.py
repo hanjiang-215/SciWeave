@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS execution (
         'queued', 'running', 'waiting', 'completed', 'failed', 'cancelled'
     )),
     draft_id TEXT,
+    draft_id_source TEXT,
     error_code TEXT,
     failed_agent TEXT,
     created_at TEXT NOT NULL,
@@ -76,7 +77,20 @@ class SqliteExecutionStore:
         self._connection = sqlite3.connect(path, check_same_thread=False)
         self._connection.row_factory = sqlite3.Row
         self._connection.executescript(_SCHEMA)
+        self._migrate()
         self._connection.commit()
+
+    def _migrate(self) -> None:
+        """Add columns a pre-existing database does not have (ai4-x0ay).
+
+        `CREATE TABLE IF NOT EXISTS` is a no-op on an installed database, and
+        the kit ships with one, so every later column needs its own step. Read
+        through `PRAGMA table_info` first: repeating the check is free, while a
+        repeated `ALTER TABLE` is an error.
+        """
+        columns = {row["name"] for row in self._connection.execute("PRAGMA table_info(execution)")}
+        if "draft_id_source" not in columns:
+            self._connection.execute("ALTER TABLE execution ADD COLUMN draft_id_source TEXT")
 
     def close(self) -> None:
         self._connection.close()
@@ -105,8 +119,18 @@ class SqliteExecutionStore:
             )
         return cursor.rowcount > 0
 
-    def complete(self, execution: ExecutionRecord, draft_id: str) -> ExecutionRecord:
-        return self._transition(execution.execution_id, "completed", draft_id=draft_id)
+    def complete(
+        self,
+        execution: ExecutionRecord,
+        draft_id: str,
+        draft_id_source: str | None = None,
+    ) -> ExecutionRecord:
+        return self._transition(
+            execution.execution_id,
+            "completed",
+            draft_id=draft_id,
+            draft_id_source=draft_id_source,
+        )
 
     def fail(
         self, execution: ExecutionRecord, error_code: str, failed_agent: str | None = None
@@ -141,7 +165,8 @@ class SqliteExecutionStore:
 
     def list_all(self, limit: int = 200) -> list[dict]:
         rows = self._connection.execute(
-            """SELECT execution_id, target_id, status, draft_id, error_code, created_at
+            """SELECT execution_id, target_id, status, draft_id, draft_id_source, error_code,
+                      created_at
                FROM execution ORDER BY created_at DESC, execution_id LIMIT ?""",
             (limit,),
         ).fetchall()
@@ -286,6 +311,7 @@ class SqliteExecutionStore:
         status: str,
         *,
         draft_id: str | None = None,
+        draft_id_source: str | None = None,
         error_code: str | None = None,
         failed_agent: str | None = None,
     ) -> ExecutionRecord:
@@ -293,11 +319,12 @@ class SqliteExecutionStore:
             cursor = self._connection.execute(
                 """UPDATE execution
                    SET status = ?, draft_id = COALESCE(?, draft_id),
+                       draft_id_source = COALESCE(?, draft_id_source),
                        error_code = COALESCE(?, error_code),
                        failed_agent = COALESCE(?, failed_agent),
                        updated_at = ?
                    WHERE execution_id = ? AND status NOT IN ('completed', 'failed', 'cancelled')""",
-                (status, draft_id, error_code, failed_agent, _utc_now(), execution_id),
+                (status, draft_id, draft_id_source, error_code, failed_agent, _utc_now(), execution_id),
             )
         record = self.get(execution_id)
         if record is None:
@@ -318,4 +345,5 @@ def _record(row: sqlite3.Row | None) -> ExecutionRecord | None:
         draft_id=row["draft_id"],
         error_code=row["error_code"],
         failed_agent=row["failed_agent"],
+        draft_id_source=row["draft_id_source"],
     )

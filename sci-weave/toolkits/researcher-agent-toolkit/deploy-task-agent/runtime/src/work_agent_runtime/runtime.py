@@ -16,6 +16,10 @@ class ExecutionRecord:
     draft_id: str | None = None
     error_code: str | None = None
     failed_agent: str | None = None
+    #: Where `draft_id` came from: ``runtime`` when this process read it off the
+    #: draft box, ``agent_reported`` when the agent told us what it wrote
+    #: (ai4-x0ay). The difference matters: the second is an unverified claim.
+    draft_id_source: str | None = None
 
 
 # Short compatibility name for callers that used the initial runtime prototype.
@@ -51,9 +55,9 @@ class ExecutionStore:
             self._replace(updated)
             return True
 
-    def complete(self, execution: ExecutionRecord, draft_id: str) -> ExecutionRecord:
+    def complete(self, execution: ExecutionRecord, draft_id: str, draft_id_source: str | None = None) -> ExecutionRecord:
         with self._lock:
-            updated = ExecutionRecord(execution.execution_id, execution.target_id, "completed", draft_id)
+            updated = ExecutionRecord(execution.execution_id, execution.target_id, "completed", draft_id, draft_id_source=draft_id_source)
             self._replace(updated)
             return updated
 
@@ -267,7 +271,9 @@ class WorkAgentRuntime:
             result = WorkflowExecutor(config, agent, self.drafts).run(workflow_name, prompt, target_id=target_id)
             current = self.store.get(execution.execution_id) or execution
             if result.status == "completed":
-                return self.store.complete(current, result.draft_id or "")
+                return self.store.complete(
+                    current, result.draft_id or "", getattr(result, "draft_id_source", None)
+                )
             return self.store.fail(current, result.error_code or "workflow_failed", result.failed_agent)
         finally:
             self.lease.release(target_id)
