@@ -1,6 +1,6 @@
 ---
 id: ai4-derq
-status: open
+status: in_progress
 deps: []
 links: [ai4-u9gj, ai4-3zxu]
 created: 2026-10-27T13:35:41Z
@@ -13,14 +13,60 @@ tags: [message-envelope, central, protocol, correctness]
 
 `docs/data-flow/message-queue.md:69-90` 规定所有 Redpanda 业务消息使用统一信封，`shared/message-envelope/`（`ai4-3zxu`）是它的实现包。**线上没有任何一条消息经过它。**
 
-## 一、三个格式并存
+## 一、四种形状
 
-| 出处 | 形状 | 调用方 |
+实测字段（不是读文档抄的，是把各生产者的真实 dict 跑出来的）：
+
+| 出处 | 顶层字段 | 家族 |
 | --- | --- | --- |
-| `shared/message-envelope/` | 分层：`message_id` / `dedupe_key` / `producer` / `routing` / `payload`，`schema_version` 为整数，`validate()` 强校验 | **0 个** |
-| `coordinator/src/coordinator/adapter_publisher.py:53-62` | 扁平：业务字段全在顶层，无 `message_id`、无 `schema_version`、无 `routing` | 交接协调服务（`task_handoff_ready` 实际发布者） |
-| `research-map` / `research-wiki` 的 `governance_events.py:137-147` | 另一份扁平：`event_id` / `event_type` / `target` / `payload` | 领域治理事件发布者 |
-| `centre-agents/gateway/ingest/src/gateway_ingest/service.py:320-326` | 第三份：MCP 入站事件，形状又不同 | 中央 ingest |
+| `shared/message-envelope/`（包本身，不是生产者） | `message_id` `message_type` `schema_version`(int) `dedupe_key` `occurred_at` `published_at` `producer{service,instance_id}` `routing{partition_key,target_agent_id}` `payload` | 分层（权威候选） |
+| `coordinator/src/coordinator/adapter_publisher.py:52-62` | `message_type` `mapping_domain_id` `task_node_id` `target_node_version_ref` `target_agent_id` `pending_handoff_id` `trigger_revision_id` | 扁平 A |
+| `research-map/src/research_mapping/governance_events.py:137-146` | `event_id` `event_type` `schema_version`(**str** `"1"`) `mapping_domain_id` `occurred_at` `dedupe_key` `target{kind,id}` `payload` | 扁平 B |
+| `research-wiki/src/llm_wiki/governance_events.py:127-136` | 同 B，但 `wiki_domain_id` 取代 `mapping_domain_id` | 扁平 B |
+| `centre-agents/gateway/ingest/src/gateway_ingest/service.py:317-328` | `event_id` `event_type` `schema_version`(**int** `1`) `mapping_domain_id` `occurred_at` `dedupe_key` `target{kind,id}` `payload` | 扁平 B |
+
+四个生产者里 `make_event_body` **零生产调用方**（只有 `tests/test_governance_consumer.py` 用它），所以线上实际只有三条消息在跑。
+
+### 与 `payloads.py` 必填项逐条对齐
+
+信封包的必填项分两层：信封必填（`Envelope` 的 9 个字段）与 payload 必填（`PAYLOAD_SCHEMAS`）。
+
+| 信封必填字段 | 信封包 | 协调器 | map | wiki | ingest |
+| --- | --- | --- | --- | --- | --- |
+| `message_id` | ✅ | ❌ **缺** | ❌（有 `event_id`） | ❌（同） | ❌（同） |
+| `message_type` | ✅ | ✅ | ❌（有 `event_type`） | ❌（同） | ❌（同） |
+| `schema_version`（int） | ✅ | ❌ **缺** | ⚠️ 是 str `"1"` | ⚠️ str `"1"` | ✅ int `1` |
+| `dedupe_key` | ✅ | ❌ **缺** | ✅ | ✅ | ✅ |
+| `occurred_at` | ✅ | ❌ **缺** | ✅ | ✅ | ✅ |
+| `published_at` | ✅ | ❌ **缺** | ❌ **缺** | ❌ **缺** | ❌ **缺** |
+| `producer` | ✅ | ❌ **缺** | ❌ **缺** | ❌ **缺** | ❌ **缺** |
+| `routing` | ✅ | ❌ **缺** | ❌ **缺** | ❌ **缺** | ❌ **缺** |
+| `payload` | ✅ | ❌（业务字段在顶层） | ✅ | ✅ | ✅ |
+
+| `task_handoff_ready` payload 必填 | 信封包 | 协调器 |
+| --- | --- | --- |
+| `mapping_domain_id` | ✅ | ✅ |
+| `task_node_id` | ✅ | ✅ |
+| `target_node_version_ref` | ✅（无形状规则） | ✅（string，与文档的对象形状冲突） |
+| `target_agent_id` | ✅ | ✅ |
+| `pending_handoff_id` | ✅ | ✅ |
+| `trigger_revision_id` | ✅ | ✅ |
+| `upstream_source_refs` | ✅ + 必须 array | ❌ **不发布**（`service.py:535` 算出后丢弃） |
+| `dependency_edge_version_refs` | ✅ + 必须 array | ❌ **不发布**（`service.py:539`） |
+| `executor_ref_snapshot` | ✅ + 必须 array | ❌ **不发布**（`service.py:545`） |
+| `task_text` | ❌ **未定义** | ❌ 无此字段（链路源头也没有，见第三节 A6） |
+
+| 治理事件 payload 必填 | 信封包 | map | wiki | ingest |
+| --- | --- | --- | --- | --- |
+| `formal_revision_published` → `mapping_domain_id` + `formal_revision_id` | ✅ | ⚠️ id 在 payload、domain 在顶层 | ❌ **无 mapping_domain_id** | ✅（`make_event_body`） |
+| `candidate_created` → `mapping_domain_id` + `candidate_id` | ✅ | ❌ 发的是 `submission_id` | ❌ 同 | ❌ 同 |
+
+最后一行是个独立的坑：`payloads.py` 要 `candidate_id`，map/wiki 两个发布者都发 `submission_id`（`governance_events.py:66-72`），而 ingest 的消费端 `service.py:278` 写的是 `event.payload.get("candidate_id") or event.payload.get("submission_id")`——**消费端在两年前就知道会分裂，用 `or` 糊住了，协议定义一直没改**。实测：
+
+```
+validate_payload("candidate_created", {"submission_id":"s-1","proposal_id":None,"candidate_head":None,"domain":"mapping"})
+  → missing required field(s): mapping_domain_id, candidate_id
+```
 
 信封包零调用方，实测：
 
@@ -34,28 +80,130 @@ $ grep -rn "message_envelope" --include=*.py --include=*.toml --include=*.yaml s
 
 ## 二、后果
 
-**没有一个消费者能读所有生产者。** 套件订阅端为此写死了第三种格式（见 `ai4-u9gj`），两个准入守卫因此是死代码。协调器发的消息没有 `schema_version`，`payloads.py` 里那套必填字段校验一次也没在线上跑过。
+**没有一个消费者能读所有生产者**，而且分裂出来的每个洞都会静默失败。逐条实测：
+
+**1. 信封包读不了任何一个真实生产者。**
+
+```
+decode(coordinator 的 dict) → EnvelopeFormatError: message_id must be a non-empty string
+decode(research-map 的 dict) → EnvelopeFormatError: message_id must be a non-empty string
+```
+
+**2. 协调器把已经算好的字段扔掉了。** `service.py:535/539/545` 和 `861/865/868` 算出 `upstream_source_refs`、`dependency_edge_version_refs`、`executor_ref_snapshot`，`adapter_publisher.publish()` 一个都不往外发。实测发布出去的就是 7 个字段。
+
+**3. 就算补上也会崩，因为形状不对。** 这三个字段在 `HandoffReadyMessage` 里是 `tuple[tuple[str, str], ...]`，落成 JSON 是 `[["T0","v0"]]`；文档与消费端期望的是 `[{"logical_id":"T0","version_id":"v0"}]`。`payloads.py` 的 `ARRAY_FIELDS` 只检查「是不是 list」，所以 `[["T0","v0"]]` 会**一路通过校验**，然后在消费端 `.get("logical_id")` 上炸。这是信封包自己的洞，不是生产者的。
+
+**4. `wiki_domain_id` 不是 `mapping_domain_id` 改名。** `research-wiki/src/` 里 `mapping_domain_id` 出现 **0 次**，`research-map/src/` 里 `wiki_domain_id` 出现 0 次。两个域是两套注册表，wiki 版本发布时不存在可填的 mapping 域。实测：
+
+```
+validate_payload("formal_revision_published", wiki 的 payload)
+  → missing required field(s): mapping_domain_id
+```
+
+**5. 这条不是「将来会坏」，现在就是坏的。** 把 wiki 的真实信封喂给协调器的 `GovernanceEventConsumer.handle()`：返回 `None`，`on_formal_revision_published` 一次都没被调用。把同样的消息换成 `mapping_domain_id` 就路由成功。**wiki 的正式版本发布从来没有触发过下游交接。**
+
+**6. `task_completed` 文档与消费端读的不是同一个字段。** 文档式 payload（`payloads.py:42-50`，含 `completed_version_ref`）能通过校验，但 `adapter_events._handle_task_completed` 只认 `node_version_ref` / `task_node_version_ref` / `target_node_version_ref` → 返回 `None`，下游不解除。而且**全仓库没有任何代码发布 `task_completed`**（只有消费端、schema 和 `service.on_task_completed`），文档写的那条「解除下游完成条件」路径在生产上不可达。
+
+**7. 字段名四家不一致。** `task_node_id`（信封包 + 协调器）vs `target_node_id`（`message-queue.md:313`、`message-delivery-recovery.md:37-38`）。套件订阅端按 `task_node_id` 取，实测喂文档的 `target_node_id` 直接抛 `EnvelopeError`。
+
+**8. 连文档自己的例子都过不了信封包的校验。** 把 `message-queue.md:306-324` 的 payload 原样送进 `validate_payload("task_handoff_ready", …)`：
+
+```
+→ missing required field(s): task_node_id
+```
+
+所以这不只是「文档 vs 代码」分叉，是**文档 / 信封包 / 三个生产者四方分叉**。
+
+**9. 分区键也对不上，而且这次是代码错。** 文档说 `target_node_id`（`message-queue.md:65`、`:349`、`message-delivery-recovery.md:37`），协调器实际发 `f"{task_node_id}:{target_node_version_ref}"`。信封包的 `routing.partition_key` 没有任何生产者对应实现。
+
+这里**文档是对的，协调器是错的**：分区键的作用是把需要保序的消息放进同一分区，而同一 TaskNode 的不同版本恰恰是最需要保序的一对；用复合键恰好把它们劈到两个分区。这个复合键还有第二个危害：它是套件订阅端 `task_node_id()` 绝不能回退到 key 的唯一原因（key 里塞了版本号，回退会把 `"T1:cv-2"` 当成节点 id 送进草稿箱、执行记录和租约，见 `ai4-u9gj` 的原始 bug）。分区键修对之后这个陷阱才消失。协调器那一行归阶段 1。
+
+**10. `schema_version` 三态。** 信封包要求 int；map/wiki 发字符串 `"1"`；ingest 发 int `1`；协调器**什么都不发**。而且 ingest 用 `int(x) != 1` 把两种都收下，套件订阅端用 `!=` 只收 int——同一个缺失字段，两个消费者给出两个相反的「接受」语义。
 
 这也是 `ai4-u9gj` 那张票的初版结论出错的地方：我按文档认定「分层信封是权威格式」，据此复现出一个不存在的 bug。文档与实现分叉到这个程度，会持续误导后续判断。
 
-## 三、范围
+## 三、裁决
 
-本票只做**裁决与对齐方案**，不实施迁移：
+**唯一权威格式：信封包的分层形状。** 理由是它有 `validate()`、有 `PAYLOAD_SCHEMAS`、且不携带 Kafka 客户端，迁移只需改生产者而不需要重新发明协议。但裸用不行，需要七条修正：
 
-1. 定下唯一信封格式（建议信封包的分层形状，因为它有 `validate()` 与 `payloads.py` 的字段定义）；
-2. 列出三个生产者分别要改什么、破窗期怎么兼容（分层消费端能否读扁平？还是加一个 `decode_legacy()`）；
-3. 定 `schema_version` 缺失时的语义——现在两个生产者都不发，若定为必填就是破窗迁移；
-4. 把 `docs/data-flow/message-queue.md` 的信封章节与实际对齐，或明确标注「该格式尚未落地」。
+| # | 修正 | 代价 |
+| --- | --- | --- |
+| A1 | 治理事件类的 payload 允许 `wiki_domain_id` 作为 `mapping_domain_id` 的**并列替代**（不是改名） | 校验器加一个 `or` + 一行文档；避免 192 处改名和一个假断言 |
+| A2 | `schema_version` 保持 **int 且必填**；map/wiki 各改 2 处 `"1"`→`1` | 4 行；同时删掉 ingest 的 `int()` 强制转换，否则它继续掩盖分裂 |
+| A3 | 字段名用 `task_node_id`，**文档改** | 0 行代码；文档 2 处 |
+| A4 | `target_node_version_ref` 是**纯版本号字符串**；两个 `*_refs` 数组的元素是 `{"logical_id","version_id"}` 对象，协调器发布时做投影 | 协调器加投影函数；信封包补元素形状校验（补洞 #3） |
+| A5 | `task_completed` 统一用 `completed_version_ref`；消费端先读它，其余三个名字作一个窗口的兼容回退 | 消费端 3 行 |
+| A6 | `task_handoff_ready` **新增必填 `task_text`** | 见下 |
+| A7 | `candidate_created` 的候选标识统一为 `candidate_id`；map/wiki 发布者的 `submission_id` **保留**（它是提交单 id，不是候选 id），另加 `candidate_id` | 两个发布者各 1 行；ingest 的 `or` 回退留一个窗口 |
 
-**不在本票范围**：实际改任何生产者或消费者。实施要拆成垂直切片，每片一张票。
+**A6 是最贵的一条，也是唯一一条动到拓扑的。** `TaskNodeDoc` 只有 4 个字段（`task_node_id` `version_id` `executor_refs` `task_owner_id`），实测把 map 的完整 TaskNode 文档（含 `title`、`objective`）喂进 `_build_snapshot()` 之后：
+
+```
+TaskNodeDoc fields: ['task_node_id', 'version_id', 'executor_refs', 'task_owner_id']
+text survived?     : NONE
+```
+
+也就是说任务文本在协调器这一层就被丢掉了，跟 `adapter_publisher` 丢 refs 是同一类问题。`payloads.py` 里没有 `task_text` 是**故意的**：协议层从未裁决过它该不该在消息里。套件订阅端的 `TASK_TEXT_FIELDS`（5 个候选名）就是这个空洞的记录。本票的裁决是：**该在**。不放进消息，端侧 agent 永远只能拿到一个节点 id，`worker_shell.task_instruction` 里那句「只收到了节点引用」就成了永久状态。落地要两件事：`TaskNodeDoc` 长出 `title`/`objective`（或一个合成好的指令串），`PAYLOAD_SCHEMAS` 加 `task_text`。存储侧归 `ai4-1e9e`。
+
+**A7 的取舍**：`submission_id` 是「哪一次提交」，`candidate_id` 是「哪个候选」。一个提交可以产出多个候选，所以 `submission_id` 在语义上不能当 `candidate_id` 用。但两个发布者现在把后者当前者使，且 ingest 用 `or` 兜住了。裁决是**加字段而不是改名**：改 `submission_id` 会动到 map/wiki 已经落库的字段与既有消费者的读取路径，而它本身没错，只是不够。
+
+## 四、迁移方案
+
+原则：**消费者先行，且每个消费者在一个发布里同时接受两种形状**。这样破窗期为零，不需要停服对齐。
+
+| 阶段 | 改谁 | 消费者怎么读 |
+| --- | --- | --- |
+| 0 | 信封包加 `decode_legacy()` / `accepts_legacy()`，并补 A1–A7 的校验规则 | 一个读入口吃两种形状；**删除条件写进 docstring**：阶段 1–4 全部上线一个发布后删 |
+| 1 | **协调器 publisher**（先做，因为它的消费者已经容忍） | 套件订阅端 `field()` 已经是 payload 优先、顶层兜底，`routing_field()` 先看 `routing` —— 实测不用改就能读分层信封 |
+| 2 | **协调器 `GovernanceEventConsumer`**（消费者先改） | 同一次提交里 `message_type` 和 `event_type` 都读，前者优先 |
+| 3 | map / wiki publisher → 分层 | 上一步已经能读，所以生产者随便什么时候上 |
+| 4 | `centre-agents/gateway/subscriber/src/gateway_subscriber/service.py:46` | 现在只读 `target.id`，真实交接必抛 `ValueError: id is required`；改成 `payload.task_node_id` → `target.id`。**这一步无论格式怎么定都得做** |
+| 5 | 删 `decode_legacy` 与各消费端的兼容回退 | 条件：阶段 1–4 均已发布一个版本 |
+
+顺序的理由：协调器换格式时它的下游（套件订阅端）**已经**是容忍读取，所以阶段 1 单独上线不破窗；map/wiki 换格式时下游是协调器，所以必须先做阶段 2。反过来的顺序在任何一步都会有一个发布窗口读到读不懂的消息。
+
+阶段 4 那个消费者现在自带的测试 fixture（`tests/test_subscriber.py:74-96`）造了**第五种**形状（`event_id` + `event_type` + `target.kind/id` + payload 里的单数 `dependency_edge_version_ref`），没有一个生产者发这个。修它的时候测试要按 `adapter_publisher.py` 的真实输出重写，不是把断言改成通过。
+
+**不建议**让每个消费者学两种形状（套件订阅端现在就是这么干的：跨位置按字段名找）。它把「协议没定」的成本摊到 N 个消费者，且每个新消费者都要重新踩一遍。`decode_legacy()` 把这份成本收在协议包里一处。
+
+## 五、`schema_version` 缺失的语义
+
+**定必填，定 int。** 代价和收益都摆在明面上：
+
+| 选项 | 代价 | 判断 |
+| --- | --- | --- |
+| 缺失即接受 | 现在的状态。容忍式读取规则（「版本相同即可消费」）**无法执行**，因为没有可比的版本号——这正是四种格式能活到今天的机制 | 否决 |
+| 缺失即拒绝 | 协调器立刻全部断流（它不发这个字段） | 否决，除非同一次发布里补上 |
+| **必填 + 生产者补齐** | 协调器 1 行、map/wiki 4 行、ingest 删掉 `int()` 强制转换 | 采纳 |
+
+「缺失即接受」还有个隐性代价：两个消费者对同一个缺失给出相反语义（ingest 的 `int(x)` 把 `"1"` 和 `1` 都收下，套件订阅端只收 `1`）。这种「各自的宽容」比明确的严格更难排查。
+
+## 六、文档对齐（已做）
+
+AC #4 允许两条路：「改成与实际一致」或「加显著标注说明尚未落地」。**两条都做了，但分工不同**：标注负责说清「这不是现状」，改字段负责让目标格式自洽到可被校验。
+
+`docs/data-flow/message-queue.md`：
+
+1. `:69` 「消息信封」标题下加引用块警示：目标格式、尚未落地、信封包零调用方、四方不一致、迁移完成前不要按本节写新消费者、指向本票。
+2. `:310` `target_node_id` → `task_node_id`（与信封包、协调器一致）。
+3. `:311-314` `target_node_version_ref` 由 `{logical_id, version_id}` 对象改成纯版本号字符串（与协调器一致）。
+4. `:65`、`:350` 分区键由 `target_node_id` 改成 `routing.partition_key = task_node_id`，并写明理由（同节点多版本必须同分区才能保序）。
+
+`docs/data-flow/message-delivery-recovery.md:29-46`：字段清单同样加「目标格式，尚未落地」指针，`routing.partition_key` 改 `task_node_id`，并补上漏掉的 `payload.dependency_edge_version_refs`（它一直是必填，文档里却缺）。
+
+验证：改后的示例 payload 送进 `validate_payload("task_handoff_ready", …)` **通过**（改前 `missing required field(s): task_node_id`）。
+
+**残留风险，必须记清楚**：改完之后 `message-queue.md` 的示例**仍不代表任何生产者的实际输出**——协调器不发 `message_id`/`schema_version`/`routing`/`producer`，`payload` 里也缺三个 ref 数组。文档现在描述的是「裁决后的目标格式」，不是「线上正在发的东西」。这正是警示块存在的理由；迁移完成后应当删掉警示块，而不是删掉字段。
+
+**不在本票范围**：实际改任何生产者或消费者。实施要拆成垂直切片，每片一张票（上表 6 个阶段至少 4 张）。
 
 ## Acceptance Criteria
 
-- [ ] 一张对照表列出全部四个生产者的真实信封字段，与信封包 `payloads.py` 的必填项逐条对齐，标出哪边缺什么。
-- [ ] 给出迁移方案：先改谁、破窗期多长、旧消费者怎么读新消息、新消费者怎么读旧消息。
-- [ ] `schema_version` 缺失时的语义有明确结论并说明代价。
-- [ ] `docs/data-flow/message-queue.md` 的信封章节与实际一致，或加显著标注说明尚未落地。
-- [ ] 结论回写到 `ai4-u9gj`（它按真实生产者取字段，本票若改了格式需要跟进）。
+- [x] 一张对照表列出全部四个生产者的真实信封字段，与信封包 `payloads.py` 的必填项逐条对齐，标出哪边缺什么。
+- [x] 给出迁移方案：先改谁、破窗期多长、旧消费者怎么读新消息、新消费者怎么读旧消息。
+- [x] `schema_version` 缺失时的语义有明确结论并说明代价。
+- [x] `docs/data-flow/message-queue.md` 的信封章节与实际一致，或加显著标注说明尚未落地。
+- [x] 结论回写到 `ai4-u9gj`（它按真实生产者取字段，本票若改了格式需要跟进）。
 
 ## Notes
 
