@@ -60,7 +60,6 @@ class Formalization(unittest.TestCase):
                 self.assertEqual(c.execute("SELECT COUNT(*) FROM formal_wiki_revision WHERE formal_wiki_revision_id='r2'").fetchone()[0], 1)
             self.assertEqual(result.formal_wiki_revision_id, "r2")
             self.assertEqual(db.get_current_formal_revision_id("d"), "r2")
-    def test_same_operation_is_rejected_when_owner_approval_identity_changes(self):
             with db.connection() as c:
                 result_row=c.execute("SELECT * FROM wiki_formalization_result").fetchone()
                 op_row=c.execute("SELECT notification_status,notification_reason FROM wiki_formalization_operation WHERE operation_id='fresh-op'").fetchone()
