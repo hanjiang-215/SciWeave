@@ -308,6 +308,81 @@ class PassthroughFullChainTests(unittest.TestCase):
         self.assertEqual(self.tools.drafts, [], "the single-agent double writes no MCP draft")
 
 
+class RunWorkflowRecordsProvenanceTests(unittest.TestCase):
+    """`run_workflow` puts `agent_reported` on the record, not just on the result.
+
+    The two halves were tested apart — the executor produced the marker and the
+    store persisted a marker someone passed in. This is the seam between them:
+    an execution that ends `completed` with a draft id the runtime never saw.
+    """
+
+    def _config(self):
+        from work_agent_runtime import load_config
+
+        return load_config(
+            {
+                "agents": {
+                    "entry": {
+                        "identity": "e",
+                        "instruction": "e",
+                        "model": "fake",
+                        "allowed_mcp_resources": [],
+                        "resources": [],
+                    },
+                    "writer": {
+                        "identity": "w",
+                        "instruction": "w",
+                        "model": "fake",
+                        "allowed_mcp_resources": ["draft-buffer"],
+                        "resources": [],
+                    },
+                },
+                "workflows": {
+                    "main": {
+                        "type": "Orchestrator",
+                        "entry_agent": "entry",
+                        "sub_agents": ["entry"],
+                        "summarizer": "entry",
+                        "final_writer": "writer",
+                    }
+                },
+            },
+            known_mcp_resources={"draft-buffer"},
+        )
+
+    def test_a_completed_run_stores_the_source_of_the_draft_id(self) -> None:
+        identifier = "3f12df3e-1111-4222-8333-444455556666"
+        runtime = WorkAgentRuntime()
+
+        def agent(name, prompt, tools=None):
+            if name == "writer":
+                return '{"draft_id": "%s", "summary": "done"}' % identifier
+            return "intermediate"
+
+        record = runtime.run_workflow(
+            "node-1", "evt-1", self._config(), agent, "main", "go"
+        )
+        self.assertEqual(record.status, "completed")
+        self.assertEqual(record.draft_id, identifier)
+        self.assertEqual(record.draft_id_source, "agent_reported")
+        stored = runtime.store.get(record.execution_id)
+        self.assertEqual(stored.draft_id_source, "agent_reported")
+
+    def test_a_missing_draft_id_fails_the_record_and_names_the_writer(self) -> None:
+        runtime = WorkAgentRuntime()
+
+        def agent(name, prompt, tools=None):
+            return "a plausible paragraph" if name == "writer" else "intermediate"
+
+        record = runtime.run_workflow(
+            "node-1", "evt-1", self._config(), agent, "main", "go"
+        )
+        self.assertEqual(record.status, "failed")
+        self.assertEqual(record.error_code, "draft_id_missing")
+        self.assertEqual(record.failed_agent, "writer")
+        self.assertIsNone(record.draft_id, "no fabricated id")
+
+
 class RecordedInSqliteTests(unittest.TestCase):
     """`draft_id` and its provenance survive a process restart (ai4-x0ay)."""
 
