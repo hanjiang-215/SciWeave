@@ -128,6 +128,8 @@ python humans/competition/demo-evidence/run_iris_mapping_pipeline.py
 - 承接 T1/T2 的执行记录与输入/输出快照哈希；
 - 人工接管点说明。
 
+> **执行入口已就绪**：`sciencepal-runs/run_t1_t2_on_sciencepal.py`（含 README）把 `check_iris_input.py` + `run_iris_baseline.py` + 锁定数据快照交给 SciencePal 沙箱执行，轮询到终态、下载产物、核对 `status=ok`/accuracy 后落盘 `sciencepal_t1_t2_evidence.json`。已在本地用假 SciencePal 服务验证全流程（staging→run→collect→核对→证据），SciencePal 平台网络恢复即可实跑（当前仅 sciencepal.ai 超时，2026-10-28 凌晨确认）。
+
 这些就绪后，`ai4-aaff` 的「可执行初始 Research Mapping」「最小数字数据/证据包」「计时演示脚本」「真实成功与失败/驳回路径」四个未勾选验收项才能闭合。
 
 ## 替换验证（NOAA Mauna Loa CO₂）
