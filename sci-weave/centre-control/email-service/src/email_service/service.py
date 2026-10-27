@@ -588,7 +588,7 @@ def _content_problem(caller: Caller, intent: dict[str, Any], kind_allowlist: dic
             return True
     if _HTML_MARKUP.search(subject) or _HTML_MARKUP.search(body):
         return True
-    if _has_disallowed_control(subject) or _has_disallowed_control(body):
+    if _has_disallowed_subject_control(subject) or _has_disallowed_control(body):
         return True
     if len(subject) > SUBJECT_MAX_CHARS or len(body) > BODY_MAX_CHARS:
         return True
@@ -603,6 +603,16 @@ def _kind_allowed(caller: Caller, kind: str, kind_allowlist: dict[str, frozenset
 
 def _has_disallowed_control(text: str) -> bool:
     return any(unicodedata.category(char) == "Cc" and char not in _KEPT_CONTROLS for char in text)
+
+
+def _has_disallowed_subject_control(subject: str) -> bool:
+    # ai4-9687: subjects must not carry \r or \n (SMTP header injection); \t is
+    # not a header separator and stays allowed. Body handling keeps \r\n\t via
+    # _has_disallowed_control above. Other Cc control characters are still
+    # rejected through the same category check as before.
+    return any(char in "\r\n" for char in subject) or any(
+        unicodedata.category(char) == "Cc" and char not in _KEPT_CONTROLS for char in subject
+    )
 
 
 def _now() -> str:
