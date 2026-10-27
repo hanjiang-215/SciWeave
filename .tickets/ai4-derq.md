@@ -122,7 +122,7 @@ validate_payload("formal_revision_published", wiki 的 payload)
 → missing required field(s): task_node_id
 ```
 
-所以这不只是「文档 vs 代码」分叉，是**文档 / 信封包 / 三个生产者四方分叉**。
+所以这不只是「文档 vs 代码」分叉：**文档、信封包、三个线上生产者，五份互不一致的字段表**。
 
 **9. 分区键也对不上，而且这次是代码错。** 文档说 `target_node_id`（`message-queue.md:65`、`:350`、`message-delivery-recovery.md:37`），协调器实际发 `f"{task_node_id}:{target_node_version_ref}"`。信封包的 `routing.partition_key` 没有任何生产者对应实现。
 

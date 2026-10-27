@@ -70,7 +70,7 @@ sciweave.governance-events
 
 > **⚠️ 本节描述的是目标格式，尚未落地（2026-10-27）。**
 >
-> 线上三个生产者（交接协调服务、research-map、research-wiki）发的都是各自手写的扁平 dict，`shared/message-envelope/` 这个包**零调用方**。字段名、`schema_version` 的类型与有无、引用数组的形状，四方（本节 / 信封包 / 协调器 / 领域发布者）目前互不一致；细节与迁移顺序见 [信封格式三分叉](../../.tickets/ai4-derq.md)。在迁移完成前，**不要按本节写新的消费者**——请按本节下方「兼容策略采用容忍式读取」那一段读真实消息。
+> 线上三个生产者（交接协调服务、research-map、research-wiki）发的都是各自手写的扁平 dict，`shared/message-envelope/` 这个包**零调用方**。字段名、`schema_version` 的类型与有无、引用数组的形状，五份字段表（本节、信封包、协调器、research-map、research-wiki）目前互不一致；细节与迁移顺序见 [信封格式三分叉](../../.tickets/ai4-derq.md)。在迁移完成前，**不要按本节写新的消费者**——请按本节下方「兼容策略采用容忍式读取」那一段读真实消息。
 
 所有 Redpanda 业务消息使用统一信封，业务字段放在 `payload`：
 
