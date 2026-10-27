@@ -2,7 +2,7 @@
 id: ai4-grlc
 status: open
 deps: []
-links: [ai4-g1km, ai4-58d0, ai4-b4zb, ai4-ced7]
+links: [ai4-g1km, ai4-58d0, ai4-b4zb, ai4-ced7, ai4-0vnn]
 created: 2026-10-27T04:01:17Z
 type: bug
 priority: 1
