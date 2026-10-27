@@ -87,6 +87,7 @@ def idempotent_mcp(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("SCIWEAVE_EMAIL_SMTP_PORT", str(SMTP_PORT))
     monkeypatch.setenv("SCIWEAVE_EMAIL_SMTP_USERNAME", SMTP_USERNAME)
     monkeypatch.setenv("SCIWEAVE_EMAIL_SMTP_PASSWORD", SMTP_PASSWORD)
+    monkeypatch.setenv("SCIWEAVE_EMAIL_SMTP_SECURITY", "starttls")
     monkeypatch.setenv(
         "SCIWEAVE_EMAIL_TOKENS_JSON",
         json.dumps({"gateway": {"caller_id": "service:task-gateway", "caller_type": "service"}}),

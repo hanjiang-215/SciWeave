@@ -24,7 +24,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 
 from .config import EmailServiceConfig, MailboxSettings, TokenIdentity
-from .ports import EmailServiceError, MailSender, RecipientResolver
+from .ports import EmailServiceError, MailSender, RecipientResolver, sender_state
 from .service import Caller, EmailDeliveryService
 
 
@@ -196,14 +196,14 @@ def create_email_server(
             "health",
             "service",
             "email-service",
-            lambda: _component_health(conn, audit_box["conn"], lock, config.mailbox),
+            lambda: _component_health(conn, audit_box["conn"], lock, config.mailbox, sender),
             write=False,
         )
 
     @server.custom_route("/health", methods=["GET"], include_in_schema=False)
     async def http_health(_: Request) -> JSONResponse:
         payload = {
-            "status": _public_status(conn, audit_box.get("conn"), lock, config.mailbox),
+            "status": _public_status(conn, audit_box.get("conn"), lock, config.mailbox, sender),
             "service": "email-service",
             "api_version": config.api_version,
         }
@@ -298,10 +298,11 @@ def _public_status(
     audit: sqlite3.Connection | None,
     lock: RLock,
     mailbox: MailboxSettings,
+    sender: MailSender,
 ) -> str:
     if not _query_ready(facts, lock, "SELECT 1 FROM notification_delivery LIMIT 1"):
         return "unavailable"
-    if _mailbox_state(mailbox) != "ready":
+    if _mailbox_state(mailbox) != "ready" or sender_state(sender) != "ready":
         return "not_configured"
     if audit is None or not _query_ready(audit, lock, "SELECT 1 FROM audit_call LIMIT 1"):
         return "unavailable"
@@ -322,6 +323,7 @@ def _component_health(
     audit: sqlite3.Connection,
     lock: RLock,
     mailbox: MailboxSettings,
+    sender: MailSender,
 ) -> dict[str, Any]:
     delivery = "ready"
     audit_state = "ready"
@@ -336,11 +338,15 @@ def _component_health(
     except sqlite3.Error:
         audit_state = "unavailable"
     mailbox_state = _mailbox_state(mailbox)
+    # ai4-ceqq: report whether a delivery channel is actually bound. Without this
+    # the service could answer "ready" from the four config fields while the
+    # assembled sender was the unbound placeholder — green health, 0% delivery.
+    delivery_channel = sender_state(sender)
     if delivery == "unavailable":
         overall = "unavailable"
     elif audit_state == "unavailable":
         overall = "degraded"
-    elif mailbox_state == "not_configured":
+    elif mailbox_state == "not_configured" or delivery_channel != "ready":
         overall = "not_configured"
     else:
         overall = "ready"
@@ -350,19 +356,15 @@ def _component_health(
             "delivery_store": delivery,
             "audit": audit_state,
             "mailbox": mailbox_state,
+            "sender": delivery_channel,
         },
     }
 
 
 def _mailbox_state(mailbox: MailboxSettings) -> str:
-    configured = (
-        bool(mailbox.from_address)
-        and bool(mailbox.smtp_host)
-        and bool(mailbox.smtp_username)
-        and bool(mailbox.smtp_password)
-        and isinstance(mailbox.smtp_port, int)
-        and mailbox.smtp_port > 0
-    )
-    if configured:
-        return "ready"
-    return "not_configured"
+    """Whether the configured channel can actually deliver.
+
+    ``channel_configured`` also requires an explicit security mode, so a mailbox
+    that merely has host/port filled in no longer looks ready.
+    """
+    return "ready" if mailbox.channel_configured else "not_configured"

@@ -1,0 +1,22 @@
+[project]
+name = "sciweave-sciencepal-bridge"
+version = "0.1.0"
+description = "SciencePal execution bridge for SciWeave researcher Work Agents"
+requires-python = ">=3.12,<3.16"
+dependencies = [
+  "httpx>=0.28,<1",
+  "mcp>=2.3,<3",
+]
+
+[project.scripts]
+sciencepal = "sciencepal_bridge.cli:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]

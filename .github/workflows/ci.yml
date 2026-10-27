@@ -1,0 +1,43 @@
+# 持续集成：只做「调脚本」，矩阵本身在 scripts/ci.sh 里。
+#
+# 注意：本仓库托管在 Gitee，这个文件在 Gitee 上**不会**执行。它的作用是把
+# scripts/ci.sh 的调用方式固定下来，供 GitHub 镜像或自托管 runner 直接复用；
+# 具体接哪一端见 docs/ci.md 的「待决」一节。
+name: CI
+
+on:
+  push:
+    branches: [develop, 'feature/**']
+  pull_request:
+    branches: [develop]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  matrix:
+    name: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: 安装前端依赖
+        working-directory: sci-weave/centre-control/web-ui
+        run: npm ci
+
+      - name: 跑回归矩阵
+        shell: bash
+        run: scripts/ci.sh

@@ -1,0 +1,3 @@
+# ai4-jht7 的索引归属与简介（人工维护）
+module = ["gateway"]
+summary = "buffer 对已初始化的 TerminusDB 库重启时误判 schema 初始化失败并退出"

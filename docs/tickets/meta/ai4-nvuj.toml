@@ -1,0 +1,3 @@
+# ai4-nvuj 的索引归属与简介（人工维护）
+module = ["gateway", "product"]
+summary = "为看板 queue 槽补上 subscriber 只读来源，输出监听状态与最近消费事件"

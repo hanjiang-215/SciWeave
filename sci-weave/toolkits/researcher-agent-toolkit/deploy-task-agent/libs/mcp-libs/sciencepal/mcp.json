@@ -1,0 +1,127 @@
+{
+  "name": "sciencepal",
+  "version": "0.1.0",
+  "description": "Delegate one research execution to SciencePal domain agents and sandbox, then collect artifacts with sha256 evidence.",
+  "transport": "stdio",
+  "startup": {
+    "executable": "uv",
+    "args": ["run", "--env-file", ".env", "python", "src/main.py"],
+    "project_dir_env": "SCIENCEPAL_BRIDGE_DIR"
+  },
+  "environment": [
+    "SCIENCEPAL_ACCESS_TOKEN",
+    "SCIENCEPAL_BASE_URL",
+    "SCIENCEPAL_WORKSPACE",
+    "SCIENCEPAL_RUN_DB",
+    "SCIENCEPAL_DEFAULT_AGENT_ID"
+  ],
+  "tools": [
+    {
+      "name": "sciencepal_start",
+      "description": "Start one SciencePal run and return run_id/thread_id immediately. Idempotent by idempotency_key.",
+      "input": {
+        "type": "object",
+        "required": ["instruction", "idempotency_key"],
+        "properties": {
+          "instruction": {"type": "string"},
+          "idempotency_key": {"type": "string"},
+          "execution_id": {"type": "string"},
+          "files_json": {"type": "string", "description": "JSON array of {name, path}"},
+          "agent_id": {"type": "string"},
+          "agent_select_type": {"type": "string", "enum": ["manual", "auto"]},
+          "web_search": {"type": "boolean"},
+          "model_name": {"type": "string"}
+        }
+      },
+      "output": {
+        "run_id": "string",
+        "thread_id": "string",
+        "status": "string",
+        "reused": "boolean",
+        "inputs": "array of {name, size, sha256}"
+      },
+      "examples": [
+        {
+          "instruction": "运行 check_iris_input.py，核对 150 行、4 特征、3 类各 50。",
+          "idempotency_key": "exec:exec-123",
+          "files_json": "[{\"name\":\"iris_data.csv\",\"path\":\"inputs/iris_data.csv\"}]"
+        }
+      ],
+      "allowed": ["delegate a research execution to SciencePal"],
+      "failures": [
+        "sciencepal_token_missing",
+        "sciencepal_unauthorized",
+        "sciencepal_unavailable",
+        "sciencepal_workspace_violation",
+        "sciencepal_upload_too_large"
+      ]
+    },
+    {
+      "name": "sciencepal_status",
+      "description": "Read one run status. completed/failed/stopped are terminal.",
+      "input": {
+        "type": "object",
+        "required": ["run_id"],
+        "properties": {"run_id": {"type": "string"}}
+      },
+      "output": {
+        "run_id": "string",
+        "status": "string",
+        "terminal": "boolean",
+        "error": "string or null",
+        "elapsed_s": "number"
+      },
+      "examples": [{"run_id": "run-1"}],
+      "allowed": ["poll a delegated execution"],
+      "failures": ["sciencepal_run_not_found", "sciencepal_unavailable"]
+    },
+    {
+      "name": "sciencepal_collect",
+      "description": "Download sandbox artifacts for a completed run, verify sha256 and write manifest.json.",
+      "input": {
+        "type": "object",
+        "required": ["run_id"],
+        "properties": {
+          "run_id": {"type": "string"},
+          "names_json": {"type": "string", "description": "optional JSON array of basenames"},
+          "roots_json": {"type": "string", "description": "optional JSON array of sandbox roots; defaults to [\"/workspace\", \"/outputs\"]"}
+        }
+      },
+      "output": {
+        "artifacts": "array of {name, path, size, sha256, kind}",
+        "manifest_path": "string",
+        "reused": "boolean"
+      },
+      "examples": [{"run_id": "run-1", "names_json": "[\"result.json\", \"report.md\"]"}],
+      "allowed": ["collect execution evidence"],
+      "failures": [
+        "sciencepal_run_not_completed",
+        "sciencepal_no_artifacts",
+        "sciencepal_artifact_missing",
+        "sciencepal_unavailable"
+      ]
+    },
+    {
+      "name": "sciencepal_cancel",
+      "description": "Stop a queued or running run. Terminal runs return accepted=false.",
+      "input": {
+        "type": "object",
+        "required": ["run_id"],
+        "properties": {"run_id": {"type": "string"}}
+      },
+      "output": {"run_id": "string", "status": "string", "accepted": "boolean"},
+      "examples": [{"run_id": "run-1"}],
+      "allowed": ["cancel a delegated execution"],
+      "failures": ["sciencepal_run_not_found", "sciencepal_unavailable"]
+    },
+    {
+      "name": "sciencepal_agents",
+      "description": "List SciencePal domain agents visible to the configured token.",
+      "input": {"type": "object", "properties": {}},
+      "output": {"agents": "array of {id, name, description}"},
+      "examples": [],
+      "allowed": ["discover domain agents before starting a run"],
+      "failures": ["sciencepal_token_missing", "sciencepal_unauthorized"]
+    }
+  ]
+}

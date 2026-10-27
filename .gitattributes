@@ -1,0 +1,6 @@
+# 让检出结果与 CI 可复现。
+#
+# 下面的证据包文件按字节计算 SHA256 并在测试里固定比对（见
+# humans/competition/demo-evidence/tests），Windows 上 core.autocrlf=true 会把
+# 工作区改写成 CRLF，导致哈希对不上、测试在本地假失败。这里显式钉成 LF。
+humans/competition/demo-evidence/** text eol=lf

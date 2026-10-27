@@ -11,13 +11,42 @@ class TokenIdentity:
     caller_type: str
 
 
+SMTP_SECURITY_MODES = frozenset({"ssl", "starttls", "none"})
+DEFAULT_SMTP_TIMEOUT_SECONDS = 10.0
+
+
 @dataclass(frozen=True)
 class MailboxSettings:
+    """Mailbox and channel configuration.
+
+    ai4-ceqq: ``smtp_security`` is explicit and has no default. Guessing between
+    plaintext, STARTTLS and implicit TLS is not a safe default — a wrong guess
+    can send ``AUTH`` before ``starttls()`` and put the password on the wire in
+    clear text. ``smtp_timeout_seconds`` is separate from the delivery retry
+    timeout: it bounds one socket operation, and delivery is serial, so an
+    unbounded connect would stall the whole queue.
+    """
+
     from_address: str
     smtp_host: str
     smtp_port: int
     smtp_username: str
     smtp_password: str
+    smtp_security: str = ""
+    smtp_timeout_seconds: float = DEFAULT_SMTP_TIMEOUT_SECONDS
+
+    @property
+    def requires_authentication(self) -> bool:
+        return self.smtp_security in {"ssl", "starttls"}
+
+    @property
+    def channel_configured(self) -> bool:
+        """True when a real sender can be bound from these settings."""
+        if not self.smtp_security or not self.smtp_host or self.smtp_port <= 0:
+            return False
+        if self.requires_authentication and not (self.smtp_username and self.smtp_password):
+            return False
+        return bool(self.from_address)
 
 
 @dataclass(frozen=True)
@@ -96,13 +125,7 @@ class EmailServiceConfig:
             resource_url=os.environ["SCIWEAVE_EMAIL_RESOURCE_URL"],
             api_version=os.environ["SCIWEAVE_EMAIL_API_VERSION"],
             token_identities=identities,
-            mailbox=MailboxSettings(
-                from_address=os.environ.get("SCIWEAVE_EMAIL_FROM_ADDRESS", ""),
-                smtp_host=os.environ.get("SCIWEAVE_EMAIL_SMTP_HOST", ""),
-                smtp_port=_optional_port("SCIWEAVE_EMAIL_SMTP_PORT"),
-                smtp_username=os.environ.get("SCIWEAVE_EMAIL_SMTP_USERNAME", ""),
-                smtp_password=os.environ.get("SCIWEAVE_EMAIL_SMTP_PASSWORD", ""),
-            ),
+            mailbox=_mailbox(),
             retry=RetrySettings(
                 initial_seconds=_seconds("SCIWEAVE_EMAIL_RETRY_INITIAL_SECONDS"),
                 multiplier=_multiplier("SCIWEAVE_EMAIL_RETRY_MULTIPLIER"),
@@ -116,6 +139,75 @@ class EmailServiceConfig:
             registry_token=os.environ["SCIWEAVE_EMAIL_REGISTRY_TOKEN"],
             registry_timeout_seconds=_seconds("SCIWEAVE_EMAIL_REGISTRY_TIMEOUT_SECONDS"),
         )
+
+
+def _mailbox() -> MailboxSettings:
+    """Build and validate the mailbox channel.
+
+    ai4-ceqq constraint ②: the encryption mode is explicit and has no default.
+    Constraint ⑤ of the ticket's acceptance list: an illegal or missing mode, or
+    a mode that needs authentication without host/port/username/password, must
+    fail at startup with a message naming the problem — not at the first send,
+    and not silently by falling back to plaintext.
+    """
+    security = os.environ.get("SCIWEAVE_EMAIL_SMTP_SECURITY", "").strip().lower()
+    mailbox = MailboxSettings(
+        from_address=os.environ.get("SCIWEAVE_EMAIL_FROM_ADDRESS", ""),
+        smtp_host=os.environ.get("SCIWEAVE_EMAIL_SMTP_HOST", "").strip(),
+        smtp_port=_optional_port("SCIWEAVE_EMAIL_SMTP_PORT"),
+        smtp_username=os.environ.get("SCIWEAVE_EMAIL_SMTP_USERNAME", ""),
+        smtp_password=os.environ.get("SCIWEAVE_EMAIL_SMTP_PASSWORD", ""),
+        smtp_security=security,
+        smtp_timeout_seconds=_smtp_timeout(),
+    )
+    # An entirely unconfigured mailbox stays legal: the service still answers
+    # status queries and reports "not_configured" on /health. Only a *partial*
+    # channel is a startup error.
+    if not any(
+        (mailbox.smtp_host, mailbox.smtp_port, mailbox.smtp_username, mailbox.smtp_password)
+    ):
+        if security:
+            raise ValueError(
+                "SCIWEAVE_EMAIL_SMTP_SECURITY is set but no SMTP channel is configured"
+            )
+        return mailbox
+    if not security:
+        raise ValueError(
+            "SCIWEAVE_EMAIL_SMTP_SECURITY must be set to ssl, starttls or none when "
+            "the SMTP channel is configured; it has no default because guessing can "
+            "send the password in clear text"
+        )
+    if security not in SMTP_SECURITY_MODES:
+        raise ValueError(
+            "SCIWEAVE_EMAIL_SMTP_SECURITY must be one of ssl, starttls, none"
+        )
+    if not mailbox.from_address:
+        raise ValueError("SCIWEAVE_EMAIL_FROM_ADDRESS must be set when SMTP is configured")
+    if not mailbox.smtp_host:
+        raise ValueError("SCIWEAVE_EMAIL_SMTP_HOST must be set when SMTP is configured")
+    if mailbox.smtp_port <= 0:
+        raise ValueError(
+            "SCIWEAVE_EMAIL_SMTP_PORT must be a positive integer when SMTP is configured"
+        )
+    if mailbox.requires_authentication and not (mailbox.smtp_username and mailbox.smtp_password):
+        raise ValueError(
+            f"SCIWEAVE_EMAIL_SMTP_USERNAME and SCIWEAVE_EMAIL_SMTP_PASSWORD must be set "
+            f"when SCIWEAVE_EMAIL_SMTP_SECURITY={security}"
+        )
+    return mailbox
+
+
+def _smtp_timeout() -> float:
+    raw = os.environ.get("SCIWEAVE_EMAIL_SMTP_TIMEOUT_SECONDS", "").strip()
+    if not raw:
+        return DEFAULT_SMTP_TIMEOUT_SECONDS
+    try:
+        value = float(raw)
+    except ValueError as exc:
+        raise ValueError("SCIWEAVE_EMAIL_SMTP_TIMEOUT_SECONDS must be a positive number") from exc
+    if value <= 0:
+        raise ValueError("SCIWEAVE_EMAIL_SMTP_TIMEOUT_SECONDS must be a positive number")
+    return value
 
 
 def _optional_port(name: str) -> int:

@@ -9,7 +9,7 @@ import pytest
 import uvicorn
 
 from email_service.config import EmailServiceConfig
-from email_service.ports import PermanentSenderFailure
+from email_service.ports import PermanentSenderFailure, UnboundMailSender
 from email_service.server import create_email_server
 from test_http import (
     API_VERSION,
@@ -86,6 +86,7 @@ def _start(
         "SCIWEAVE_EMAIL_SMTP_PORT",
         "SCIWEAVE_EMAIL_SMTP_USERNAME",
         "SCIWEAVE_EMAIL_SMTP_PASSWORD",
+        "SCIWEAVE_EMAIL_SMTP_SECURITY",
     )
     if mailbox:
         monkeypatch.setenv("SCIWEAVE_EMAIL_FROM_ADDRESS", FROM_ADDRESS)
@@ -93,6 +94,7 @@ def _start(
         monkeypatch.setenv("SCIWEAVE_EMAIL_SMTP_PORT", str(SMTP_PORT))
         monkeypatch.setenv("SCIWEAVE_EMAIL_SMTP_USERNAME", SMTP_USERNAME)
         monkeypatch.setenv("SCIWEAVE_EMAIL_SMTP_PASSWORD", SMTP_PASSWORD)
+        monkeypatch.setenv("SCIWEAVE_EMAIL_SMTP_SECURITY", "starttls")
     else:
         for name in mailbox_names:
             monkeypatch.delenv(name, raising=False)
@@ -174,6 +176,24 @@ def test_public_health_is_not_configured_when_mailbox_is_missing(tmp_path: Path,
     assert SMTP_PASSWORD not in probe.text
 
 
+def test_health_refuses_to_look_ready_with_an_unbound_sender(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """ai4-ceqq: a configured mailbox plus an unbound sender used to read ready."""
+    server, thread, mcp = _start(tmp_path, monkeypatch, sender=UnboundMailSender())
+    try:
+        report = body(call_tool(mcp, "gateway", "health"))
+        probe = httpx.get(mcp["health_url"], timeout=5)
+    finally:
+        _stop(server, thread)
+
+    assert report["components"]["sender"] == "not_bound"
+    assert report["components"]["mailbox"] == "ready"
+    assert report["status"] == "not_configured"
+    assert probe.status_code == 503
+    assert probe.json()["status"] == "not_configured"
+
+
 def test_authenticated_health_is_degraded_when_audit_is_down(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     server, thread, mcp = _start(tmp_path, monkeypatch, sender=FakeSender())
     try:
@@ -192,6 +212,7 @@ def test_authenticated_health_is_degraded_when_audit_is_down(tmp_path: Path, mon
             "delivery_store": "ready",
             "audit": "unavailable",
             "mailbox": "ready",
+            "sender": "ready",
         },
     }
     encoded = json.dumps(report)

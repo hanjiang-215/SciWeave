@@ -1,6 +1,6 @@
 ---
 id: ai4-ceqq
-status: open
+status: in_progress
 deps: []
 links: []
 created: 2026-10-26T14:05:45Z
@@ -94,6 +94,12 @@ OutboundMail(..., smtp_password='SUPER-SECRET-PASSWORD')
 
 ## Notes
 
+**2026-10-27 负责人转交：Frank Qi → hanjiang**
+
+原负责人 Frank Qi 已授权把本票转给 hanjiang 继续推进，用户在本会话中明确要求「frank 的票已经授权转给我了，你帮我转一下然后全部推进」。按属人修改权规则先改 `assignee`，再动内容。
+
+身份核对：当前分支 `feature/hanjiang`、`git config user.name=hanjiang`，与新 assignee 一致。本票正文、约束与验收标准由 Frank Qi 立项时定稿，转交后保持不变；实现若发现规格需要调整，在下方追加带日期的修订注记，不覆盖原文。
+
 **2026-10-26 立项（Frank Qi）**
 
 身份核对：assignee `Frank Qi`、分支 `feature/frank-qi`、`git config user.name=Frank Qi`，三者一致。
@@ -131,3 +137,49 @@ OutboundMail(..., smtp_password='SUPER-SECRET-PASSWORD')
 `ai4-4pyb` 与本票的关系：`4pyb` 修的是「产品链路一封都发不出去」，本票修的是「发出去之后仍然不安全、不可配置、不可观测」。两者不重复，本票的 Not in Scope 也没有把上面的剩余项排除出去。
 
 正文与其余验收标准保持原样，只在上面这段说明哪些已勾。
+
+**2026-10-27 实现（hanjiang）**
+
+身份核对：assignee `hanjiang`、分支 `feature/hanjiang`、`git config user.name=hanjiang`，三者一致。
+
+前置冲突：本票立项后，`ai4-4pyb`（同为我负责、已关闭）先落过一版 `SmtpMailSender`（提交 `e0c1013`）。那一版**不符合本票约束**：通道配置仍在 `OutboundMail` 上（约束①）、靠 `has_extn("starttls")` 猜加密方式（约束②）、没有 `SMTP_SSL`（163 的 465 走不通）、没有 `Message-ID`、没有 `classify_smtp_error`、`/health` 不看 sender。本票按规格重做，`ai4-4pyb` 的实现被取代；已在 `ai4-4pyb` 追加带日期的修订注记。
+
+七条约束逐条落地：
+
+1. **通道不进消息对象**：`OutboundMail` 只剩 `from_address`/`to_address`/`subject`/`body`/`notification_id`；通道由 `SmtpMailSender(settings)` 持有。测试断言 `repr(OutboundMail(...))` 不含 `smtp`/密码/用户名。
+2. **加密方式显式**：`SCIWEAVE_EMAIL_SMTP_SECURITY` = `ssl`/`starttls`/`none`，无默认值，不按端口推断。`ssl` 用 `smtplib.SMTP_SSL` + `ssl.create_default_context()`；`starttls` 在 EHLO 后升级；`none` 仅本地明文联调。
+3. **独立 socket 超时**：`SCIWEAVE_EMAIL_SMTP_TIMEOUT_SECONDS`（默认 10s，非正值报错），与 `SCIWEAVE_EMAIL_SENDING_TIMEOUT_SECONDS`（恢复判定）分开。
+4. **按投递语义分类**：`classify_smtp_error(exc)` 纯函数，顺序为「先点名 transient（`SMTPServerDisconnected`/`SMTPConnectError`/`TimeoutError`）→ 其余 `SMTPException` 一律 permanent → `ValueError` 落 `NonRetryableContentError` → 裸 `OSError` transient」。测试用 `subTest` 覆盖表内全部 12 行。
+5. **`EmailMessage` 构造报文**：不手工拼 header；测试断言主题含 `\r\n` 时抛 `NonRetryableContentError`（即标准库拦住了头注入）。
+6. **稳定 `Message-ID`**：`sha256(notification_id + "\n" + to_address)[:32]`，域名取自 `from_address` 的域。测试断言同通知同收件人重复投递得到相同 id、换收件人/换通知则不同。
+7. **`/health` 的 `sender` 分项**：`components.sender` = `ready`/`not_bound`；未绑定时整体 `not_configured`，`GET /health` 返回 503。不主动探活 SMTP。
+
+**一处需要说明的取舍（AC5 与 AC7 的边界）**：AC5 写「`SCIWEAVE_EMAIL_SMTP_SECURITY` 缺失…启动即失败」，AC7 又要求「未绑定发送端口时整体状态不报 ready」。两者要同时成立，必须区分两种「缺失」：
+
+- **完全没配 SMTP**（host/port/username/password 全空）→ 进程照常启动，sender 保持 `UnboundMailSender`，`/health` 报 `not_configured` + `sender=not_bound`。这是 AC7 描述的状态，也符合原注释「同一进程还要回答 `get_notification_status`」。
+- **配了一部分通道**（例如给了 host 但缺 SECURITY，或 `ssl`/`starttls` 缺账号密码）→ 启动即失败，错误信息点名缺哪个变量。
+
+即：AC5 的「缺失」按「通道已开始配置但缺项」执行，不做成「必须永远配齐 SMTP 才能启动」。若原意是后者，需要把 `main.py` 改成无条件 `SmtpMailSender` 并删除 `UnboundMailSender`，这条取舍我记在这里供复核，不覆盖票面原文。
+
+验证：
+
+```text
+email-service: 92 passed（原 75 + 新增 test_smtp_config.py 11 项 + test_smtp_sender.py 重写 12 项 + 健康项）
+全量矩阵: 通过 21 / 共 21 个阶段，pytest 813 项通过，git diff --check 通过
+```
+
+真实 socket 自检（本机临时最小 SMTP 服务，不经 mock，`security=none`）：
+
+```text
+投递成功: True
+  From: no-reply@sciweave.test
+  To: owner@example.test
+  Subject: =?utf-8?b?…?=            ← 中文主题按 RFC 2047 编码
+  Message-ID: <9739820cb66ce34d4da2602cb076f861@sciweave.test>
+  X-SciWeave-Notification-Id: notif-e2e-1
+含明文密码: False
+```
+
+**未完成项（不当作通过）**：AC 里「人工完成一次真实 163 SMTP（`smtp.163.com:465` + SSL）投递并记录 `delivery_status=sent`」**没有做**——需要授权码，本会话没有凭据，且凭据不得写进仓库或票。上面的 socket 自检只证明协议序列、报文构造、`Message-ID` 与错误分类正确，不等于对 163 投递成功。这一条仍需有凭据的人补做：设置 `SCIWEAVE_EMAIL_SMTP_SECURITY=ssl`、`SCIWEAVE_EMAIL_SMTP_HOST=smtp.163.com`、`SCIWEAVE_EMAIL_SMTP_PORT=465`、账号与授权码后，走一次 `send_notification` 并确认状态为 `sent`。
+
+另：`.env.example` 已补 `SCIWEAVE_EMAIL_SMTP_SECURITY`（示例值 `none`，附「无默认值」说明）与 `SCIWEAVE_EMAIL_SMTP_TIMEOUT_SECONDS`；`README.md` 第 5 段按实际行为重写（显式加密方式、独立超时、稳定 `Message-ID`、通道不随消息传递、`/health` 的 `sender` 分项）。

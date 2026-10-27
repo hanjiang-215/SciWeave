@@ -1,0 +1,6 @@
+# web-ui 单独作为构建上下文，必须排掉自身依赖目录。
+node_modules
+dist
+.vite
+.env
+*.log

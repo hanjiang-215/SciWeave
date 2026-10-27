@@ -1,7 +1,23 @@
-from email_service.config import EmailServiceConfig
+from email_service.config import EmailServiceConfig, MailboxSettings
+from email_service.ports import MailSender, UnboundMailSender
 from email_service.registry_client import RegistryRecipientResolver
 from email_service.server import create_email_server
 from email_service.smtp_sender import SmtpMailSender
+
+
+def build_sender(mailbox: MailboxSettings) -> MailSender:
+    """Bind the SMTP channel when the configuration describes a usable one.
+
+    ai4-ceqq: the entry point used to assemble ``UnboundMailSender``
+    unconditionally, so every accepted notification ended as
+    ``sender_unavailable`` and nobody was ever told anything. A configuration
+    that describes *no* channel still starts — the same process also serves
+    status queries — but ``/health`` then reports ``sender=not_bound`` instead of
+    pretending to be ready.
+    """
+    if mailbox.channel_configured:
+        return SmtpMailSender(mailbox)
+    return UnboundMailSender()
 
 
 def main() -> None:
@@ -13,12 +29,7 @@ def main() -> None:
             config.registry_token,
             config.registry_timeout_seconds,
         ),
-        # ai4-4pyb: the entry point used to assemble UnboundMailSender, so every
-        # accepted notification ended as sender_unavailable and nobody was told
-        # anything. A missing SMTP host is reported as a permanent failure on the
-        # notification record instead of at startup: the same process also serves
-        # notification status queries.
-        SmtpMailSender(),
+        build_sender(config.mailbox),
     ).run(transport="streamable-http")
 
 

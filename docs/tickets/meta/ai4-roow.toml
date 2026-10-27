@@ -1,0 +1,3 @@
+# ai4-roow 的索引归属与简介（人工维护）
+module = ["mapping", "agent"]
+summary = "把 SciencePal 执行报告写入草稿、经候选正式化回写地图的两条进度轨道"

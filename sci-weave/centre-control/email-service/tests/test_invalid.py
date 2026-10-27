@@ -77,6 +77,7 @@ def invalid_mcp(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("SCIWEAVE_EMAIL_SMTP_PORT", str(SMTP_PORT))
     monkeypatch.setenv("SCIWEAVE_EMAIL_SMTP_USERNAME", SMTP_USERNAME)
     monkeypatch.setenv("SCIWEAVE_EMAIL_SMTP_PASSWORD", SMTP_PASSWORD)
+    monkeypatch.setenv("SCIWEAVE_EMAIL_SMTP_SECURITY", "starttls")
     monkeypatch.setenv(
         "SCIWEAVE_EMAIL_TOKENS_JSON",
         json.dumps({"gateway": {"caller_id": "service:task-gateway", "caller_type": "service"}}),
@@ -395,10 +396,10 @@ def test_caller_sender_overrides_are_rejected_and_mailbox_stays_configured(inval
     assert len(invalid_mcp["sender"].sent) == 1
     message = invalid_mcp["sender"].sent[0]
     assert message.from_address == FROM_ADDRESS
-    assert message.smtp_host == SMTP_HOST
-    assert message.smtp_port == SMTP_PORT
-    assert message.smtp_username == SMTP_USERNAME
-    assert message.smtp_password == SMTP_PASSWORD
+    # ai4-ceqq: caller-supplied channel overrides have nowhere to land, because
+    # the message no longer carries host/port/credentials at all.
+    assert not hasattr(message, "smtp_host")
+    assert not hasattr(message, "smtp_password")
     assert message.to_address == RESOLVED_EMAIL
 
 

@@ -155,6 +155,7 @@ def email_mcp(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("SCIWEAVE_EMAIL_SMTP_PORT", str(SMTP_PORT))
     monkeypatch.setenv("SCIWEAVE_EMAIL_SMTP_USERNAME", SMTP_USERNAME)
     monkeypatch.setenv("SCIWEAVE_EMAIL_SMTP_PASSWORD", SMTP_PASSWORD)
+    monkeypatch.setenv("SCIWEAVE_EMAIL_SMTP_SECURITY", "starttls")
     monkeypatch.setenv(
         "SCIWEAVE_EMAIL_TOKENS_JSON",
         json.dumps(
@@ -310,6 +311,7 @@ def test_authenticated_health_returns_component_status(email_mcp):
             "delivery_store": "ready",
             "audit": "ready",
             "mailbox": "ready",
+            "sender": "ready",
         },
     }
     encoded = json.dumps(report)
@@ -390,7 +392,7 @@ def test_schema_forbids_sender_overrides_and_mail_uses_configured_mailbox(email_
     wait_until_sent(email_mcp)
     message = email_mcp["sender"].sent[0]
     assert message.from_address == FROM_ADDRESS
-    assert message.smtp_host == SMTP_HOST
-    assert message.smtp_port == SMTP_PORT
-    assert message.smtp_username == SMTP_USERNAME
-    assert message.smtp_password == SMTP_PASSWORD
+    # ai4-ceqq: the channel is no longer carried on the message, so a caller
+    # cannot override it and a traceback cannot print the password.
+    assert not hasattr(message, "smtp_host")
+    assert "secret" not in repr(message).lower()

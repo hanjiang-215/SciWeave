@@ -44,17 +44,21 @@ class NonRetryableContentError(EmailServiceError):
 
 @dataclass(frozen=True)
 class OutboundMail:
-    """Mail handed to the sender port. SMTP settings come from service configuration."""
+    """Mail handed to the sender port.
+
+    Content only. Channel configuration (host, port, credentials, encryption) is
+    held by the sender itself, built from ``MailboxSettings`` at composition time.
+
+    ai4-ceqq: these fields used to live here, which made
+    ``repr(OutboundMail(...))`` print the SMTP password — one exception traceback
+    or debug print would have written a production mailbox password to the logs.
+    """
 
     from_address: str
     to_address: str
     subject: str
     body: str
     notification_id: str
-    smtp_host: str
-    smtp_port: int
-    smtp_username: str
-    smtp_password: str
 
 
 class RecipientResolver(Protocol):
@@ -84,3 +88,13 @@ class UnboundMailSender:
 
     def send(self, message: OutboundMail) -> None:
         raise EmailServiceError("sender_unavailable")
+
+
+def sender_state(sender: "MailSender") -> str:
+    """Report whether a real delivery channel is bound.
+
+    ai4-ceqq: ``/health`` used to answer ``ready`` based on the four config fields
+    alone, while the assembled sender was the unbound placeholder — a green health
+    check with 100% delivery failure. Health now asks the sender itself.
+    """
+    return "not_bound" if isinstance(sender, UnboundMailSender) else "ready"

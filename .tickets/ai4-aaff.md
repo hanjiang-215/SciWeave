@@ -2,7 +2,7 @@
 id: ai4-aaff
 status: in_progress
 deps: [ai4-ay0e, ai4-r3so, ai4-m0vt, ai4-xrxw, ai4-vbnr]
-links: [ai4-v869]
+links: [ai4-v869, ai4-jckq]
 created: 2026-10-17T14:58:26Z
 assignee: hanjiang
 type: prototype
@@ -153,3 +153,7 @@ tags: [wayfinder:prototype, product, sciencepal, ai4science]
 `humans/competition/demo-script.md` 第 5 段由"预期的路线变更展示"改写为"平台治理链路实演"：直接运行 `run_iris_mapping_pipeline.py` 真实 TerminusDB + 管理 MCP 六步时序（正式查询→候选提交→差异预览→驳回与批准→正式化→正式查询），并展示三条失败路径的稳定错误码。已加入实测运行基线说明。SciencePal 段（T1/T2 实演）计时仍待回填，「提供并实际计时一条 3—5 分钟可复现的演示脚本」验收项因此在完整计时证据补齐前维持未勾选。
 
 `project-summary.md` 说明材料草稿同步为当前 HEAD：管理 MCP 工具面 7/8、验证表更新为 2026-10-24 实测数字（Mapping 90 / Wiki 96 / buffer 25 / dashboard-api 17 / web-ui 26 / 套件 runtime 18），"5 页说明材料"验收项已勾选（草稿含原创性/资源声明且无凭据，SciencePal 局限如实标注）。
+
+**2026-10-27T04:03:15Z**
+
+2026-10-27 SciencePal 真实执行 smoke 已跑通：run 670a5341（15.8s，无产物）、run 2772f7b7（32.2s，产物 hello.txt/probe.txt，sha256 见证据）、CLI run d06aff3b（19.2s）。上传文件落 /workspace，产物在 /outputs 与 /workspace/outputs；401 与 token 缺失有稳定错误码。证据见 humans/competition/demo-evidence/sciencepal-smoke.md；跨 harness 套件见 ai4-jckq，报告回写见 ai4-roow。T1/T2 真实执行、失败注入与 3–5 分钟录制仍未完成，本票保持 in_progress。

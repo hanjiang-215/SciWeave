@@ -157,6 +157,17 @@ class CentreAgentTests(unittest.TestCase):
             self.assertIn(key, execution)
         self.assertEqual(execution["taskId"], "candidate-1")
         self.assertEqual(execution["trigger"], "owner_command")
+        # ai4-nvuj: events used to be a hard-coded empty list; they must now be
+        # projected from the audit trail and stay inside the front-end vocabulary.
+        self.assertIn("events", fragment)
+        self.assertTrue(fragment["events"], "audit events must be projected, not hard-coded empty")
+        for event in fragment["events"]:
+            self.assertIn(
+                event["type"],
+                {"formal_release", "candidate_change", "message_received", "execution_completed", "mcp_failure"},
+            )
+            self.assertTrue(event["id"])
+            self.assertTrue(event["occurredAt"])
 
 
 if __name__ == "__main__":
@@ -188,9 +199,17 @@ class RuntimeConfigurationVisibilityTests(unittest.TestCase):
     def test_dashboard_component_matches_health(self) -> None:
         self.app.mark_runtime_misconfigured("worker_settings_invalid: connection scope")
 
-        services = {item["id"]: item["status"] for item in self.app.dashboard_sources()["services"]}
+        services = {item["id"]: item for item in self.app.dashboard_sources()["services"]}
 
-        self.assertEqual(services["worker_runtime"], "misconfigured")
+        # ai4-nvuj: the dashboard fragment speaks the vocabulary the web UI
+        # validates, so a misconfigured runtime surfaces as "unavailable" rather
+        # than reusing the health endpoint's internal "misconfigured" token.
+        self.assertEqual(services["worker_runtime"]["status"], "unavailable")
+        self.assertEqual(services["worker_runtime"]["role"], "centre-agent")
+        self.assertTrue(services["worker_runtime"]["name"])
+        for service in services.values():
+            self.assertIn(service["role"], {"task-agent", "centre-agent"})
+            self.assertIn(service["status"], {"online", "stale", "unavailable", "unknown"})
 
     def test_a_configured_runtime_reports_ready(self) -> None:
         self.app.enable_test_runtime()
