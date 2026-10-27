@@ -1,0 +1,40 @@
+{
+  "status": "ok",
+  "message": {
+    "DOI": "10.1038/nature14539",
+    "URL": "https://doi.org/10.1038/nature14539",
+    "title": [
+      "Deep learning"
+    ],
+    "author": [
+      {
+        "given": "Yann",
+        "family": "LeCun"
+      },
+      {
+        "given": "Yoshua",
+        "family": "Bengio"
+      },
+      {
+        "given": "Geoffrey",
+        "family": "Hinton"
+      }
+    ],
+    "published": {
+      "date-parts": [
+        [
+          2015,
+          5,
+          27
+        ]
+      ]
+    },
+    "license": [
+      {
+        "URL": "https://www.nature.com/articles/nature14539",
+        "content-version": "vor"
+      }
+    ],
+    "abstract": "<jats:p>Deep learning allows computational models &lt;b&gt;composed of multiple layers&lt;/b&gt; to learn.</jats:p>"
+  }
+}
