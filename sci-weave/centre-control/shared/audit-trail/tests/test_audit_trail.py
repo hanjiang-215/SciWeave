@@ -179,6 +179,50 @@ def test_query_rejects_non_string_filters():
         query_audit_calls(conn, caller_id=123)
 
 
+def test_query_time_range_before_and_combined(monkeypatch):
+    # ai4-bp6v 复核补齐：时间区间验收只测了 occurred_after，补 before 与组合区间
+    import audit_trail as at
+
+    fixed = "2026-10-27T00:00:00.000000Z"
+    monkeypatch.setattr(at, "_now", lambda: fixed)
+
+    conn = make_connection()
+    first_id = record_attempted(conn, make_record(caller_id="u1"))
+    second_id = record_attempted(conn, make_record(caller_id="u2"))
+    assert first_id and second_id
+
+    # 同时间戳下 occurred_before 含边界（<=）返回两条，倒序稳定
+    rows = query_audit_calls(conn, occurred_before=fixed)
+    assert [row["call_id"] for row in rows] == [second_id, first_id]
+
+    # 组合区间 after+before 同样两条
+    combined = query_audit_calls(conn, occurred_after=fixed, occurred_before=fixed)
+    assert [row["call_id"] for row in combined] == [second_id, first_id]
+
+    # before 早于时间戳 → 空
+    assert query_audit_calls(conn, occurred_before="2010-01-01T00:00:00.000000Z") == []
+
+
+def test_finish_write_failure_is_swallowed_and_leaves_invoked(tmp_path):
+    # ai4-bp6v 复核补齐：finish 的数据库写失败不抛、留下未配对的 invoked
+    path = tmp_path / "locked.sqlite"
+    conn1 = open_connection(str(path), busy_timeout_ms=1)
+    init_audit_table(conn1)
+    call_id = begin_call(conn1, make_record())
+
+    conn1.execute("BEGIN IMMEDIATE")  # 锁住写
+    conn2 = open_connection(str(path), busy_timeout_ms=1)
+    try:
+        finish_call(conn2, call_id, result="error", error_code="boom")  # 不应抛
+    finally:
+        conn2.close()
+    conn1.rollback()
+
+    unfinished = [row["call_id"] for row in find_unfinished_calls(conn1)]
+    assert call_id in unfinished
+    conn1.close()
+
+
 def test_no_update_or_delete_api_is_exposed():
     import audit_trail
 
