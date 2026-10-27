@@ -15,6 +15,7 @@ tests runnable) without the dependency, and a missing package is reported as
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import re
 from dataclasses import dataclass
@@ -307,10 +308,28 @@ class PassthroughAgentRuntime:
 
     Only reachable when ``SCIWEAVE_GATEWAY_PASSTHROUGH_RUNTIME=1`` is set
     explicitly, so a missing key can never silently produce a fake completion.
+
+    ``mcp`` is the stand-in for the agent's MCP tools and exists for the
+    key-free end-to-end test (ai4-x0ay). When an agent that holds the
+    `draft-buffer` card gets one, this double *does* create the draft and
+    *does* send the notification — through the real draft box and the fake
+    service — so the workflow's state machine, `draft_id` hand-off and inbox
+    bookkeeping are all genuinely exercised. What stays fake is the model.
+
+    Without ``mcp`` the double returns plain text, and a workflow whose final
+    writer owns the draft box ends ``draft_id_missing``. That is the honest
+    outcome: the double cannot call a tool it does not have, and inventing an
+    id would be exactly the fabricated-success this runtime exists to prevent.
     """
 
-    def __init__(self, connection_scope: str = "local", config: object | None = None) -> None:
+    def __init__(
+        self,
+        connection_scope: str = "local",
+        config: object | None = None,
+        mcp: object | None = None,
+    ) -> None:
         self.connection_scope = connection_scope
+        self.mcp = mcp
         # The configuration is still loaded, even though this runtime ignores
         # the model. Without it the passthrough path could not exercise the
         # workflow wiring at all, and every test of "does the worker run the
@@ -319,10 +338,64 @@ class PassthroughAgentRuntime:
         self.config = config
 
     def run(self, request: AgentRequest) -> AgentOutcome:
+        definition = getattr(self.config, "agent", None)
+        cards = set(getattr(definition, "allowed_mcp_resources", ()) or ())
+        if self.mcp is not None and "draft-buffer" in cards:
+            return self._run_with_tools(request, cards)
         return AgentOutcome(
             "completed",
             result_summary=f"passthrough: {request.command_text[:200]}",
         )
+
+    def _run_with_tools(self, request: AgentRequest, cards: set[str]) -> AgentOutcome:
+        """Create the draft and notify, then answer in the JSON contract.
+
+        The ids are the ones the tools returned, so an `agent_reported` draft id
+        here is as real as the draft box behind it. The summary says the model
+        was a double, because a reviewer must not mistake this for a model
+        answer.
+        """
+        try:
+            draft = self.mcp.create_draft(  # type: ignore[attr-defined]
+                namespace="wiki",
+                kind="wiki_document",
+                title=request.task_node_id or "handoff",
+                payload=f"passthrough draft for {request.task_node_id}",
+                idempotency_key=f"draft:{request.execution_id}",
+            )
+        except Exception as error:  # a tool failure is a failed step, not a crash
+            return AgentOutcome("failed", error_summary=f"create_draft failed: {error}")
+        if "email-service" in cards:
+            self._notify(request, draft["draft_id"])
+        return AgentOutcome(
+            "completed",
+            result_summary=json.dumps(
+                {
+                    "draft_id": draft["draft_id"],
+                    "summary": f"passthrough double wrote a draft for {request.task_node_id}",
+                }
+            ),
+        )
+
+    def _notify(self, request: AgentRequest, draft_id: str) -> None:
+        """Best effort: a notification failure must not lose the draft."""
+        from .notifications import build_intent
+
+        intent = build_intent(
+            execution_id=request.execution_id,
+            task_node_id=request.task_node_id,
+            # Deliberately not a real principal: the double has no mapping to
+            # read an owner from, and a plausible-looking id would be a lie a
+            # reviewer could mistake for a real recipient.
+            recipient_principal_id="passthrough:owner",
+            subject=f"Draft ready for {request.task_node_id}"[:200],
+            body=f"passthrough double created draft {draft_id}",
+        )
+        try:
+            self.mcp.send_notification(**intent.to_dict())  # type: ignore[attr-defined]
+        except Exception:
+            # Nothing to retry: the draft exists and is the thing that matters.
+            pass
 
     def resume(self, request: AgentRequest) -> AgentOutcome:
         return self.run(request)
@@ -331,7 +404,12 @@ class PassthroughAgentRuntime:
         return AgentOutcome("cancelled", error_summary="cancelled")
 
 
-def build_agent_runtime(environ: dict[str, str] | None = None, *, config: object | None = None):
+def build_agent_runtime(
+    environ: dict[str, str] | None = None,
+    *,
+    config: object | None = None,
+    mcp: object | None = None,
+):
     """Build the runtime the worker shell uses, or fail with what is missing.
 
     Loads the researcher's agent definition, MCP cards, workflow libs and agent
@@ -355,8 +433,12 @@ def build_agent_runtime(environ: dict[str, str] | None = None, *, config: object
             from .assembly import load_worker_config
 
             config = load_worker_config(env)
+        # `mcp` is only meaningful for the double; the real runtime gets its
+        # tools from fast-agent, so passing one there is a mistake worth naming.
+        if mcp is not None and env.get("SCIWEAVE_GATEWAY_PASSTHROUGH_RUNTIME", "").strip() != "1":
+            raise ValueError("mcp= is only accepted by the passthrough runtime")
         return PassthroughAgentRuntime(
-            env.get("SCIWEAVE_WORKER_CONNECTION_SCOPE", "local"), config
+            env.get("SCIWEAVE_WORKER_CONNECTION_SCOPE", "local"), config, mcp
         )
     settings = FastAgentSettings(
         api_key=env.get("DEEPSEEK_API_KEY"),

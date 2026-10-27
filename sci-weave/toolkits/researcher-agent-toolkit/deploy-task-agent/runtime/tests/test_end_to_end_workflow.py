@@ -216,6 +216,98 @@ class FullChainTests(unittest.TestCase):
         self.assertIn("no task instruction", self.writer_prompts[0])
 
 
+class PassthroughFullChainTests(unittest.TestCase):
+    """The same path through `build_agent_runtime`, still with no key.
+
+    `FullChainTests` builds the agent boundary by hand. This one uses the real
+    factory with `SCIWEAVE_GATEWAY_PASSTHROUGH_RUNTIME=1`, so the preset's own
+    instruction, the per-agent config pinning and the factory's argument
+    validation are all in the path. The model is still a double — that is what
+    "no key" means — but everything around it is the shipped code.
+    """
+
+    def setUp(self) -> None:
+        import tempfile
+
+        from work_agent_runtime.fast_agent_runtime import build_agent_runtime
+
+        self.build = build_agent_runtime
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.db = Path(self._tmp.name) / "kit.sqlite"
+        self.inbox = InboxStore(str(self.db))
+        self.addCleanup(self.inbox.close)
+        self.tools = FakeMCP()
+        self.env = dict(_ENV, SCIWEAVE_GATEWAY_PASSTHROUGH_RUNTIME="1")
+        self.config = load_worker_config(self.env)
+
+    def _workflow(self):
+        from work_agent_runtime.workflow_agent import plan_for
+
+        plan = plan_for(self.config, "literature-agent")
+
+        def factory(name):
+            return self.build(self.env, config=self.config.with_agent(name), mcp=self.tools)
+
+        def run(prompt, target_id, execution_id=""):
+            stepper = WorkflowAgent(
+                factory,
+                execution_id=execution_id or target_id,
+                task_node_id=target_id,
+                session_id=execution_id or target_id,
+            )
+            return WorkflowExecutor(self.config.project, stepper, drafts=None).run(
+                plan.name, prompt, target_id=target_id, execution_id=execution_id
+            )
+
+        return run
+
+    def test_the_shipped_preset_completes_without_an_api_key(self) -> None:
+        self.inbox.enqueue(
+            "node-7:evt-7",
+            "node-7",
+            "evt-7",
+            "researcher-task-agent",
+            binding_present=True,
+            command_text="比较 RAG 与长上下文两条基线",
+        )
+        runtime = WorkAgentRuntime(inbox=self.inbox)
+        results = run_one_queued(
+            runtime, agent=None, dedupe_key="node-7:evt-7", workflow=self._workflow()
+        )
+
+        self.assertEqual(results[0]["status"], "completed")
+        self.assertEqual(results[0]["draft_id"], self.tools.draft_id)
+        self.assertEqual(len(self.tools.drafts), 1)
+        self.assertEqual(len(self.tools.notifications), 1)
+        self.assertIsNone(notification_problem(self.tools.notifications[0]))
+        self.assertEqual(self.inbox.get("node-7:evt-7")["status"], "processed")
+
+    def test_the_writer_really_is_the_agent_that_holds_the_draft_card(self) -> None:
+        """A reader with the draft card would produce a draft from a partial view."""
+        writer = self.config.project.agents["literature-draft-writer"]
+        reader = self.config.project.agents["literature-searcher"]
+        self.assertIn("draft-buffer", writer.allowed_mcp_resources)
+        self.assertNotIn("draft-buffer", reader.allowed_mcp_resources)
+
+    def test_a_single_agent_handoff_still_works_with_no_workflow_set(self) -> None:
+        """The preset may be a workflow, but the plain path must not regress."""
+        self.inbox.enqueue(
+            "node-8:evt-8",
+            "node-8",
+            "evt-8",
+            "researcher-task-agent",
+            binding_present=True,
+            command_text="写一份关于 RAG 的词条草稿",
+        )
+        runtime = WorkAgentRuntime(inbox=self.inbox)
+        agent = self.build(self.env, config=self.config)
+        results = run_one_queued(runtime, agent=agent, dedupe_key="node-8:evt-8")
+
+        self.assertEqual(results[0]["status"], "completed")
+        self.assertEqual(self.tools.drafts, [], "the single-agent double writes no MCP draft")
+
+
 class RecordedInSqliteTests(unittest.TestCase):
     """`draft_id` and its provenance survive a process restart (ai4-x0ay)."""
 

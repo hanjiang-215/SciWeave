@@ -106,6 +106,17 @@ def workflow_callable(agent, runtime: WorkAgentRuntime, environ: dict[str, str])
     return run
 
 
+def _tool_less_passthrough(agent) -> bool:
+    """The credential-free double, and without MCP tools to stand in for.
+
+    The double can be given a fake MCP server (the key-free end-to-end test does
+    exactly that), and then it *can* finish a draft-owning workflow. The worker
+    never gives it one, so this is true here — but saying "cannot" without
+    checking would make the notice wrong the day someone wires it up.
+    """
+    return type(agent).__name__ == "PassthroughAgentRuntime" and getattr(agent, "mcp", None) is None
+
+
 def build_runtime() -> WorkAgentRuntime:
     runtime = WorkAgentRuntime()
     runtime.inbox = InboxStore(required("DATABASE_PATH"))
@@ -150,7 +161,25 @@ def main() -> int:
     )
     workflow = workflow_callable(agent, runtime, dict(os.environ))
     if workflow is not None:
-        print(json.dumps({"workflow": workflow.workflow_name, "agents": list(workflow.agents)}, ensure_ascii=False), flush=True)
+        print(
+            json.dumps(
+                {"workflow": workflow.workflow_name, "agents": list(workflow.agents)},
+                ensure_ascii=False,
+            ),
+            flush=True,
+        )
+        if _tool_less_passthrough(agent):
+            # The double has no MCP tools, so a preset whose final writer owns
+            # the draft box cannot finish: it would have to report a draft id it
+            # never received. Say so before the run fails, otherwise
+            # `draft_id_missing` looks like a runtime bug during bring-up.
+            print(
+                "notice: the passthrough runtime cannot call MCP tools, so a workflow "
+                "whose final writer holds `draft-buffer` ends failed(draft_id_missing); "
+                "this path needs a real DEEPSEEK_API_KEY",
+                file=sys.stderr,
+                flush=True,
+            )
     # One handoff by key when the subscriber started us (ai4-0fwc); a batch scan
     # only for the standalone bring-up run.
     dedupe_key = argument("--dedupe-key")
