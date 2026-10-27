@@ -71,6 +71,9 @@ class PendingHandoff:
     last_trigger_revision_id: str | None
     created_at: str
     updated_at: str
+    # ai4-te1v / ai4-quvy: why the handoff is waiting, when it is
+    # (blocking_dependency_missing, activation_condition_unknown, ...).
+    waiting_reason: str | None = None
 
 
 @dataclass(frozen=True)
@@ -112,6 +115,7 @@ class CoordinatorStore:
               last_trigger_revision_id TEXT,
               created_at TEXT NOT NULL,
               updated_at TEXT NOT NULL,
+              waiting_reason TEXT,
               UNIQUE (mapping_domain_id, task_node_id, target_node_version_ref)
             );
             CREATE TABLE IF NOT EXISTS handoff_dispatch (
@@ -139,8 +143,22 @@ class CoordinatorStore:
               latest_formal_revision_id TEXT NOT NULL,
               updated_at TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS snapshot_failure (
+              mapping_domain_id TEXT NOT NULL,
+              formal_revision_id TEXT NOT NULL,
+              reason TEXT NOT NULL,
+              recorded_at TEXT NOT NULL,
+              PRIMARY KEY (mapping_domain_id, formal_revision_id)
+            );
             """
         )
+        # ai4-quvy: migrate pre-existing stores to the waiting_reason column.
+        try:
+            self.conn.execute("ALTER TABLE pending_handoff ADD COLUMN waiting_reason TEXT")
+            self.conn.commit()
+        except sqlite3.OperationalError:
+            # Column already exists; the CREATE TABLE above has it for new stores.
+            pass
         self.conn.commit()
 
     def upsert_pending_handoff(
@@ -152,6 +170,7 @@ class CoordinatorStore:
         executor_refs: tuple[str, ...],
         status: str,
         trigger_revision_id: str | None,
+        waiting_reason: str | None = None,
     ) -> PendingHandoff:
         now = now_iso()
         existing = self.get_pending_handoff(mapping_domain_id, task_node_id, target_node_version_ref)
@@ -165,7 +184,7 @@ class CoordinatorStore:
                 """
                 UPDATE pending_handoff
                 SET upstream_source_refs = ?, executor_refs = ?, status = ?,
-                    last_trigger_revision_id = ?, updated_at = ?
+                    last_trigger_revision_id = ?, updated_at = ?, waiting_reason = ?
                 WHERE pending_handoff_id = ?
                 """,
                 (
@@ -174,6 +193,7 @@ class CoordinatorStore:
                     status,
                     trigger_revision_id,
                     now,
+                    waiting_reason,
                     existing.pending_handoff_id,
                 ),
             )
@@ -185,8 +205,8 @@ class CoordinatorStore:
             INSERT INTO pending_handoff (
               pending_handoff_id, mapping_domain_id, task_node_id, target_node_version_ref,
               upstream_source_refs, executor_refs, executor_agent_id, status, last_trigger_revision_id,
-              created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              created_at, updated_at, waiting_reason
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 pending_handoff_id,
@@ -200,6 +220,7 @@ class CoordinatorStore:
                 trigger_revision_id,
                 now,
                 now,
+                waiting_reason,
             ),
         )
         self.conn.commit()
@@ -321,6 +342,39 @@ class CoordinatorStore:
         rows = self.conn.execute("SELECT mapping_domain_id FROM domain_state ORDER BY mapping_domain_id").fetchall()
         return [row["mapping_domain_id"] for row in rows]
 
+    def record_snapshot_failure(
+        self, mapping_domain_id: str, formal_revision_id: str, reason: str
+    ) -> None:
+        """Record that a formal snapshot could not be read (ai4-98ye).
+
+        One row per (domain, revision): the point is that the fact is
+        observable, not that every retry is counted. Without it a silent skip
+        is indistinguishable from "this domain had nothing to dispatch".
+        """
+        self.conn.execute(
+            """
+            INSERT INTO snapshot_failure (mapping_domain_id, formal_revision_id, reason, recorded_at)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT (mapping_domain_id, formal_revision_id)
+            DO UPDATE SET reason = excluded.reason, recorded_at = excluded.recorded_at
+            """,
+            (mapping_domain_id, formal_revision_id, reason, now_iso()),
+        )
+        self.conn.commit()
+
+    def list_snapshot_failures(self) -> list[dict[str, str]]:
+        rows = self.conn.execute(
+            "SELECT * FROM snapshot_failure ORDER BY mapping_domain_id, formal_revision_id"
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+    def clear_snapshot_failure(self, mapping_domain_id: str, formal_revision_id: str) -> None:
+        self.conn.execute(
+            "DELETE FROM snapshot_failure WHERE mapping_domain_id = ? AND formal_revision_id = ?",
+            (mapping_domain_id, formal_revision_id),
+        )
+        self.conn.commit()
+
     def create_dispatch(
         self,
         pending_handoff_id: str,
@@ -417,6 +471,7 @@ class CoordinatorStore:
             last_trigger_revision_id=row["last_trigger_revision_id"],
             created_at=row["created_at"],
             updated_at=row["updated_at"],
+            waiting_reason=row["waiting_reason"] if "waiting_reason" in row.keys() else None,
         )
 
     @staticmethod

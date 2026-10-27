@@ -12,7 +12,7 @@ SciWeave 是一个面向科研团队的协作与智能体平台，把「科研�
 - **LLM-Wiki（知识库）**：WikiDocument 与 ResourceVersion 的引用资格审核、候选 Proposal 与正式 WikiRevision 生命周期，与 Research Mapping 共用治理语义但保持独立 MCP、存储与审计边界。
 - **Work Agent（执行）**：Task Agent（研究员端侧）与 Centre Agent（中央）统一架构——消息驱动触发、短生命周期 Worker 执行一轮 fast-agent loop、ExecutionRecord 为唯一状态机、结果写入中央草稿箱后由人一审。
 
-对外接口是两套独立的领域管理 MCP（Mapping 7 工具 / Wiki 8 工具），覆盖正式只读、候选提交、候选审阅、Owner 正式化/恢复与健康检查；服务端按五档能力（read / candidate_submit / candidate_review / formalize / centre）鉴权，Bearer 令牌注入调用者身份，不信任客户端自报角色；所有工具调用写入接口层审计账本（读 attempted fail-open，写 invoked/completed fail-closed）。
+对外接口是两套独立的领域管理 MCP（Mapping 11 工具 / Wiki 11 工具，2026-10-27 按两处 `TOOL_DEFINITIONS` 逐条计数），覆盖正式只读、候选提交、候选审阅、Owner 正式化/恢复与健康检查；服务端按五档能力（read / candidate_submit / candidate_review / formalize / centre）鉴权，Bearer 令牌注入调用者身份，不信任客户端自报角色；所有工具调用写入接口层审计账本（读 attempted fail-open，写 invoked/completed fail-closed）。
 
 ## 2. 创新点
 
@@ -38,7 +38,7 @@ SciWeave 是一个面向科研团队的协作与智能体平台，把「科研�
 ## 4. 当前局限
 
 - SciencePal 实演尚未接入：赛事硬门槛要求 SciencePal 实际承接核心数据检查或分析执行；本机 T1/T2 脚本只证明闭环可复现，不替代 SciencePal 执行记录。
-- 中央 Agent 专属写工具（预审日志追加、混合候选新建）依赖注册表开放面收口，尚未对外暴露。
+- 中央 Agent 专属写工具（`append_prereview_log`、`create_merged_candidate`）已暴露在两套管理 MCP 的工具面上，待端侧 MCP 客户端接入后实调。
 - 看板 Gateway 与消息监听来源依赖 Gateway 侧只读契约，当前以 unavailable/partial 降级展示。
 - 单机验证为主；跨进程、跨机部署与生产级恢复仍待后续阶段。
 

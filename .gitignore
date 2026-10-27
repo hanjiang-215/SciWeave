@@ -35,3 +35,6 @@ htmlcov/
 # 工单索引生成物（运行 ticket-index render 生成，不提交）
 docs/tickets/INDEX.md
 docs/tickets/modules/
+
+# shared/ 协议包不提交锁文件（本地跑测试会生成，可再生成）
+sci-weave/centre-control/shared/*/uv.lock

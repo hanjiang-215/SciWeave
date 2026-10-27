@@ -85,9 +85,16 @@ class DraftBufferService:
             docs = [item for item in docs if item.get("draft_id") != draft["draft_id"]]
             docs.append(draft)
         if operation == "submit_draft":
-            commit = self.store.write(docs, operation, key + ":submitted")
-            draft["submitted_commit"] = commit
-            docs = [item for item in docs if item.get("draft_id") != draft["draft_id"]] + [draft]
+            if draft.get("submitted_commit"):
+                # A previous attempt froze the snapshot and then failed before
+                # writing the operation row (ai4-6qht). Re-freezing would move
+                # the review snapshot, so the existing commit is kept and the
+                # retry only writes the missing operation row.
+                commit = draft["submitted_commit"]
+            else:
+                commit = self.store.write(docs, operation, key + ":submitted")
+                draft["submitted_commit"] = commit
+                docs = [item for item in docs if item.get("draft_id") != draft["draft_id"]] + [draft]
         else:
             commit = None
         result = {**result, "snapshot_commit": commit}
@@ -127,7 +134,13 @@ class DraftBufferService:
         draft = copy.deepcopy(self._find(docs, request["draft_id"]))
         self._require(bool(request["actor_id"]), "identity_required", "authenticated caller identity is required")
         self._require(draft["submitted_by"] == request["actor_id"], "forbidden", "only the submitter may submit this draft")
-        self._require(draft["status"] == "drafting", "invalid_transition", "draft cannot be submitted in its current state")
+        if draft["status"] not in {"drafting", "submitted"}:
+            self._require(False, "invalid_transition", "draft cannot be submitted in its current state")
+        # ``submitted`` reaches here only on a retry: _mutate returns the stored
+        # result when the operation row already exists, so an interrupted
+        # submit (snapshot frozen, row missing) is the one way back in
+        # (ai4-6qht). Re-freezing is safe because a review requires a
+        # submitted_commit, which an interrupted submit never persisted.
         draft["status"] = "submitted"
         return draft, {"draft_id": draft["draft_id"], "status": "submitted"}
 

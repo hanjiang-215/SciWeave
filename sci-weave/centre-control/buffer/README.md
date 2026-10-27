@@ -6,7 +6,7 @@
 
 - 使用 `Draft` 与 `NamespaceConfig` 文档，`@key` 为 TerminusDB `Random`；正文 payload 以 JSON 保存。
 - 提交时固定 exact TerminusDB Commit。后续修改只影响可编辑草稿，不改变该次审核快照。
-- 状态：`drafting → submitted → accepted → promoted`；驳回为 `rejected`，修订创建新的提交身份并保留 `supersedes_draft_id`；未发布草稿可以 `abandoned`。
+- 状态：`drafting → submitted → accepted → promoted`；驳回为 `rejected`，修订创建新的提交身份并保留 `supersedes_draft_id`。设计里的 `under_review`（并发审核保护）与 `abandoned`（作者放弃草稿）未实现，首版不支持。
 - 仅提交者可修改草稿；审核人由 `SCIWEAVE_BUFFER_REVIEWERS_JSON` 按命名空间配置。`mark_promoted` 由调用领域 MCP 创建候选的一方显式调用，只记录候选 ID 和 Commit。
     `create_draft`, `update_draft`, `submit_draft`, `review_draft`、`mark_promoted` 接受幂等键；同一键同一请求返回首次结果，不同请求返回冲突。
 - stdio MCP transport 不认证调用者。部署方必须通过可信 MCP 宿主注入 `actor_id`（调用工具时的参数字段），并确保调用方不能自行伪造或覆盖它；本服务不信任客户端自行填写的 `actor_id`。当前裸 stdio 入口没有可信身份注入配置，因此工具调用会明确拒绝，必须接入身份注入适配后才能使用写入或审核功能。工具 schema 故意不公开 `actor_id`，由受信任宿主在转发前注入。

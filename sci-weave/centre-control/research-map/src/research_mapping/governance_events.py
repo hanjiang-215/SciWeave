@@ -18,7 +18,7 @@ import json
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Protocol
+from typing import Any, Callable, Protocol
 
 GOVERNANCE_TOPIC = "sciweave.governance-events"
 
@@ -112,11 +112,22 @@ class RecordingGovernanceEventPublisher:
 class KafkaGovernanceEventPublisher:
     """kafka-python producer for the central Redpanda governance topic."""
 
-    def __init__(self, bootstrap_servers: str, topic: str = GOVERNANCE_TOPIC, *, timeout_seconds: float = 5.0) -> None:
-        from kafka import KafkaProducer  # lazy import keeps domain tests broker-free
+    def __init__(
+        self,
+        bootstrap_servers: str,
+        topic: str = GOVERNANCE_TOPIC,
+        *,
+        timeout_seconds: float = 5.0,
+        producer_factory: Callable[..., Any] | None = None,
+    ) -> None:
+        # The producer factory is injectable so the envelope shape can be
+        # asserted without a broker; production leaves it as kafka-python.
+        if producer_factory is None:
+            from kafka import KafkaProducer  # lazy import keeps domain tests broker-free
 
+            producer_factory = KafkaProducer
         self.topic = topic
-        self._producer = KafkaProducer(
+        self._producer = producer_factory(
             bootstrap_servers=bootstrap_servers,
             value_serializer=lambda value: json.dumps(value, ensure_ascii=False).encode("utf-8"),
         )
@@ -147,3 +158,23 @@ class NoopGovernanceEventPublisher:
 
     def close(self) -> None:
         return
+
+
+def create_governance_publisher(
+    bootstrap_servers: str | None,
+    *,
+    topic: str = GOVERNANCE_TOPIC,
+    producer_factory: Callable[..., Any] | None = None,
+) -> GovernanceEventPublisher:
+    """Pick the publisher from configuration.
+
+    An unset broker means "this deployment has no queue": the domain keeps
+    working and Centre Agent falls back to snapshot scans.  A configured broker
+    must not silently degrade to no-op, because the coordinator's whole trigger
+    is the ``formal_revision_published`` event.
+    """
+    if not bootstrap_servers:
+        return NoopGovernanceEventPublisher()
+    return KafkaGovernanceEventPublisher(
+        bootstrap_servers, topic=topic, producer_factory=producer_factory
+    )

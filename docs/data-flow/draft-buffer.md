@@ -1,6 +1,6 @@
 # 中央草稿箱（Draft Buffer）
 
-尚未成为领域候选的内容放在这里，由人审核。计划中对应 `sci-weave/centre-control/buffer`，目前只有一行说明。
+尚未成为领域候选的内容放在这里，由人审核。已实现在 `sci-weave/centre-control/buffer/`：服务、MCP 传输与测试都在该目录。
 
 本文件是 2026-10-21 讨论的设计记录，不是已发布的规格。与既有工单冲突之处在第 8 节单列。
 
@@ -65,19 +65,19 @@ TerminusDB 没有文件夹，只有类与文档 ID。因此：
 ## 4. 状态机
 
 ```text
-drafting → submitted → under_review → accepted → promoted
+drafting → submitted → accepted → promoted
                      └→ rejected → (修订后重新 submitted)
-
-任意非 promoted 状态 → abandoned
 ```
+
+首版契约只有 `drafting`、`submitted`、`accepted`、`rejected`、`promoted` 五个状态，实现见 `sci-weave/centre-control/buffer/src/draft_buffer/service.py`。下面两个状态是设计目标，尚未实现。
 
 - `drafting`：作者还在写，不进审核队列。
 - `submitted`：已提交，固定当前 Commit 为 `submitted_commit`；之后正文仍可修改，但不影响本轮审核对象。
-- `under_review`：审核人已打开，避免两人同时审同一份。
 - `accepted`：审核通过。**不产生候选分支**，等待人调用领域 MCP。
 - `rejected`：驳回并写明原因；重新提交是新的 `submitted_commit`，原草稿历史保留。
 - `promoted`：领域候选已创建，草稿转只读。
-- `abandoned`：作者或审核人放弃。
+- `under_review`（未实现，首版不支持）：用于并发审核保护，审核人打开即锁定，避免两人同时审同一份。
+- `abandoned`（未实现，首版不支持）：作者放弃草稿的出口，首版未提供。
 
 审核对象是 `submitted_commit`，不是「最新内容」。这正是选 TerminusDB 的主要理由：每次写入天然产生 Commit，固定一个 hash 就能说清「人当时看的是哪一版」，不需要另做快照表。
 

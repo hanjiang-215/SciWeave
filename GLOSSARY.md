@@ -192,7 +192,7 @@ _Avoid_: 把一次投递尝试叫做一次通知、把重试算作新通知
 | 对象 | 研究人员看到的操作 | 首版状态 | 正式化条件 |
 | --- | --- | --- | --- |
 | TaskNode/DependencyEdge 版本 | 查看路线草稿、比较路线、查看正式路线 | `candidate`、`formal`、`superseded`、`rejected`、`invalidated` | 通过 Proposal 和 Project Owner 的 Formal Publication Review |
-| Mapping 草稿 | 提交、修改、查看退回原因 | `drafting`、`submitted`、`under_review`、`accepted`、`rejected`、`promoted`、`abandoned` | 一审通过后由人调用 Mapping 管理 MCP 写入候选分支 |
+| Mapping 草稿 | 提交、修改、查看退回原因 | `drafting`、`submitted`、`accepted`、`rejected`、`promoted`（`under_review` 并发审核保护、`abandoned` 作者放弃草稿，均未实现，首版不支持） | 一审通过后由人调用 Mapping 管理 MCP 写入候选分支 |
 | Mapping Proposal | 查看路线变更、影响和审核意见 | `draft`、`candidate`、`mr_ready`、`stale`、`conflict`、`merged`、`rejected`、`abandoned` | 创建新的 Formal MappingRevision |
 | Execution Record | 执行、重试、转人工、回答提问、查看草稿 | `queued`、`running`、`waiting`、`completed`、`needs_revision`、`rejected`、`human_takeover`、`failed`、`cancelled` | 首版不单独发布“正式科研结论”；执行完成时草稿已写入中央草稿箱，草稿的审核与正式化属领域治理 |
 | TaskNode 运行投影 | 查看“待执行、执行中、待补充、需调整路线” | `not_ready`、`ready`、`in_progress`、`blocked`、`route_change_required` | 由正式 Mapping 和 Execution Record 计算，不覆盖版本状态 |

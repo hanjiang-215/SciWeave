@@ -2,7 +2,7 @@
 id: ai4-dhpv
 status: closed
 deps: []
-links: [ai4-we38, ai4-353s, ai4-yvh2, ai4-gqj3, ai4-z3z4, ai4-te1v, ai4-csyj]
+links: [ai4-we38, ai4-353s, ai4-yvh2, ai4-gqj3, ai4-z3z4, ai4-te1v, ai4-csyj, ai4-g6zi]
 created: 2026-10-21T22:12:00Z
 type: epic
 priority: 1
@@ -97,7 +97,7 @@ centre-agent 也是消息驱动：草稿进入某状态、候选出现新 head �
 
 ## Resolution
 
-2026-10-22 收口。通道分工以 [ADR-0001](../../docs/adr/0001-task-dispatch-via-message-queue.md)、`docs/data-flow/work-agent.md` 与「最小 Work Agent 实现规格」(ai4-z3z4) 为准。正文「Design」里 2026-10-21 的「工具保留、提示词约束」保留作过程记录，不再是结论。
+2026-10-22 收口。通道分工以 [ADR-0001](../docs/adr/0001-task-dispatch-via-message-queue.md)、`docs/data-flow/work-agent.md` 与「最小 Work Agent 实现规格」(ai4-z3z4) 为准。正文「Design」里 2026-10-21 的「工具保留、提示词约束」保留作过程记录，不再是结论。
 
 - 两类 MCP 仍然分开：Gateway 的 MCP 给人做处置与观察；领域 MCP（Mapping、Wiki、草稿箱）给 Agent 当工具。这句话只约束前者。
 - 任务下发只走消息队列。根任务的首条消息由 Project Owner 发到队列；上游交接由领域正式版本发布触发。
@@ -134,7 +134,7 @@ centre-agent 也是消息驱动：草稿进入某状态、候选出现新 head �
 
 **2026-10-22T09:40:00Z**
 
-2026-10-22：本篇所列的通道分工已落成可实施形态，见 `docs/data-flow/work-agent.md`、[ADR-0001](../../docs/adr/0001-task-dispatch-via-message-queue.md) 与「最小 Work Agent 实现规格」(ai4-z3z4)。
+2026-10-22：本篇所列的通道分工已落成可实施形态，见 `docs/data-flow/work-agent.md`、[ADR-0001](../docs/adr/0001-task-dispatch-via-message-queue.md) 与「最小 Work Agent 实现规格」(ai4-z3z4)。
 
 被定案的两项待定：
 

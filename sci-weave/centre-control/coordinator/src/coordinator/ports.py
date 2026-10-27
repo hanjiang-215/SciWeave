@@ -39,11 +39,26 @@ class TaskNodeDoc:
 
 @dataclass(frozen=True)
 class DependencyEdgeDoc:
-    edge_id: str
+    """One dependency edge from a formal mapping snapshot.
+
+    ``logical_id`` is the edge's stable identity and ``version_id`` its
+    immutable version (ai4-fu4i); both come straight from the domain
+    DependencyEdge document. The four judgement fields were added whole
+    (ai4-quvy): coordinator must not treat every edge as "all upstream
+    complete means go" (ai4-te1v dependency-kind rules).
+    """
+
+    logical_id: str
+    version_id: str
     source_node_id: str
     source_version_id: str
     target_node_id: str
     target_version_id: str
+    dependency_kind: str = "information"
+    activation_condition: str | None = None
+    required_outputs: tuple[str, ...] = ()
+    blocks_until: str | None = None
+    alternative_group_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -125,16 +140,41 @@ class NotificationPublisherPort(Protocol):
         """Submit the notification intent. Raises PublisherUnavailableError on transient failure."""
 
 
+class NotificationTransportUnavailable(RuntimeError):
+    """The notification transport is not configured, so nothing was sent.
+
+    Distinct from a delivery failure: retrying cannot help until the endpoint
+    is configured, and marking the dispatch ``published`` would lose the
+    notification for good. Callers record it as ``failed`` with this reason.
+    """
+
+
+class AgentState(StrEnum):
+    """What the Registry knows about one executor ref (ai4-te1v, ai4-xkbd).
+
+    The four values exist because the coordinator owes the task owner a
+    different next step in each case: bind a workflow (nothing is listed),
+    fix a bad agent id (listed but never registered), restore a retired or
+    offline instance, or admit it could not ask at all.
+    """
+
+    AVAILABLE = "available"
+    UNAVAILABLE = "unavailable"
+    UNREGISTERED = "unregistered"
+    UNKNOWN = "unknown"
+
+
 class AgentAvailabilityPort(Protocol):
     """Read-only view of executor availability from Registry registration facts."""
 
-    def is_available(self, agent_id: str) -> bool:
-        """True when the executor agent is registered and can receive tasks.
+    def state_of(self, agent_id: str) -> AgentState:
+        """Report what the Registry knows about this executor ref.
 
-        Registry facts never authorize execution; the formal mapping executor_refs
-        remains the source of execution eligibility. Return False when the agent
-        is unregistered, retired or offline so the coordinator keeps the waiting
-        fact and notifies a human instead of modifying the formal map.
+        Registry facts never authorize execution; the formal mapping
+        executor_refs remains the source of execution eligibility. UNKNOWN
+        (the Registry could not be consulted) must never be reported as
+        UNREGISTERED -- that would turn an outage into a claim about the
+        agent's existence.
         """
 
 

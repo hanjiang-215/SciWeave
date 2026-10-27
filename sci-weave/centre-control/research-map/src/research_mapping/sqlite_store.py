@@ -36,7 +36,56 @@ class SqliteStore:
                 connection.execute(
                     "ALTER TABLE mapping_candidate_commit ADD COLUMN candidate_snapshot_digest TEXT"
                 )
+            self._migrate_prereview_report_key(connection)
             connection.commit()
+
+    def _migrate_prereview_report_key(self, connection: sqlite3.Connection) -> None:
+        """Widen the prereview report key to include the base revision.
+
+        A database created before ai4-sf8l carries the three-column key, where
+        a re-review after ``base_moved`` was INSERT-OR-IGNOREd onto the
+        invalidated row: the new checks were dropped and the candidate stayed
+        ``report_stale`` for good. Rebuilding the table keeps every row.
+        """
+        columns: tuple[str, ...] | None = None
+        for index in connection.execute("PRAGMA index_list(mapping_prereview_report)").fetchall():
+            if not index["unique"]:
+                continue
+            names = tuple(
+                row["name"]
+                for row in connection.execute(f"PRAGMA index_info({index['name']})").fetchall()
+            )
+            if len(names) == 4:
+                return
+            if len(names) == 3:
+                columns = names
+        if columns is None:
+            return
+        connection.execute("PRAGMA foreign_keys = OFF")
+        connection.executescript(
+            """
+            CREATE TABLE mapping_prereview_report_rebuild (
+                report_id               TEXT PRIMARY KEY,
+                candidate_id            TEXT NOT NULL,
+                candidate_head          TEXT NOT NULL,
+                base_formal_revision_id TEXT NOT NULL DEFAULT '',
+                rule_set_version        TEXT NOT NULL,
+                checks                  TEXT NOT NULL,
+                verdict                 TEXT NOT NULL CHECK (verdict IN ('passed', 'failed')),
+                conflict_matrix         TEXT NOT NULL,
+                created_at              TEXT NOT NULL,
+                UNIQUE (candidate_id, candidate_head, rule_set_version, base_formal_revision_id)
+            );
+            INSERT INTO mapping_prereview_report_rebuild
+                SELECT report_id, candidate_id, candidate_head,
+                       COALESCE(base_formal_revision_id, ''), rule_set_version,
+                       checks, verdict, conflict_matrix, created_at
+                FROM mapping_prereview_report;
+            DROP TABLE mapping_prereview_report;
+            ALTER TABLE mapping_prereview_report_rebuild RENAME TO mapping_prereview_report;
+            """
+        )
+        connection.execute("PRAGMA foreign_keys = ON")
 
     @contextmanager
     def connection(self) -> Iterator[sqlite3.Connection]:
@@ -296,9 +345,10 @@ class SqliteStore:
             row = connection.execute(
                 """
                 SELECT * FROM mapping_prereview_report
-                WHERE candidate_id = ? AND candidate_head = ? AND rule_set_version = ?
+                WHERE candidate_id = ? AND candidate_head = ?
+                  AND rule_set_version = ? AND base_formal_revision_id = ?
                 """,
-                (candidate_id, candidate_head, rule_set_version),
+                (candidate_id, candidate_head, rule_set_version, base_formal_revision_id or ""),
             ).fetchone()
             connection.commit()
         return dict(row)
@@ -345,6 +395,7 @@ class SqliteStore:
                 """
                 SELECT * FROM mapping_prereview_report
                 WHERE candidate_id = ? AND candidate_head = ?
+                ORDER BY created_at DESC, rowid DESC LIMIT 1
                 """,
                 (candidate_id, candidate_head),
             ).fetchone()
@@ -376,6 +427,7 @@ class SqliteStore:
                 """
                 SELECT * FROM mapping_prereview_report
                 WHERE candidate_id = ? AND candidate_head = ?
+                ORDER BY created_at DESC, rowid DESC LIMIT 1
                 """,
                 (candidate_id, candidate_head),
             ).fetchone()

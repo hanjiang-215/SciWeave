@@ -31,10 +31,20 @@ from __future__ import annotations
 
 import sqlite3
 import threading
+import uuid
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterator
+
+
+class DispositionError(Exception):
+    """A disposition request the store refuses; ``code`` is a stable error code."""
+
+    def __init__(self, code: str, detail: str) -> None:
+        super().__init__(f"{code}: {detail}")
+        self.code = code
+        self.detail = detail
 
 EXECUTION_STATUSES = (
     "queued",
@@ -213,3 +223,146 @@ class ExecutionStore:
                 (limit,),
             ).fetchall()
         return [dict(row) for row in rows]
+    # -- disposition (ai4-4pyb follow-up: the gateway used to answer unimplemented) --
+
+    def ask_question(self, execution_id: str, question: str) -> dict[str, object]:
+        """Park a running execution until a human answers ``question``."""
+        if not question.strip():
+            raise DispositionError("invalid_state", "a question cannot be empty")
+        now = utc_now()
+        with self.transaction() as connection:
+            row = connection.execute(
+                "SELECT status FROM execution_records WHERE execution_id = ?",
+                (execution_id,),
+            ).fetchone()
+            if row is None:
+                raise DispositionError("not_found", execution_id)
+            if row["status"] not in {"queued", "running"}:
+                raise DispositionError("invalid_state", row["status"])
+            connection.execute(
+                """UPDATE execution_records
+                   SET status = 'waiting', pending_question = ?, updated_at = ?
+                   WHERE execution_id = ?""",
+                (question, now, execution_id),
+            )
+            self._audit(connection, "execution_question_asked", execution_id, now)
+        return {"execution_id": execution_id, "status": "waiting", "pending_question": question}
+
+    def answer_question(
+        self, execution_id: str, answer: str, *, idempotency_key: str
+    ) -> dict[str, object]:
+        """Record the answer and queue a resumed execution that points at the original."""
+        if not answer.strip():
+            raise DispositionError("invalid_state", "an answer cannot be empty")
+        now = utc_now()
+        with self.transaction() as connection:
+            existing = connection.execute(
+                "SELECT execution_id FROM execution_records WHERE business_key = ?",
+                (f"answer:{idempotency_key}",),
+            ).fetchone()
+            if existing is not None:
+                return {
+                    "execution_id": existing["execution_id"],
+                    "status": "queued",
+                    "idempotent": True,
+                }
+            row = connection.execute(
+                "SELECT task_node_id, session_id, status, pending_question FROM execution_records"
+                " WHERE execution_id = ?",
+                (execution_id,),
+            ).fetchone()
+            if row is None:
+                raise DispositionError("not_found", execution_id)
+            if row["status"] != "waiting" or not row["pending_question"]:
+                raise DispositionError("invalid_state", row["status"])
+            resumed_id = str(uuid.uuid4())
+            connection.execute(
+                """INSERT INTO execution_records
+                   (execution_id, task_node_id, session_id, status, trigger, trigger_ref,
+                    business_key, resume_of, created_at, updated_at)
+                   VALUES (?, ?, ?, 'queued', 'resume', ?, ?, ?, ?, ?)""",
+                (
+                    resumed_id,
+                    row["task_node_id"],
+                    row["session_id"],
+                    execution_id,
+                    f"answer:{idempotency_key}",
+                    execution_id,
+                    now,
+                    now,
+                ),
+            )
+            connection.execute(
+                """UPDATE execution_records
+                   SET status = 'completed', pending_question = NULL, updated_at = ?
+                   WHERE execution_id = ?""",
+                (now, execution_id),
+            )
+            self._audit(connection, "execution_question_answered", execution_id, now)
+        return {"execution_id": resumed_id, "resume_of": execution_id, "status": "queued"}
+
+    def record_review(
+        self, execution_id: str, decision: str, reason: str, *, idempotency_key: str
+    ) -> dict[str, object]:
+        """Append a disposition decision and move the execution to its resulting status."""
+        resulting = {
+            "request_revision": "needs_revision",
+            "reject": "rejected",
+            "request_human_takeover": "human_takeover",
+        }.get(decision)
+        if resulting is None:
+            raise DispositionError("invalid_state", decision)
+        if not reason.strip():
+            raise DispositionError("invalid_state", "a review needs a reason")
+        now = utc_now()
+        with self.transaction() as connection:
+            # Idempotency is checked before the state guard: replaying a decision
+            # on an execution that the first call already moved must return the
+            # first result, not an invalid_state error.
+            replayed = connection.execute(
+                """SELECT decision, resulting_status FROM review_decisions
+                   WHERE idempotency_key = ?""",
+                (idempotency_key,),
+            ).fetchone()
+            if replayed is not None:
+                return {
+                    "execution_id": execution_id,
+                    "decision": replayed["decision"],
+                    "status": replayed["resulting_status"],
+                    "idempotent": True,
+                }
+            row = connection.execute(
+                "SELECT status FROM execution_records WHERE execution_id = ?",
+                (execution_id,),
+            ).fetchone()
+            if row is None:
+                raise DispositionError("not_found", execution_id)
+            if row["status"] not in {"completed", "failed", "needs_revision"}:
+                raise DispositionError("invalid_state", row["status"])
+            connection.execute(
+                """INSERT INTO review_decisions
+                   (idempotency_key, execution_id, decision, reason, resulting_status, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?)""",
+                (idempotency_key, execution_id, decision, reason, resulting, now),
+            )
+            connection.execute(
+                "UPDATE execution_records SET status = ?, updated_at = ? WHERE execution_id = ?",
+                (resulting, now, execution_id),
+            )
+            self._audit(connection, "execution_reviewed", execution_id, now)
+        return {
+            "execution_id": execution_id,
+            "decision": decision,
+            "status": resulting,
+        }
+
+    def _audit(self, connection: sqlite3.Connection, event_type: str, execution_id: str, now: str) -> None:
+        row = connection.execute(
+            "SELECT task_node_id FROM execution_records WHERE execution_id = ?",
+            (execution_id,),
+        ).fetchone()
+        connection.execute(
+            """INSERT INTO audit_events (event_type, task_node_id, execution_id, details, created_at)
+               VALUES (?, ?, ?, '{}', ?)""",
+            (event_type, row["task_node_id"] if row else "", execution_id, now),
+        )

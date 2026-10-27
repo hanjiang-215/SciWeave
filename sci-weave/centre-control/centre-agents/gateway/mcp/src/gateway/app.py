@@ -14,7 +14,7 @@ from typing import Any
 
 from task_agent_worker.config import WorkerSettings
 from task_agent_worker.runtime import FastAgentDeepSeekRuntime, FastAgentPassthroughRuntime
-from task_agent_worker.store import ExecutionStore, utc_now
+from task_agent_worker.store import DispositionError, ExecutionStore, utc_now
 
 from .runtime import RuntimeAdapter, RuntimeOutcome, RuntimeRequest, TestRuntimeAdapter
 
@@ -134,6 +134,20 @@ class GatewayApplication:
         self.caller_id = caller_id
         self.test_runtime_enabled = False
         self.runtime: RuntimeAdapter | None = None
+        # ai4-c61f: a runtime that failed to configure used to look exactly like
+        # a healthy gateway, so every execution stayed queued with no signal.
+        self.runtime_misconfigured: str | None = None
+
+    def mark_runtime_misconfigured(self, reason: str) -> None:
+        """Record why no Worker runtime could be configured; surfaced by health."""
+        self.runtime_misconfigured = reason or "runtime_not_configured"
+        self.test_runtime_enabled = False
+        self.runtime = None
+
+    def runtime_state(self) -> str:
+        if self.runtime_misconfigured is not None:
+            return "misconfigured"
+        return "ready" if self.test_runtime_enabled else "not_configured"
 
     def enable_test_runtime(self, outcome: str = "success", duration_seconds: float = 0) -> None:
         self.test_runtime_enabled = True
@@ -248,7 +262,14 @@ class GatewayApplication:
             return {"execution_id": execution_id, "execution_status": "cancelled", "accepted": True}
 
     def list_pending(self, task_node_id: str | None = None) -> list[dict[str, Any]]:
-        statuses = ("queued", "running", "waiting", "completed", "failed", "cancelled")
+        """Executions that still need a human decision (ai4-k6m2).
+
+        Terminal states (completed/failed/cancelled) are read through
+        ``query_execution``; listing them here made the disposition surface
+        return finished work while hiding the records that actually wait for a
+        reviewer (needs_revision, human_takeover).
+        """
+        statuses = ("queued", "running", "waiting", "needs_revision", "human_takeover")
         placeholders = ", ".join("?" for _ in statuses)
         query = f"""SELECT execution_id, task_node_id, session_id, status AS execution_status,
                          result_summary, error_summary, created_at, updated_at
@@ -262,9 +283,19 @@ class GatewayApplication:
             rows = self.store.connection.execute(query, arguments).fetchall()
         return [dict(row) for row in rows]
 
-    def centre_disposition(self, *_: object) -> None:
-        """Centre Agent disposition tools are intentionally not implemented in this ticket."""
-        raise NotImplementedError
+    def answer_question(
+        self, execution_id: str, answer: str, *, idempotency_key: str
+    ) -> dict[str, Any]:
+        """Record an owner answer and queue the resumed execution."""
+        return self.store.answer_question(execution_id, answer, idempotency_key=idempotency_key)
+
+    def review_execution(
+        self, execution_id: str, decision: str, reason: str, *, idempotency_key: str
+    ) -> dict[str, Any]:
+        """Dispose a finished execution: revise, reject or hand it to a human."""
+        return self.store.record_review(
+            execution_id, decision, reason, idempotency_key=idempotency_key
+        )
 
     def dashboard_sources(self) -> dict[str, Any]:
         """Read-only dashboard gateway/queue source fragment.
@@ -298,7 +329,7 @@ class GatewayApplication:
         services = [
             {"id": "mcp", "label": "处置面 MCP", "status": "ready", "role": "gateway"},
             {"id": "storage", "label": "执行存储", "status": "ready" if self.store.health() else "unavailable", "role": "gateway"},
-            {"id": "worker_runtime", "label": "Worker 运行时", "status": "ready" if self.test_runtime_enabled else "not_configured", "role": "worker"},
+            {"id": "worker_runtime", "label": "Worker 运行时", "status": self.runtime_state(), "role": "worker"},
             {"id": "subscriber", "label": "消息监听", "status": "not_configured", "role": "listener"},
         ]
         return {
@@ -318,7 +349,7 @@ class GatewayApplication:
                 "mcp": "ready",
                 "storage": storage,
                 "ingest": "not_configured",
-                "worker_runtime": "ready" if self.test_runtime_enabled else "not_configured",
+                "worker_runtime": self.runtime_state(),
             },
         }
 
@@ -433,8 +464,25 @@ def make_handler(app: GatewayApplication):
             if not isinstance(name, str) or not isinstance(arguments, dict):
                 return self._protocol_error(request_id, -32602, "invalid params")
             try:
-                if name in {"answer_question", "review_execution"}:
-                    return self._tool_error(request_id, "unimplemented", "Centre Agent disposition is not implemented")
+                if name == "answer_question":
+                    return self._tool_result(
+                        request_id,
+                        app.answer_question(
+                            self._required_string(arguments, "execution_id"),
+                            self._required_string(arguments, "answer"),
+                            idempotency_key=self._required_string(arguments, "idempotency_key"),
+                        ),
+                    )
+                if name == "review_execution":
+                    return self._tool_result(
+                        request_id,
+                        app.review_execution(
+                            self._required_string(arguments, "execution_id"),
+                            self._required_string(arguments, "decision"),
+                            self._required_string(arguments, "reason"),
+                            idempotency_key=self._required_string(arguments, "idempotency_key"),
+                        ),
+                    )
                 if name == "query_execution":
                     result = app.query_execution(self._required_string(arguments, "execution_id"))
                     if result is None:
@@ -455,6 +503,12 @@ def make_handler(app: GatewayApplication):
                 return self._protocol_error(request_id, -32602, "unknown tool")
             except ValueError:
                 return self._protocol_error(request_id, -32602, "invalid params")
+            except DispositionError as error:
+                if error.code == "not_found":
+                    return self._tool_error(request_id, "not_found", "execution was not found")
+                return self._tool_error(
+                    request_id, "invalid_state", "execution cannot be reviewed in its current state"
+                )
             except LookupError:
                 return self._tool_error(request_id, "not_found", "execution was not found")
             except RuntimeError as error:
@@ -479,8 +533,8 @@ def make_handler(app: GatewayApplication):
                 {"name": "query_execution", "description": "Query one Centre Agent execution."},
                 {"name": "cancel_execution", "description": "Request cancellation of an execution."},
                 {"name": "list_pending", "description": "List Centre Agent executions."},
-                {"name": "answer_question", "description": "Answer a Worker question (not implemented)."},
-                {"name": "review_execution", "description": "Dispose an execution (not implemented)."},
+                {"name": "answer_question", "description": "Answer a Worker question; queues a resumed execution that points at the original."},
+                {"name": "review_execution", "description": "Dispose a finished execution: request_revision, reject or request_human_takeover."},
                 {"name": "health", "description": "Read authenticated Centre Agent health."},
             ]
 

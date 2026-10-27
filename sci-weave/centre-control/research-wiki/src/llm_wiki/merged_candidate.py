@@ -57,12 +57,25 @@ class WikiMergedCandidateService:
             raise ValueError("source_proposal_ids is required and must be a non-empty array")
         if not idempotency_key or not idempotency_key.strip():
             raise ValueError("idempotency_key is required")
+        if not base_formal_revision_id or not str(base_formal_revision_id).strip():
+            raise ValueError("base_formal_revision_id is required")
 
         sources = self._load_sources(wiki_domain_id, source_proposal_ids)
         authors = [str(item["submitter_id"]) for item in sources]
         merged_change = dict(document_change)
         merged_change.setdefault("wiki_domain_id", wiki_domain_id)
-        merged_change.setdefault("base_formal_revision_id", base_formal_revision_id)
+        declared_base = merged_change.get("base_formal_revision_id")
+        if declared_base and declared_base != base_formal_revision_id:
+            # The explicit argument wins only when the caller is consistent; a
+            # silently different base would freeze the merged candidate onto a
+            # revision nobody asked for (ai4-qstm).
+            raise ValueError("base_formal_revision_conflict")
+        merged_change["base_formal_revision_id"] = base_formal_revision_id
+        # Every source must judge the same base, otherwise the merge combines
+        # conclusions drawn against different formal revisions.
+        for item in sources:
+            if (item.get("base_formal_revision_id") or "") != base_formal_revision_id:
+                raise ValueError("source_base_mismatch")
         merged_change["submitter_id"] = _merged_submitter(authors)
         # Wiki candidate validation requires document.created_by == submitter;
         # stamp the merged marker onto the revision so it passes the write gate.

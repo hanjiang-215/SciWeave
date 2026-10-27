@@ -148,3 +148,49 @@ class MappingPrereviewLogTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+class ReReviewAfterBaseMovedTests(unittest.TestCase):
+    """ai4-sf8l: a base move must let the same head be judged again."""
+
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.store = SqliteStore(os.path.join(self.tmp.name, "prereview.sqlite"))
+        self.store.initialize()
+        self.rules = os.path.join(self.tmp.name, "rules")
+        Path(self.rules).mkdir()
+        _rule_set_file(self.rules, "1.0.0")
+        self.log = MappingPrereviewLog(self.store, rules_dir=self.rules)
+
+    def _report(self, base: str, verdict: str = "passed"):
+        checks = [{"name": "基准版本", "verdict": verdict}]
+        return self.log.append_report(
+            candidate_id="candidate-1", candidate_head="head-a",
+            base_formal_revision_id=base, rule_set_version="1.0.0",
+            checks=checks, verdict=verdict, conflict_matrix=[],
+        )
+
+    def test_re_review_after_base_moved_appends_a_new_report(self) -> None:
+        first = self._report("rev-1")
+        self.log.append_decision(
+            candidate_id="candidate-1", candidate_head="head-a", reason="base_moved"
+        )
+        self.assertEqual(
+            self.store.prereview_status("candidate-1", "head-a")["status"], "report_stale"
+        )
+
+        second = self._report("rev-2", verdict="failed")
+
+        self.assertNotEqual(second.report_id, first.report_id)
+        self.assertFalse(second.duplicate)
+        status = self.store.prereview_status("candidate-1", "head-a")
+        self.assertEqual(status["status"], "report_current")
+        self.assertEqual(status["base_formal_revision_id"], "rev-2")
+        self.assertEqual(status["verdict"], "failed")
+
+    def test_same_head_rules_and_base_is_still_a_duplicate(self) -> None:
+        first = self._report("rev-1")
+        second = self._report("rev-1")
+
+        self.assertEqual(second.report_id, first.report_id)
+        self.assertTrue(second.duplicate)

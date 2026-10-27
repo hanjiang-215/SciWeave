@@ -161,12 +161,25 @@ class SubscriberWorkerRunner:
     ) -> dict[str, Any]:
         now = utc_now()
         with self.store.transaction() as connection:
-            connection.execute(
+            updated = connection.execute(
                 """UPDATE execution_records SET status = ?, result_summary = ?,
                    error_summary = ?, draft_id = ?, finished_at = ?, updated_at = ?
-                   WHERE execution_id = ?""",
+                   WHERE execution_id = ? AND status = 'running'""",
                 (status, result_summary, error_summary, draft_id, now, now, claimed["execution_id"]),
             )
+            if updated.rowcount == 0:
+                # The record left 'running' while the Worker was busy: a cancel
+                # (or another terminal write) landed first. Keep that state
+                # instead of overwriting it, and release the lease (ai4-k6m2).
+                connection.execute(
+                    "DELETE FROM worker_leases WHERE execution_id = ?",
+                    (claimed["execution_id"],),
+                )
+                current = connection.execute(
+                    "SELECT * FROM execution_records WHERE execution_id = ?",
+                    (claimed["execution_id"],),
+                ).fetchone()
+                return dict(current) if current is not None else dict(claimed)
             connection.execute(
                 "DELETE FROM worker_leases WHERE execution_id = ?",
                 (claimed["execution_id"],),

@@ -3,7 +3,7 @@ from __future__ import annotations
 import threading
 import uuid
 from dataclasses import dataclass
-from typing import Callable
+from typing import Callable, Protocol
 
 
 @dataclass(frozen=True)
@@ -70,6 +70,10 @@ class ExecutionStore:
                 None,
             )
 
+    def get_by_event(self, event_id: str) -> ExecutionRecord | None:
+        with self._lock:
+            return self._by_event.get(event_id)
+
     def _replace(self, updated: ExecutionRecord) -> None:
         for event_id, current in self._by_event.items():
             if current.execution_id == updated.execution_id:
@@ -97,21 +101,97 @@ class WorkerLease:
             self._targets.discard(target_id)
 
 
+class DraftBox(Protocol):
+    """Where a finished run leaves its draft.
+
+    One shape only: ``write`` keyword arguments. The real writer
+    (``BufferMCPDraftWriter``) and the in-memory double both implement it, so
+    the runtime cannot be wired to a collaborator that lacks the method.
+    """
+
+    def write(self, *, target_id: str, payload: str) -> str: ...
+
+
 class FakeDraftBox:
-    def create_draft(self, target_id: str, payload: str) -> str:
+    def write(self, *, target_id: str, payload: str) -> str:
         return f"draft-{target_id}-{uuid.uuid4().hex[:8]}"
 
 
 class WorkAgentRuntime:
-    """The sole runtime seam used by all three service templates."""
+    """The sole runtime seam used by all three service templates.
 
-    def __init__(self, drafts: FakeDraftBox | None = None) -> None:
+    ``handle_message`` keeps the legacy in-memory path (tests and local demos).
+    ``handle_inbound`` is the durable inbox-first path used by the real
+    subscriber: the message is recorded before any execution, a missing
+    workflow binding keeps it ``awaiting_workflow_binding``, and duplicates or
+    restarts are recovered from the inbox instead of being re-run.
+    """
+
+    def __init__(
+        self,
+        drafts: DraftBox | None = None,
+        inbox: object | None = None,
+        binding_resolver: Callable[[str], bool] | None = None,
+    ) -> None:
         self.store = ExecutionStore()
         self.lease = WorkerLease()
-        self.drafts = drafts or FakeDraftBox()
+        self.drafts: DraftBox = drafts or FakeDraftBox()
+        self.inbox = inbox
+        self.binding_resolver = binding_resolver
 
     def handle_message(self, target_id: str, event_id: str, agent_definition: str = "") -> ExecutionRecord:
         return run_one(self.store, self.lease, self.drafts, target_id, event_id, agent_definition)
+
+    def handle_inbound(self, target_id: str, event_id: str, agent_definition: str = "") -> ExecutionRecord:
+        """Durable inbox-first path; falls back to ``handle_message`` without an inbox.
+
+        Returns an ``ExecutionRecord`` whose ``status`` is
+        ``awaiting_workflow_binding`` when the workflow binding is missing, or
+        the completed/completed-or-duplicate execution otherwise.
+        """
+        if self.inbox is None:
+            return self.handle_message(target_id, event_id, agent_definition)
+        dedupe_key = f"{target_id}:{event_id}"
+        bound = self.binding_resolver(target_id) if self.binding_resolver is not None else True
+        status, _created = self.inbox.enqueue(
+            dedupe_key, target_id, event_id, agent_definition, binding_present=bound
+        )
+        if status == "awaiting_workflow_binding":
+            return ExecutionRecord(dedupe_key, target_id, "awaiting_workflow_binding")
+        existing = self.store.get_by_event(event_id)
+        if existing is not None:
+            return existing
+        if status == "processed":
+            # Duplicate delivery after a restart: never re-run a processed row.
+            return ExecutionRecord(dedupe_key, target_id, "processed")
+        try:
+            record = run_one(self.store, self.lease, self.drafts, target_id, event_id, agent_definition)
+        except Exception:
+            # The row stays ``queued``: a crashed or failed run must be
+            # replayable by drain_queued() after a restart. Marking it here
+            # would swallow the message for good.
+            raise
+        self.inbox.mark_processed(dedupe_key)
+        return record
+
+    def bind(self, dedupe_key: str) -> ExecutionRecord | None:
+        """Establish a workflow binding: ``awaiting_workflow_binding`` -> ``queued`` and run."""
+        if self.inbox is None:
+            return None
+        row = self.inbox.get(dedupe_key)
+        if row is None:
+            return None
+        self.inbox.bind(dedupe_key)
+        return self.handle_inbound(row["target_id"], row["event_id"], row["agent_definition"])
+
+    def drain_queued(self) -> list[ExecutionRecord]:
+        """Re-drive persisted ``queued`` rows (restart recovery) and return executions."""
+        if self.inbox is None:
+            return []
+        results: list[ExecutionRecord] = []
+        for row in self.inbox.list_status("queued"):
+            results.append(self.handle_inbound(row["target_id"], row["event_id"], row["agent_definition"]))
+        return results
 
     def run_workflow(self, target_id: str, event_id: str, config: object, agent: Callable[..., str], workflow_name: str, prompt: str) -> ExecutionRecord:
         """Run a configured multi-agent workflow under this one lease/record."""
@@ -135,7 +215,7 @@ class WorkAgentRuntime:
 def run_one(
     store: ExecutionStore,
     lease: WorkerLease,
-    drafts: FakeDraftBox,
+    drafts: DraftBox,
     target_id: str,
     event_id: str,
     agent_definition: str,
@@ -146,7 +226,7 @@ def run_one(
     try:
         if not store.start(execution):
             return execution
-        draft_id = drafts.create_draft(target_id, f"{agent_definition}:{event_id}")
+        draft_id = drafts.write(target_id=target_id, payload=f"{agent_definition}:{event_id}")
         return store.complete(store.get(execution.execution_id) or execution, draft_id)
     finally:
         lease.release(target_id)

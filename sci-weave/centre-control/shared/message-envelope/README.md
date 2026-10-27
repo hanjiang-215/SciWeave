@@ -18,7 +18,15 @@ envelope = Envelope(
     published_at="2026-10-26T08:00:01Z",
     producer=Producer(service="coordinator", instance_id="c-1"),
     routing=Routing(partition_key="task:T1"),
-    payload={"mapping_domain_id": "map-1"},
+    payload={
+        "mapping_domain_id": "map-1",
+        "task_node_id": "T1",
+        "completed_version_ref": "v1",
+        "execution_id": "exec-1",
+        "draft_id": "draft-1",
+        "completed_at": "2026-10-26T08:00:00Z",
+        "result_ref": "result-1",
+    },
 )
 
 body = encode(envelope)      # 校验后编成 UTF-8 JSON 字节
@@ -39,10 +47,13 @@ same = decode(body)          # 解回来并再校验一次
 | `validate(envelope) -> None` | 函数 | 只校验已在内存里的信封，非法时抛具体异常 |
 | `SCHEMA_VERSION` | 常量 | 当前支持的版本，值为 `1` |
 | `MESSAGE_TYPES` | 常量 | 本包认识的消息类型集合 |
+| `PAYLOAD_SCHEMAS` | 常量 | 每种消息类型的载荷必填字段 |
+| `required_payload_fields(message_type)` | 函数 | 取该类型的必填字段，未知类型返回空元组 |
+| `validate_payload(message_type, payload)` | 函数 | 只校验载荷，非法时抛 `PayloadError` |
 | `EnvelopeError` | 异常基类 | 统一兜底时捕它 |
 | `EnvelopeFormatError` / `SchemaVersionError` / `UnknownMessageTypeError` / `PayloadError` | 异常 | 四类失败，见下节 |
 
-`decode` 只接受 `bytes`，会拒绝四种结构性问题：入参不是字节、字节不是 UTF-8 JSON、顶层不是对象、缺 `payload` 键。缺键报格式错误而不是当成空载荷——理由同上。显式写 `{}` 则照常接受，载荷必填由载荷类型化（`ai4-sv1u`）承接，不由本包判定。
+`decode` 只接受 `bytes`，会拒绝四种结构性问题：入参不是字节、字节不是 UTF-8 JSON、顶层不是对象、缺 `payload` 键。缺键报格式错误而不是当成空载荷；显式写 `{}` 则通过格式检查、在载荷校验阶段失败——每种消息类型都有必填载荷字段，空载荷不可能合法。
 
 信封自己的字段缺陷**优先于**版本判断：一封 `schema_version=2` 且 `dedupe_key` 为空的消息报的是格式错误，不是版本错误。想靠 `SchemaVersionError` 触发升级提示的调用方要注意这一点。
 
@@ -83,9 +94,25 @@ same = decode(body)          # 解回来并再校验一次
 
 ## 载荷
 
-本包只校验信封本身，载荷按 `message_type` 结构化由后续票承接。「未知 payload 字段一律容忍」现在就是契约，不会因为载荷类型化而改变——类型化只约束必填项，不约束多余项。
+载荷按 `message_type` 结构化，必填字段见 `PAYLOAD_SCHEMAS`（字段清单来自 `ai4-te1v` 的统一信封表，本包不自行增删）：
 
-载荷按 JSON 语义处理：非字符串键（如整数键）在线上会变成字符串键，`decode` 回来是 `{"1": ...}` 而不是 `{1: ...}`。这是 JSON 的约束而非本包的选择。
+| `message_type` | 必填载荷字段 |
+| --- | --- |
+| `task_handoff_ready` | `mapping_domain_id`、`task_node_id`、`target_node_version_ref`、`target_agent_id`、`pending_handoff_id`、`trigger_revision_id`、`upstream_source_refs`、`dependency_edge_version_refs`、`executor_ref_snapshot` |
+| `task_completed` | `mapping_domain_id`、`task_node_id`、`completed_version_ref`、`execution_id`、`draft_id`、`completed_at`、`result_ref` |
+| `formal_revision_published` | `mapping_domain_id`、`formal_revision_id` |
+| `candidate_created` | `mapping_domain_id`、`candidate_id` |
+| `candidate_head_updated` | `mapping_domain_id`、`candidate_id` |
+
+三条规则：
+
+- **只约束必填项，不约束多余项。** 未知 payload 字段一律容忍并原样往返，容忍式读取不会因为载荷类型化而失效。
+- **多值引用恒为数组。** `upstream_source_refs`、`dependency_edge_version_refs`、`executor_ref_snapshot` 即使只有一个元素也必须是数组；写成单值报 `PayloadError`。形状随数量变化会逼每个消费方写两套分支，而「只有一个」那条分支通常没人测。
+- **键必须是字符串。** JSON 对象键是字符串，整数键在线上会被改写、生产方再也匹配不回来；同时排序序列化无法比较 `int` 与 `str`。报明确的 `PayloadError`，不泄漏 `json` 的 `TypeError`。
+
+`executor_ref_snapshot` 只用于审计，不替代当前正式 Map 的校验：它记录派发当时看到的执行者集合，事后能分辨「当时没有别的执行者」和「当时有但选错了」。
+
+载荷内容本身的合法性（例如 `mapping_domain_id` 是否指向真实域）不在本包判断范围，那是接收方服务的问题；协议包要查它就得先有对方的数据库。
 
 ## 运行测试
 
@@ -93,8 +120,10 @@ same = decode(body)          # 解回来并再校验一次
 uv run --extra test pytest
 ```
 
+本包不提交 `uv.lock`（见下节）。`uv run` 会在本地生成一份，已被 `.gitignore` 忽略，不要提交。
+
 ## 边界提醒
 
 `shared/` 是代码归属边界，不是项目组。按 `docs/TECH_STACK.md`，它不产生组级 `pyproject.toml` 或组级锁文件，各调用方各自提交自己的锁文件。
 
-包内现在只有一个公开面（一个信封 + 一个编解码器），因此源码集中在单个 `__init__.py`，与同目录 `audit-trail` 一致。拆分时机是载荷类型化落地：那时 `validate` 会变成按 `message_type` 分派，`errors.py` / `models.py` / `codec.py` 的划分才有第二个概念支撑。现在拆是为不存在的概念付结构成本。
+源码按概念分三处：`__init__.py` 是信封本体与编解码器，`errors.py` 是四类失败，`payloads.py` 是每种消息类型的载荷规则。载荷类型化落地后 `validate` 按 `message_type` 分派，失败类型又被载荷规则复用，两处都够独立成模块；`models.py` / `codec.py` 仍未拆——信封与编解码器共用同一份校验，拆开只会把一条规则写两遍。

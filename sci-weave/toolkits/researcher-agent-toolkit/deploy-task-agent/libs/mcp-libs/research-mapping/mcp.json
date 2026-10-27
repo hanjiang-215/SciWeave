@@ -6,106 +6,500 @@
   "endpoint": {
     "url_env": "RESEARCH_MAPPING_MCP_URL"
   },
-  "environment": ["RESEARCH_MAPPING_MCP_URL", "RESEARCH_MAPPING_MCP_TOKEN"],
+  "environment": [
+    "RESEARCH_MAPPING_MCP_URL",
+    "RESEARCH_MAPPING_MCP_TOKEN"
+  ],
   "tools": [
     {
       "name": "get_formal_mapping",
       "description": "Read the current formal Research Mapping graph for a domain. Requires the read or centre capability.",
       "input": {
         "type": "object",
-        "required": ["mapping_domain_id"],
-        "properties": {"mapping_domain_id": {"type": "string"}}
+        "required": [
+          "mapping_domain_id"
+        ],
+        "properties": {
+          "mapping_domain_id": {
+            "type": "string"
+          }
+        }
       },
-      "output": {"status": "string", "mapping_domain_id": "string", "formal_revision_id": "string", "commit_hash": "string", "documents": "array of graph records"},
-      "examples": [{"mapping_domain_id": "iris-demo"}],
-      "allowed": ["formal route lookup", "dependency inspection"],
-      "failures": ["denied", "unavailable", "unknown_domain"]
+      "output": {
+        "status": "string",
+        "mapping_domain_id": "string",
+        "formal_revision_id": "string",
+        "commit_hash": "string",
+        "documents": "array of graph records"
+      },
+      "examples": [
+        {
+          "mapping_domain_id": "iris-demo"
+        }
+      ],
+      "allowed": [
+        "formal route lookup",
+        "dependency inspection"
+      ],
+      "failures": [
+        "denied",
+        "unavailable",
+        "unknown_domain"
+      ]
+    },
+    {
+      "name": "get_formal_mapping_at_revision",
+      "description": "Read the exact formal Research Mapping snapshot pinned by a specific formal_revision_id (historical activated revision), using the same consistency gates as the current pointer read. Requires the read or centre capability.",
+      "input": {
+        "type": "object",
+        "required": [
+          "mapping_domain_id",
+          "formal_revision_id"
+        ],
+        "properties": {
+          "mapping_domain_id": {
+            "type": "string"
+          },
+          "formal_revision_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "output": {
+        "status": "string"
+      },
+      "examples": [],
+      "allowed": [],
+      "failures": [
+        "denied",
+        "unavailable",
+        "invalid_arguments"
+      ]
     },
     {
       "name": "list_candidates",
       "description": "Read the candidate record associated with a submission. Requires the read or centre capability.",
       "input": {
         "type": "object",
-        "required": ["submission_id"],
-        "properties": {"submission_id": {"type": "string"}}
+        "required": [
+          "submission_id"
+        ],
+        "properties": {
+          "submission_id": {
+            "type": "string"
+          }
+        }
       },
-      "output": {"candidate": "candidate record or null"},
-      "examples": [{"submission_id": "sub-1"}],
-      "allowed": ["candidate review", "pre-review inspection"],
-      "failures": ["denied", "unavailable"]
+      "output": {
+        "candidate": "candidate record or null"
+      },
+      "examples": [
+        {
+          "submission_id": "sub-1"
+        }
+      ],
+      "allowed": [
+        "candidate review",
+        "pre-review inspection"
+      ],
+      "failures": [
+        "denied",
+        "unavailable"
+      ]
+    },
+    {
+      "name": "list_reviewable_candidates",
+      "description": "Read the same-time reviewable candidate set (not merged, rejected or abandoned) with exact candidate head, base formal revision and immutable content snapshot. Requires the read or centre capability.",
+      "input": {
+        "type": "object",
+        "required": [
+          "mapping_domain_id"
+        ],
+        "properties": {
+          "mapping_domain_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "output": {
+        "status": "string"
+      },
+      "examples": [],
+      "allowed": [],
+      "failures": [
+        "denied",
+        "unavailable",
+        "invalid_arguments"
+      ]
     },
     {
       "name": "submit_candidate",
       "description": "Submit a Mapping candidate change set against the exact formal base. Requires candidate_submit or centre capability.",
       "input": {
         "type": "object",
-        "required": ["change_set", "idempotency_key"],
-        "properties": {"change_set": {"type": "object"}, "idempotency_key": {"type": "string"}}
+        "required": [
+          "change_set",
+          "idempotency_key"
+        ],
+        "properties": {
+          "change_set": {
+            "type": "object"
+          },
+          "idempotency_key": {
+            "type": "string"
+          }
+        }
       },
-      "output": {"status": "string", "candidate_id": "string", "candidate_head": "string", "base_formal_revision_id": "string"},
-      "examples": [{"change_set": {"add_task_node": "T4"}, "idempotency_key": "cand-1"}],
-      "allowed": ["proposing a route change"],
-      "failures": ["denied", "invalid_change_set", "base_moved", "idempotency_conflict"]
+      "output": {
+        "status": "string",
+        "candidate_id": "string",
+        "candidate_head": "string",
+        "base_formal_revision_id": "string"
+      },
+      "examples": [
+        {
+          "change_set": {
+            "add_task_node": "T4"
+          },
+          "idempotency_key": "cand-1"
+        }
+      ],
+      "allowed": [
+        "proposing a route change"
+      ],
+      "failures": [
+        "denied",
+        "invalid_change_set",
+        "base_moved",
+        "idempotency_conflict"
+      ]
     },
     {
       "name": "preview_candidate",
       "description": "Build immutable diff review evidence for a fixed candidate head. Requires candidate_review or centre capability.",
       "input": {
         "type": "object",
-        "required": ["proposal_id", "base_formal_revision_id", "candidate_head"],
+        "required": [
+          "proposal_id",
+          "base_formal_revision_id",
+          "candidate_head"
+        ],
         "properties": {
-          "proposal_id": {"type": "string"},
-          "base_formal_revision_id": {"type": "string"},
-          "candidate_head": {"type": "string"}
+          "proposal_id": {
+            "type": "string"
+          },
+          "base_formal_revision_id": {
+            "type": "string"
+          },
+          "candidate_head": {
+            "type": "string"
+          }
         }
       },
-      "output": {"status": "string", "proposal_id": "string", "buffer_id": "string", "diff": "object", "impact": "object"},
-      "examples": [{"proposal_id": "prop-1", "base_formal_revision_id": "rev-1", "candidate_head": "abc123"}],
-      "allowed": ["candidate review material"],
-      "failures": ["denied", "candidate_not_found", "head_mismatch"]
+      "output": {
+        "status": "string",
+        "proposal_id": "string",
+        "buffer_id": "string",
+        "diff": "object",
+        "impact": "object"
+      },
+      "examples": [
+        {
+          "proposal_id": "prop-1",
+          "base_formal_revision_id": "rev-1",
+          "candidate_head": "abc123"
+        }
+      ],
+      "allowed": [
+        "candidate review material"
+      ],
+      "failures": [
+        "denied",
+        "candidate_not_found",
+        "head_mismatch"
+      ]
     },
     {
       "name": "record_review",
       "description": "Record a review decision for a merge-request buffer. Requires candidate_review or centre capability.",
       "input": {
         "type": "object",
-        "required": ["buffer_id", "decision", "reason"],
+        "required": [
+          "buffer_id",
+          "decision",
+          "reason"
+        ],
         "properties": {
-          "buffer_id": {"type": "string"},
-          "decision": {"type": "string", "enum": ["approved", "returned", "rejected"]},
-          "reason": {"type": "string"}
+          "buffer_id": {
+            "type": "string"
+          },
+          "decision": {
+            "type": "string",
+            "enum": [
+              "approved",
+              "returned",
+              "rejected"
+            ]
+          },
+          "reason": {
+            "type": "string"
+          }
         }
       },
-      "output": {"status": "string", "buffer_id": "string", "decision": "string"},
-      "examples": [{"buffer_id": "buf-1", "decision": "approved", "reason": "diff verified"}],
-      "allowed": ["candidate review"],
-      "failures": ["denied", "buffer_not_found", "invalid_decision", "invalid_state"]
+      "output": {
+        "status": "string",
+        "buffer_id": "string",
+        "decision": "string"
+      },
+      "examples": [
+        {
+          "buffer_id": "buf-1",
+          "decision": "approved",
+          "reason": "diff verified"
+        }
+      ],
+      "allowed": [
+        "candidate review"
+      ],
+      "failures": [
+        "denied",
+        "buffer_not_found",
+        "invalid_decision",
+        "invalid_state"
+      ]
     },
     {
       "name": "formalize_candidate",
       "description": "Promote an Owner-approved candidate through atomic SQLite activation. Requires formalize or centre capability.",
       "input": {
         "type": "object",
-        "required": ["merge_request_id", "operation_id"],
-        "properties": {"merge_request_id": {"type": "string"}, "operation_id": {"type": "string"}}
+        "required": [
+          "merge_request_id",
+          "operation_id"
+        ],
+        "properties": {
+          "merge_request_id": {
+            "type": "string"
+          },
+          "operation_id": {
+            "type": "string"
+          }
+        }
       },
-      "output": {"status": "string", "formal_revision_id": "string", "reason_code": "string", "attempt_number": "integer"},
-      "examples": [{"merge_request_id": "mr-1", "operation_id": "op-1"}],
-      "allowed": ["Project Owner formalization"],
-      "failures": ["denied", "not_approved", "operation_id_conflict", "activation_failed"]
+      "output": {
+        "status": "string",
+        "formal_revision_id": "string",
+        "reason_code": "string",
+        "attempt_number": "integer"
+      },
+      "examples": [
+        {
+          "merge_request_id": "mr-1",
+          "operation_id": "op-1"
+        }
+      ],
+      "allowed": [
+        "Project Owner formalization"
+      ],
+      "failures": [
+        "denied",
+        "not_approved",
+        "operation_id_conflict",
+        "activation_failed"
+      ]
     },
     {
       "name": "reconcile_formalization",
       "description": "Resume the same formalization operation identity. Requires formalize or centre capability.",
       "input": {
         "type": "object",
-        "required": ["operation_id"],
-        "properties": {"operation_id": {"type": "string"}}
+        "required": [
+          "operation_id"
+        ],
+        "properties": {
+          "operation_id": {
+            "type": "string"
+          }
+        }
       },
-      "output": {"status": "string", "formal_revision_id": "string", "reason_code": "string"},
-      "examples": [{"operation_id": "op-1"}],
-      "allowed": ["recovering an interrupted formalization"],
-      "failures": ["denied", "unknown_operation", "activation_failed"]
+      "output": {
+        "status": "string",
+        "formal_revision_id": "string",
+        "reason_code": "string"
+      },
+      "examples": [
+        {
+          "operation_id": "op-1"
+        }
+      ],
+      "allowed": [
+        "recovering an interrupted formalization"
+      ],
+      "failures": [
+        "denied",
+        "unknown_operation",
+        "activation_failed"
+      ]
+    },
+    {
+      "name": "append_prereview_log",
+      "description": "Append one prereview report, or one invalidation decision, to the Mapping governance log. Append-only: reports and decisions are never edited. Passing ``reason`` (head_moved/base_moved) appends an invalidation decision; otherwise a report row is appended under the (candidate_id, candidate_head, rule_set_version) unique key. Requires the centre capability.",
+      "input": {
+        "type": "object",
+        "required": [
+          "candidate_id",
+          "candidate_head"
+        ],
+        "properties": {
+          "candidate_id": {
+            "type": "string"
+          },
+          "candidate_head": {
+            "type": "string"
+          },
+          "base_formal_revision_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "rule_set_version": {
+            "type": "string"
+          },
+          "verdict": {
+            "type": "string",
+            "enum": [
+              "passed",
+              "failed"
+            ]
+          },
+          "checks": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "verdict": {
+                  "type": "string"
+                },
+                "reason_code": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "evidence_summary": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              }
+            }
+          },
+          "conflict_matrix": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "candidate_id": {
+                  "type": "string"
+                },
+                "overlap": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "head_moved",
+              "base_moved"
+            ]
+          },
+          "superseding_report_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "output": {
+        "status": "string"
+      },
+      "examples": [],
+      "allowed": [],
+      "failures": [
+        "denied",
+        "unavailable",
+        "invalid_arguments"
+      ]
+    },
+    {
+      "name": "create_merged_candidate",
+      "description": "Create one merged Mapping candidate branch from source candidates on the same formal base. Only creates a new branch; existing candidates are never edited. The author field records every source author; source authors get no operation rights; a merged candidate may not be merged again. Requires the merged_candidate capability.",
+      "input": {
+        "type": "object",
+        "required": [
+          "mapping_domain_id",
+          "source_proposal_ids",
+          "base_formal_revision_id",
+          "change_set",
+          "idempotency_key"
+        ],
+        "properties": {
+          "mapping_domain_id": {
+            "type": "string"
+          },
+          "source_proposal_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "base_formal_revision_id": {
+            "type": "string"
+          },
+          "change_set": {
+            "type": "object",
+            "properties": {
+              "submission_id": {
+                "type": "string"
+              },
+              "proposal_id": {
+                "type": "string"
+              },
+              "nodes": {
+                "type": "array"
+              },
+              "edges": {
+                "type": "array"
+              }
+            }
+          },
+          "idempotency_key": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "output": {
+        "status": "string"
+      },
+      "examples": [],
+      "allowed": [],
+      "failures": [
+        "denied",
+        "unavailable",
+        "invalid_arguments"
+      ]
     }
   ]
 }

@@ -7,6 +7,16 @@ from .mcp_resources import MCPResource, MCPResourceError, MCPTool, MCPRegistry, 
 from .queue import KafkaQueueClient, QueueClient, QueueMessage
 from .workflows import WorkflowExecutor, WorkflowRunResult
 from .queue import FakeQueue  # noqa: F401  (forwarded for template/tests compatibility)
+from .draft_writer import BufferMCPDraftWriter, DraftWriteError
+from .durable import ExecutionNotFound, InvalidTransition, SqliteExecutionStore
+from .fast_agent_runtime import (
+    AgentOutcome,
+    FastAgentDeepSeekRuntime,
+    FastAgentSettings,
+    PassthroughAgentRuntime,
+    build_agent_runtime,
+)
+from .inbox import InboxError, InboxStore
 from .runtime import (
     Execution,
     ExecutionRecord,
@@ -28,10 +38,20 @@ __all__ = [
     "AgentResource", "ResourceConflictError", "ResourceError", "ResourceKind", "ResourceNotFoundError", "ResourceRegistry", "ResourceVersionError", "load_agent_registry",
     "MCPResource", "MCPResourceError", "MCPTool", "MCPRegistry", "load_mcp_registry",
     "KafkaQueueClient", "QueueClient", "QueueMessage",
-    "load_workflow_yaml",
-    "workflow_to_fast_agent_input",
     "WorkflowExecutor",
     "WorkflowRunResult",
+    "BufferMCPDraftWriter",
+    "DraftWriteError",
+    "InboxError",
+    "InboxStore",
+    "SqliteExecutionStore",
+    "FastAgentDeepSeekRuntime",
+    "FastAgentSettings",
+    "PassthroughAgentRuntime",
+    "build_agent_runtime",
+    "AgentOutcome",
+    "ExecutionNotFound",
+    "InvalidTransition",
     "Execution",
     "ExecutionRecord",
     "ExecutionStore",

@@ -3,7 +3,7 @@
 研究员端 Task Agent 套件，按目标交付结构组织：
 
 - `runtime/`：状态记录、Worker Lease、配置模型、资源注册表和单 Worker 多 Agent 工作流。
-- `service-template/`：`gateway/mcp`、`gateway/subscriber`、`worker` 三个启动壳。
+- `service-template/`：`gateway/subscriber` 是已实现的常驻消费者；`gateway/mcp` 是研究员处置面，提供 `docs/data-flow/work-agent.md` 的六个工具（`health`/`query_execution`/`list_pending`/`cancel_execution`/`answer_question`/`review_execution`），读写与 subscriber 共用的 SQLite 执行库；`worker` 是一次性执行壳，用 `build_agent_runtime()` 装配真实 fast-agent 运行时，把队列里的一条执行跑完并写入草稿箱；缺 Key 启动即失败，passthrough 仅在 `SCIWEAVE_GATEWAY_PASSTHROUGH_RUNTIME=1` 时可用。
 - `agent-definitions/`：兼容入口的 Agent 定义、schema；可复用 Workflow 资源位于 `libs/workflow-libs/`。
 - `libs/agent-libs/`：纯 YAML/JSON/Markdown Agent 行为资源，由 runtime 加载。
 - `libs/mcp-libs/`：纯 JSON/YAML MCP 工具描述资源，由 runtime 加载。
@@ -34,6 +34,22 @@ Agent、MCP、Workflow libs 是纯配置资源，不单独执行 `uv sync`；由
 已在 `.env.example` 说明。真实链路最小验证见
 `deploy-task-agent-skills/verify-task-agent/references/e2e-checklist.md`。
 
+### Inbox 与重启恢复
+
+配置 `DATABASE_PATH` 后，subscriber 先把每条入站消息写入 SQLite Inbox 再驱动执行：
+
+- 缺少 Workflow binding 的消息保持 `awaiting_workflow_binding`，不产生执行；
+  binding 建立（`runtime.bind`）后转为 `queued` 再执行；
+- 重复投递按 `dedupe_key` 幂等，不产生第二轮执行；
+- 订阅器启动时先 `drain_queued()` 重放上次运行遗留的 `queued` 行，崩溃不吞消息。
+
+### 草稿写入
+
+配置 `DRAFT_BUFFER_MCP_URL` 与 `DRAFT_BUFFER_MCP_TOKEN` 后，执行结果写入真实中央草稿箱
+（Streamable HTTP `create_draft`）；任一为空时使用假草稿箱（本地演示/测试）。
+领域命名空间由 `SCIWEAVE_DRAFT_NAMESPACE` 指定（默认 `mapping`）。端点、令牌与命名空间
+全部来自环境变量，仓库不持有真实凭据。
+
 ## 启动边界
 
-安装两个 systemd 用户服务后执行 `systemctl --user enable --now sciweave-task-agent-mcp.service sciweave-task-agent-subscriber.service`。打开 harness 时只执行 `hooks/check-services.sh` 检查并补启动；关闭 harness 不停止用户级常驻服务。
+安装 systemd 用户服务后执行 `systemctl --user enable --now sciweave-task-agent-subscriber.service`。`sciweave-task-agent-mcp.service` 需要 `DATABASE_PATH` 与 `DISPOSITION_MCP_TOKEN`，未配置时启动即失败。打开 harness 时只执行 `hooks/check-services.sh` 检查并补启动；关闭 harness 不停止用户级常驻服务。

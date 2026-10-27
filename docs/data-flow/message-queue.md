@@ -34,7 +34,7 @@ Registry 不保存 `task_node_id` 集合，也不保存“某个 Agent 负责哪
 
 该角色的职责是：
 
-- 消费 `sciweave.dependency-notice`；
+- 消费 `sciweave.governance-events`，路由 `formal_revision_published` 与 `task_completed`；
 - 查询当前正式 Mapping，而不是复制 TaskNode/DependencyEdge 正文；
 - 判断正式节点、正式边、版本引用、所需输出和激活条件；
 - 创建或更新 `PendingHandoff`；
@@ -49,16 +49,15 @@ Registry 不保存 `task_node_id` 集合，也不保存“某个 Agent 负责哪
 
 ```text
 sciweave.dependency-notice
-    → formal_revision_published、task_completed
-    → 交接协调服务
+    → 保留 topic，目前没有任何生产者或消费者（未实现）
 
 sciweave.task-handoff.<agent_id>
     → task_handoff_ready
     → task-workflow 的 Task Agent subscriber
 
 sciweave.governance-events
-    → candidate_created、candidate_head_updated、formal_revision_published
-    → centre-workflow 的可扩展订阅者
+    → candidate_created、candidate_head_updated、formal_revision_published、task_completed
+    → 交接协调服务（formal_revision_published、task_completed）与 centre-workflow 的可扩展订阅者
 ```
 
 首版没有 `sciweave.notification-intent`。`human_notification_intent` 与 `task_terminal_summary` 不经 Redpanda，由交接协调服务通过 email-service 的受鉴权 MCP `send_notification` 投递。
@@ -107,7 +106,7 @@ sciweave.governance-events
 
 ### 下游依赖通知
 
-`sciweave.dependency-notice` 上的 `formal_revision_published` 表示：
+`sciweave.governance-events` 上的 `formal_revision_published` 表示：
 
 > 上游已经产生新的正式事实，相关下游需要知道这次变化。
 
@@ -132,7 +131,7 @@ sciweave.governance-events
 
 ```text
 formal_revision_published / task_completed
-    → sciweave.dependency-notice
+    → sciweave.governance-events
     → 交接协调服务
     → 检查正式目标、依赖输出和激活条件
     → task_handoff_ready
@@ -142,7 +141,7 @@ formal_revision_published / task_completed
     → Worker
 ```
 
-`sciweave.dependency-notice` 的唯一消费者是交接协调服务，不是 Centre Agent 或 email-service。Centre Agent 通过独立消费者组订阅 `sciweave.governance-events` 观察治理事件，但不负责全局依赖重算；email-service 不消费任何 Redpanda topic。
+`sciweave.governance-events` 有两个消费者，各自使用独立消费者组：交接协调服务订阅并路由 `formal_revision_published` 与 `task_completed`，Centre Agent 订阅 `candidate_created`、`candidate_head_updated` 与 `formal_revision_published` 观察治理事件，但不负责全局依赖重算。`sciweave.dependency-notice` 是保留 topic，目前没有生产者也没有消费者；email-service 不消费任何 Redpanda topic。
 
 ## 严格的版本约束
 
@@ -360,13 +359,16 @@ sciweave.task-handoff.<agent_id>
 
 则不发布 `task_handoff_ready`。交接协调服务通过 email-service 的受鉴权 MCP `send_notification` 提交一条 `human_notification_intent`，不经 Redpanda。
 
-这四种原因不共用一个 `notification_kind`，因为它们要求的动作不同：
+上述原因不共用一个 `notification_kind`，因为它们要求的动作不同：
 
 ```text
 executor_refs 为空                     → workflow_binding_required
 executor_refs 指向未登记的 agent_id    → workflow_load_failed
 已注销 / 无可用实例 / 只配置人工处理    → agent_unavailable
+入边带激活条件、协调无法自动判定       → dependency_condition_hold
 ```
+
+`dependency_condition_hold` 的触发点不在本节「没有可用 Workflow Agent」的判断里：入边带 `activation_condition` 且协调服务无法自动判定时不得猜条件，只能挂起并通知该节点的 `task_owner_id`。第四种 kind 与通知去重键的粒度见 [消息队列协作模型分支](../../.tickets/ai4-te1v.md) 的「2026-10-27 修订」。
 
 收件人一律是该节点的 TaskNode Owner，取自 `TaskNode.task_owner_id`；email-service 按这个 `principal_id` 经 Registry 解析邮箱并发送邮件。邮件说明：
 
@@ -524,7 +526,7 @@ backoff_strategy   = 指数退避（1s, 2s, 4s, 8s, 16s，封顶 60s）
 ```text
 上游正式版本发布
     ↓
-交接协调服务消费 sciweave.dependency-notice
+交接协调服务消费 sciweave.governance-events
     ↓
 查询当前正式 DependencyEdge
     ↓
