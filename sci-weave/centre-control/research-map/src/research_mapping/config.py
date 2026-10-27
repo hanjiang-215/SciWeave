@@ -82,6 +82,10 @@ class MappingConfig:
             caller_capabilities=caller_capabilities or None,
             audit_sqlite_path=audit_sqlite_path,
             prereview_rules_dir=prereview_rules_dir,
+            # ai4-e1jk: 这一项原来只读进局部变量、没有传给 cls(...)，于是
+            # create_governance_publisher 永远拿到 None，治理事件恒为 Noop——
+            # 候选提交与正式发布都不再通知 coordinator 和 Centre Agent。
+            governance_kafka_bootstrap=governance_kafka_bootstrap,
         )
 
 
