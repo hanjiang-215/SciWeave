@@ -150,7 +150,7 @@
 | 7 | `CHANGELOG.md` | 最后写入 2026-10-27 03:14，其后当天 113 个提交未收录；内容混入 `Bring origin/develop into the registry branch` 这类合并噪声 | 不能当发布日志用；提交前若要用需重跑 `git cliff` |
 | 8 | `scripts/demo-dashboard.ps1` 收尾提示 | 打印 `停止 : pwsh scripts/demo-dashboard.ps1 -Stop`，而本机没有 `pwsh`（只有 Windows PowerShell 5.1） | 演示现场照抄会失败 |
 | 9 | `shared/message-envelope` | 87 项测试全绿，但**生产代码零引用**：`git grep message_envelope -- '*.py' ':!*/tests/*'` 无命中。coordinator 的 `adapter_publisher.py`、`gateway/ingest`、service-template 仍各自手搓 dict | 与 10-22 时 `audit-trail` 的处境相同：写完没人用。区别是 `audit-trail` 已经接上了，这个还没有。消息协议一旦两边各自演化，信封的版本校验就形同虚设 |
-| 10 | `toolkits/.../service-template/{worker,gateway/mcp,gateway/subscriber}` | 三个角色都只有 `src/main.py`，**没有 `pyproject.toml`**，不是可安装包 | 套件对研究员的承诺是「上传 zip 就能装就能跑」（`ai4-grlc` 的口径），而这三个入口目前只能靠 `PYTHONPATH` 手拼起来跑 |
+| 10 | `toolkits/.../service-template/{worker,gateway/mcp,gateway/subscriber}` | 三个角色都只有 `src/main.py`、没有 `pyproject.toml`。**复核后确认这是设计，不是缺陷**：三者与 `runtime/` 同属一个 uv 项目，用 `uv run --project runtime` 借用已安装的 `work_agent_runtime`，我实测三条命令都能起来并按缺配置报错。真正的缺口是**这套启动方式没有写进任何文档**，读者只能靠猜 | 套件对研究员的承诺是「装好就能跑」，而入口命令不在 README 里 |
 | 11 | `buffer/src/draft_buffer/main.py:98` | `SCIWEAVE_BUFFER_DEMO=1` 时只打印 `{"status":"ready"}` 然后 `return 0`，不提供服务 | 演示环境若误用这个开关，草稿箱会「启动成功但什么都不做」——与 `ai4-c61f` 修掉的静默降级是同一类形状 |
 
 `ai4-grlc` 记的那条跨平台缺陷我认为是真的：`Path("C:/absolute").is_absolute()` 在 POSIX 上是 `False`，`parts` 为 `('C:', 'absolute')`，两个条件都不成立，逃逸路径会被静默接受。本机 Windows 上 runtime 106 项全绿，正说明这条只在 Linux 上红——而 Linux 上没人跑。
@@ -264,4 +264,28 @@ python .cursor/skills/engineering/ticket-index/scripts/ticket_index.py check
 2. 未做安全渗透：MCP 鉴权、能力档越权、令牌作用域只做了代码阅读与既有测试覆盖的确认。
 3. 未跑 `docker compose` 形态的 demo-stack（用的是同源的本机三进程脚本），因此镜像构建链路依赖 `ai4-0uu6` / README 的记载。
 4. 未评估 SciencePal 平台侧能力边界；T1/T2 能否由 SciencePal 稳定承载，取决于平台沙箱能否装下这两个脚本。
-5. 本次审查未修改任何代码与工单；文中列出的 11 处缺陷未建票，处置方式待确认。
+5. 本次审查（上午那一轮）未修改任何代码与工单；晚间已按用户要求处置，见下节。
+
+---
+
+## 十、处置结果（同日 19:00–21:00 修复）
+
+用户要求「帮我修复」，11 条里 9 条已改并验证，2 条改为登记决策。全量矩阵修复后 **21/21 阶段通过、863 项用例、22 项跳过**（较修复前多 2 项，来自新增的 buffer 演示开关测试）。
+
+| # | 处置 | 票 | 关键验证 |
+| --- | --- | --- | --- |
+| 1 | 已修：`$failed` 包成数组 | `ai4-tve9` | 造出「恰好一个阶段失败」的真实场景，修前打印「通过 3 / 共 3」，修后「通过 2 / 共 3」并列出失败阶段 |
+| 2 | 已修：把被覆盖的断言并回它们真正归属的用例 | `ai4-u2rd` | 故意把 `notification_failed` 改成错值，测试立刻红，证明断言确实在执行；还原后 9 passed |
+| 3 | 已修：`docs/ci.md` 改为 17 位置 / 863 项，并注明数字以脚本汇总为准 | `ai4-tve9` | 与实跑汇总行一致 |
+| 4 | 已修：README 补 `coordinator`、`email-service`、`shared/message-envelope` 三行 | `ai4-g1y7` | 与实际目录逐一对齐 |
+| 5 | 已修：规格状态改为「已实现并合并」，并核对 6 张下游票全部 closed | `ai4-g1y7` | `ai4-6s53`/`ai4-z0lb`/`ai4-1qyc`/`ai4-91tk`/`ai4-txhf`/`ai4-jdjx` 均 closed |
+| 6 | 已清：本地 `sci-weave/task-agent/` 已删除 | 无票（本地残留，非仓库内容） | 删除前确认 0 个被跟踪文件、159MB 全是 `.venv`/`egg-info`；删除后 `sci-weave/` 只剩 `centre-control`/`demo-stack`/`service`/`toolkits` |
+| 7 | 已重跑 `git cliff` 生成 `CHANGELOG.md` | 「#7」并入 `ai4-g1y7` | 见该提交；生成后不再含合并噪声行 |
+| 8 | 已修：停止提示按本机实际可用壳打印 | `ai4-g1y7` | 无 `pwsh` 时打印 `powershell scripts/demo-dashboard.ps1 -Stop` |
+| 9 | 改为登记决策：`message-envelope` README 写明「当前无生产调用方」，并列出接线前置条件与顺序 | `ai4-4bxp` | 未改线格式——`Envelope` 与现有扁平消息不兼容，4 天内做协议迁移的收益低于风险 |
+| 10 | 复核后修正审查结论：无 `pyproject.toml` 是设计；改为在套件 README 写出三条启动命令 | `ai4-g1y7` | 三条 `uv run --project runtime python ../service-template/.../main.py` 实测均能启动并按缺配置报错 |
+| 11 | 已修：演示短路改为 `status: stub` + `serving: false` + stderr 告警，并补 2 条测试 | `ai4-g1y7` | buffer 由 28 passed 变 30 passed |
+
+另外补了一处审查时没写进清单、但同属「假绿」的问题：**`compileall` 阶段依赖上一次留下的 `__pycache__`**。清掉缓存后该阶段在受限环境下车库级失败，说明它的绿是缓存给的。已改为 `PYTHONPYCACHEPREFIX=var/pycache-ci`（每次先清空），修复后在零缓存工作区首跑即通过，`src/` 里也不再落生成物。
+
+**仍未修、且不建议在本轮修的**：`ai4-grlc` 的跨平台路径缺陷（需在 Linux 实跑验证）、CI 在 Gitee 上仍不执行（Gitee Go 未接，属外部配置）、SciencePal 承载 Iris T1/T2（`ai4-aaff`，赛事硬门槛，优先级高于以上任何一条）。
