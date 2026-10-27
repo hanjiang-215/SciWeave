@@ -217,9 +217,18 @@ GET :8702/api/dashboard/snapshot                  → mode=live，gateway 来源
 docker compose --env-file .env exec centre supervisorctl tail -f coordinator stderr
 ```
 
-## 已知缺口（不属于本单元范围）
+## 已知缺口与已修项
 
-- `research-wiki` 的正式化**不发布治理事件**（`WikiManagementService` 无治理事件端口），wiki 候选的治理闭环依赖 Centre Agent 的快照扫描而非事件推送。见 `docs/AI4Sci-review-2026-10-27.md` 与工单记录。
-- `SCIWEAVE_MAPPING_KAFKA_BOOTSTRAP` 曾在 `research-map` 的 config 里被读取后丢弃（治理事件恒为 Noop），本轮已修复并补回归测试（`ai4-e1jk`）。
+已修（本轮）：
+
+- `SCIWEAVE_MAPPING_KAFKA_BOOTSTRAP` 曾在 `research-map` 的 config 里被读取后丢弃（治理事件恒为 Noop）——已修并补回归测试（`ai4-e1jk`）。
+- `research-wiki` 的 `main.py` 没有注入治理事件发布器，wiki 候选与正式发布不产生事件——已接线（`ai4-u5e6`）。
+- 两个领域的 Kafka 发布器改为**惰性连接**：`KafkaProducer` 构造期会同步等元数据（默认 60 秒），broker 不可达时抛错，原来会把管理 MCP 一起拖成 FATAL（`ai4-xncm`）。
+- coordinator 的轮询异常改为**退避重试**：broker 抖动不再终止进程（`ai4-xncm`）。
+- 领域 MCP 的写工具描述与 README 不再声称 `centre` 能写（`ai4-k81j`）。
+
+仍属缺口：
+
+- 仓库自带 Redpanda 的 external 监听 advertise 为 `localhost:19092`，容器内不可达，本地必须叠加 `compose.local-redpanda.yaml`。
 - 公网暴露的 TLS 与反向代理不在本单元内；MCP 端点已有 Bearer 鉴权，看板与 Dashboard API 建议置于反代之后。
-- coordinator 在 Kafka 短暂不可达时会被异常打断并由 supervisord 重启（不是静默丢事件，但会表现为 FATAL 重试循环），排障时先看 `redpanda` 是否可达。
+- 未在 Linux 主机上验证；SMTP 与真实模型执行未演练。

@@ -342,3 +342,15 @@ GET :8702/api/dashboard/snapshot → mode=live；gateway=fresh；
 4. 三个领域库在全新环境不存在：草稿箱初始化 schema 拿到 404 直接退出（`schema_initialization_failed`），看板 mapping/wiki 恒 `unavailable`。已补幂等引导脚本 `centre-stack/scripts/bootstrap_terminusdb.py` 与 `compose run --rm bootstrap`。
 
 另外两点属于**环境事实**而非代码缺陷，已写进 README：仓库自带 Redpanda 把 external 监听 advertise 成 `localhost:19092`，容器内连不上（用附带的 `compose.local-redpanda.yaml` 接入其 docker 网络走 `redpanda:9092`）；coordinator 在 broker 短暂不可达时会被异常打断并由 supervisord 重启。
+
+### 11.6 按建议继续的三项修复（23:35–24:05）
+
+| 票 | 改动 | 验证 |
+| --- | --- | --- |
+| `ai4-u5e6` | `research-wiki` 接线治理事件：`WikiConfig` 新增 `SCIWEAVE_WIKI_KAFKA_BOOTSTRAP`、`llm_wiki.governance_events` 补 `create_governance_publisher`（可注入 `producer_factory`）、`main.py` 注入 publisher；`.env.example` 与 centre-stack compose 同步 | wiki 136 → **141 passed**（新增 5 项），12 skipped |
+| `ai4-xncm` | 两个领域的 Kafka 发布器改为**惰性连接**（构造期不等元数据）；coordinator 轮询异常改为**指数退避重试**（上限 `max_poll_backoff_seconds`），关闭异常不再掩盖退出原因；修好 `compose.local-redpanda.yaml`（原来只设了没人读的 `SCIWEAVE_CENTRE_KAFKA_BOOTSTRAP`） | coordinator 86 → **87 passed**；research-map 133 → **134 passed**；容器实跑 **11/12 RUNNING 稳定超过 100 秒**（修复前 wiki-mcp 与 mapping-mcp 会在 60 秒后因生产者超时变 FATAL） |
+| `ai4-k81j` | 写工具 description 与两个 README 不再声称 `centre` 能写；读工具保留「read 或 centre」，并补一句「centre 只解锁 4 个读工具」 | 两个领域全量测试通过 |
+
+实跑旁证：修复后 Redpanda 里 `coordinator` 消费组状态为 **Stable**，说明协调器真的连上了集群并在消费；修复前它只能靠 supervisord 反复重启。
+
+仍未做的验证（不声称已完成）：wiki 候选提交 → 治理事件 → 下游消费的**真实端到端**没有演练（只到单元级 + 消费组连接级）；Linux 主机、真实 SMTP、真实模型执行同样未验证。
