@@ -1,0 +1,131 @@
+---
+id: ai4-4zjz
+status: open
+deps: [ai4-4r0h]
+links: [ai4-x0ay, ai4-z3z4, ai4-4r0h]
+created: 2026-10-27T10:44:56Z
+type: chore
+priority: 1
+assignee: Frank Qi
+tags: [toolkit, task-agent, glossary, spec-gap]
+---
+# 套件与既有规格及术语的一致性收口
+
+套件侧有三处和已经定下的东西不一致——不是新功能缺失，是**已经写进文档、已经勾过验收、已经拍过板的东西，代码与术语没跟上**。本票只收口这三处，不新增能力。
+
+三处都不大，但都属于「越晚越贵」：术语一旦被引用进新票就会自我复制；悬空引用会让研究员以为有某个工作流；凭据边界错了会让 `ai4-x0ay` 的实现方式跟着错。
+
+## 一、GLOSSARY 缺 `Workflow` 条目
+
+第 1 轮设计（2026-10-27，grill-with-docs）已经拍板要加一条 `Workflow`，定义是「fast-agent-mcp 构建的多 agent 工作流」，并且 Work Agent 的语义要涵盖工作流。落票时这件事没有进任何一张票，`GLOSSARY.md` 至今没有这个条目：
+
+```
+$ grep -c "Workflow" GLOSSARY.md
+0
+```
+
+条目需要说清三件事：
+
+- Workflow 是**一份 YAML 声明**，由多个 agent 与它们之间的编排关系组成，不是运行中的线程池，也不是一段提示词；
+- 它由 `Agent Definition` 里声明的 agent 组装而成，`final_writer` 由 runtime 在编排后确定性调用（这一点在 `ai4-x0ay` 里细化为「草稿署名 agent」）；
+- Work Agent 的一轮 loop **可以**执行一个 Workflow，也可以只执行单 agent——这是 `Task Agent` 与 `Agent Definition` 两条现有定义的上位补充，不是替代。
+
+同时要补 `_Avoid_`：不要把 Workflow 叫成「流程」「pipeline」「编排器」——`Orchestrator` 只是四种 `type` 之一的名字，不是 Workflow 的同义词。
+
+## 二、GLOSSARY 里 `Agent Definition` 的措辞与选定的预设方案冲突
+
+`GLOSSARY.md:111` 现在写：
+
+> Task Agent 的定义由研究员**在平台给出的样例上**修改。
+
+第 1 轮选定的是选项 (b)「默认配置，出厂即可安装运行，研究员从能跑的东西上改」。两者不完全冲突——「样例」可以就是「能跑的预设」——但「样例」这个词暗示的是**示意性的、不能直接跑的**东西，正是 (b) 要否掉的那种形态。措辞应当改成能体现「出厂就是可运行的默认值」的说法，例如：
+
+> Task Agent 的定义由研究员在平台提供的**可直接运行的默认配置**上修改；平台不做「先给一个跑不起来的样例，再由研究员补全」这种预设。
+
+这条要和 `ai4-x0ay` 的第七节（单 agent 最小样例）口径一致：那个「样例」是可加载、可跑通 passthrough 的真实配置，不是占位符。
+
+## 三、`libs/agent-libs/workflows/research.workflow.yaml` 是悬空引用
+
+```yaml
+kind: workflow_helper
+value:
+  workflow: sequential-research
+```
+
+全树 grep `sequential-research`，**只命中这一行**。仓库里没有任何工作流叫这个名字，而 `ResourceKind.WORKFLOW_HELPER` 的 `value` 字段**完全不被校验**（`resources.py` 的 `Resource` 只校验 `kind` 是合法枚举，不解释 `value`）。
+
+后果：研究员在 `agent-libs` 里看到一份 `workflow_helper`，会以为 `sequential-research` 是某个存在的工作流，然后花时间去找它。
+
+两种收法，取其一：
+
+- **（推荐）指向真实工作流**：`libs/workflow-libs/` 落地后（`ai4-4r0h` + `ai4-x0ay`），把它改成指向其中一个真实名字，例如 `orchestrator-example`；
+- **或者删掉**：如果 `workflow_helper` 这个 `ResourceKind` 目前没有任何消费方（本票需先确认），那这份文件连同该 kind 一起标记为「协议保留、当前无消费方」，避免误导。
+
+倾向第一种：`workflow_helper` 的语义是「把工作流包成一个可被 agent 引用的资源」，`ai4-x0ay` 的文献工作流正好需要这个能力（agent 通过 `resources` 引用它）。那就更应该指向一个真实存在的工作流。
+
+顺带的次级问题：如果选择「指向真实工作流」，则 `ResourceKind.WORKFLOW_HELPER` 的 `value.workflow` 应当被校验——引用了不存在的工作流要报错。但那需要 `ResourceRegistry` 知道 `workflow-libs` 里的内容，属于跨两个 registry 的校验，本票**先记下、不实现**，避免把票做大。
+
+## 四、`subscriber` 仍持有草稿箱凭据，与 `ai4-z3z4` 已勾选的验收相反
+
+`ai4-z3z4` 的验收里有一条**已经打勾**：
+
+> [x] Gateway 不持有草稿箱凭据，草稿写入由 Worker 内的 agent 完成
+
+但 `service-template/gateway/subscriber/src/main.py:43-50` 现在就是：
+
+```python
+draft_url = os.environ.get("DRAFT_BUFFER_MCP_URL", "").strip()
+draft_token = os.environ.get("DRAFT_BUFFER_MCP_TOKEN", "").strip()
+if draft_url and draft_token:
+    runtime.drafts = BufferMCPDraftWriter(
+        endpoint=draft_url,
+        token=draft_token,
+        namespace=namespace,
+        submitter_id=agent_id,
+    )
+```
+
+订阅端读 `DRAFT_BUFFER_MCP_TOKEN` 并自己建一个写草稿的客户端，`runtime.drafts` 因此不是「装配给 agent 的 MCP 服务器」，而是「subscriber 自己写草稿」。这与 `ai4-z3z4` 的边界、与 `ai4-x0ay` 第三节的分工（agent 写、runtime 只装配）都相反。
+
+它也是另外两个已确认缺陷的直接原因：常驻订阅者从不调用模型，草稿 payload 是 `':evt-1'` 这种拼接串（`runtime.py:229` 的 `f"{agent_definition}:{event_id}"`），因为订阅端确实没有模型可调。
+
+修法：删掉 `subscriber` 里的 `BufferMCPDraftWriter` 装配，改为把草稿箱作为**该 agent 的 MCP 服务器**注入（`ai4-x0ay` 第六节的 `mcp.servers` 翻译），凭据通过 agent 侧的 MCP 配置走到 `fast-agent.yaml`，而不是留在订阅端的 `runtime.drafts`。`runtime.drafts` 保留为「单 agent 直写」的兼容路径，但默认不装配、且 `PassthroughAgentRuntime` 之外不走它。
+
+本票只做**装配位置的移动与默认值**，不实现 `mcp.servers` 的翻译本身（那是 `ai4-x0ay` 第六节）。
+
+## Acceptance Criteria
+
+- [ ] `GLOSSARY.md` 新增 `Workflow` 条目，含定义、与 `Agent Definition` / `Work Agent` 的关系、以及 `_Avoid_`（不叫「流程」「pipeline」「编排器」）。
+- [ ] `GLOSSARY.md` 的 `Agent Definition` 条目删去「在平台给出的样例上修改」的措辞，改为「在平台提供的可直接运行的默认配置上修改」，与 `ai4-x0ay` 第七节口径一致。
+- [ ] `libs/agent-libs/workflows/research.workflow.yaml` 的 `value.workflow` 指向一个真实存在的工作流（或整份删除并说明理由）；仓库内不再有悬空的工作流名引用。
+- [ ] 若选择保留，`workflow_helper` 引用不存在的工作流这件事写进 Notes 作为已知缺口（跨 registry 校验暂不实现）。
+- [ ] `service-template/gateway/subscriber/src/main.py` 不再读 `DRAFT_BUFFER_MCP_TOKEN` / `DRAFT_BUFFER_MCP_URL`，不再装配 `BufferMCPDraftWriter`。
+- [ ] `subscriber` 的现有测试同步调整：原先断言「订阅端写草稿」的用例改为断言「订阅端不写草稿、`runtime.drafts` 未装配」。
+- [ ] `.env.example` 与 `README.md` 里关于订阅端凭据的说明同步修改（与 `ai4-4r0h` 第五节的 `.env.example` 收口对齐，避免两票改同一段时冲突）。
+- [ ] runtime 与 `service-template` 全量测试通过；`compileall` 与 `git diff --check` 通过。
+
+## Not in Scope
+
+- 不实现 `fast-agent.yaml` 的 `mcp.servers` 翻译（`ai4-x0ay` 第六节）。
+- 不改草稿箱服务端的 `_authorize_namespace` / reviewer 配置。
+- 不实现 `ResourceKind.WORKFLOW_HELPER` 的跨 registry 引用校验（本票只记录缺口）。
+- 不改 `ai4-z3z4` 的验收勾选状态——那张票已关闭，本票只让代码追平它。
+- 不重写 GLOSSARY 的其它条目。
+
+## Blocked by
+
+- [ai4-4r0h](ai4-4r0h.md)：`WORKFLOW_LIBS_PATH` 未实现、`libs/workflow-libs/` 的 agent 名未去重前，没有「真实存在的工作流」可指，第三条无法落地；`.env.example` 的收口也在那张票里，两票会碰同一段。
+
+## Notes
+
+**2026-10-27 立项（Frank Qi）**
+
+> *This was generated by AI during triage.*
+
+身份核对：assignee `Frank Qi`、分支 `feature/frank-qi`、`git config user.name=Frank Qi`，三者一致。
+
+来源是 2026-10-27 的 deploy-task-agent grill 复审：三条都属于「已经定过但没落票」的漏项。第一条（`Workflow` 条目）是第 1 轮设计直接拍板的；第二条（`Agent Definition` 措辞）是同轮指出的冲突，一直悬空；第三条与第四条是实现侧与规格侧的偏差，其中第四条尤其严重——它是 `ai4-z3z4` 已勾选验收与代码的直接矛盾。
+
+第四条与 `ai4-58d0` 的「读写与 subscriber 共用的 SQLite 执行库」那处虚假陈述属于同一类问题：**已勾选的验收不等于已被代码验证的验收**。本票只修这一处，同类其它处不在本票范围。
+
+不新建票处理 `preview_wiki_review` / `preview_candidate` 的命名不对称：那是中央侧工具面的一致性问题，已改用 Gitee issue 提出（IKQZ02），避免占用 fer 的套件票位。
