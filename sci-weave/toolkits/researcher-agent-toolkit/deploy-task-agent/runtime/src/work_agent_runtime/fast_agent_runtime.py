@@ -21,6 +21,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
+from .mcp_servers import MCPServerConfigError, fast_agent_servers, render_fast_agent_config
+
 _DRIVE_PREFIX = re.compile(r"^[A-Za-z]:")
 
 
@@ -85,10 +87,26 @@ class FastAgentDeepSeekRuntime:
     constants in this file, and every YAML the researcher edited is ignored.
     """
 
-    def __init__(self, settings: FastAgentSettings, config: object | None = None) -> None:
+    def __init__(
+        self,
+        settings: FastAgentSettings,
+        config: object | None = None,
+        environ: dict[str, str] | None = None,
+    ) -> None:
         settings.validate_for_model_call()
         self.settings = settings
         self.config = config
+        # The MCP URL variables are read from this mapping rather than from
+        # `os.environ` so a caller can hand the runtime an explicit environment
+        # (tests, or the worker's `--env-file`). Defaulting to `os.environ` keeps
+        # the bare constructor usable.
+        self.environ = dict(os.environ) if environ is None else dict(environ)
+        # Translate the MCP cards now, not on the first handoff (ai4-x0ay). A
+        # missing `*_MCP_URL` is a deployment mistake; discovering it half-way
+        # through a model run turns it into `fast_agent_runtime_error`, which
+        # says nothing about the missing variable. This way the worker refuses
+        # to start, like it does for every other configuration defect.
+        self._mcp_servers()
 
     def run(self, request: AgentRequest) -> AgentOutcome:
         return self._execute(request, resumed=False)
@@ -135,6 +153,11 @@ class FastAgentDeepSeekRuntime:
                 name=agent_name,
                 instruction=self._instruction(request),
                 model=f"openai.{self._model()}",
+                # Only the cards this agent declares (ai4-x0ay). An empty list
+                # is correct and meaningful: a definition that grants no MCP
+                # resource gets an agent with no MCP tools, rather than one
+                # inheriting whatever happens to be configured elsewhere.
+                servers=list(self._servers()),
                 use_history=True,
             )
             async def worker_loop() -> None:
@@ -242,10 +265,30 @@ class FastAgentDeepSeekRuntime:
             f"Session: {request.session_id}."
         )
 
+    def _servers(self) -> tuple[str, ...]:
+        """The MCP servers this agent may use, as fast-agent server names."""
+        definition = self._definition()
+        return () if definition is None else tuple(definition.allowed_mcp_resources)
+
+    def _mcp_servers(self) -> dict[str, dict]:
+        """Translate this agent's cards into `mcp.servers` entries.
+
+        Returns an empty mapping when the runtime was built without a config
+        (the bare smoke test). A missing environment variable raises
+        `MCPServerConfigError` rather than dropping the server: an agent that
+        quietly has one tool fewer than its definition says will improvise.
+        """
+        names = self._servers()
+        if not names:
+            return {}
+        catalog = getattr(self.config, "project", None)
+        catalog = getattr(catalog, "mcp_catalog", None) or {}
+        return fast_agent_servers(names, catalog, self.environ)
+
     def _write_fast_agent_config(self) -> Path:
         config_path = self.settings.home / "fast-agent.yaml"
         config_path.write_text(
-            "compaction:\n  auto: false\nsession_history: true\n", encoding="utf-8"
+            render_fast_agent_config(self._mcp_servers()), encoding="utf-8"
         )
         return config_path
 
@@ -266,8 +309,14 @@ class PassthroughAgentRuntime:
     explicitly, so a missing key can never silently produce a fake completion.
     """
 
-    def __init__(self, connection_scope: str = "local") -> None:
+    def __init__(self, connection_scope: str = "local", config: object | None = None) -> None:
         self.connection_scope = connection_scope
+        # The configuration is still loaded, even though this runtime ignores
+        # the model. Without it the passthrough path could not exercise the
+        # workflow wiring at all, and every test of "does the worker run the
+        # configured workflow" would need a real key — which is exactly the
+        # reason the wiring stayed broken (ai4-x0ay).
+        self.config = config
 
     def run(self, request: AgentRequest) -> AgentOutcome:
         return AgentOutcome(
@@ -298,7 +347,17 @@ def build_agent_runtime(environ: dict[str, str] | None = None, *, config: object
     """
     env = os.environ if environ is None else environ
     if env.get("SCIWEAVE_GATEWAY_PASSTHROUGH_RUNTIME", "").strip() == "1":
-        return PassthroughAgentRuntime(env.get("SCIWEAVE_WORKER_CONNECTION_SCOPE", "local"))
+        # The passthrough loads the configuration too: it ignores the model, but
+        # it still has to know which workflow and which agents were configured,
+        # otherwise the workflow wiring could only be exercised with a real key
+        # (ai4-x0ay).
+        if config is None:
+            from .assembly import load_worker_config
+
+            config = load_worker_config(env)
+        return PassthroughAgentRuntime(
+            env.get("SCIWEAVE_WORKER_CONNECTION_SCOPE", "local"), config
+        )
     settings = FastAgentSettings(
         api_key=env.get("DEEPSEEK_API_KEY"),
         base_url=env.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com"),
@@ -312,9 +371,7 @@ def build_agent_runtime(environ: dict[str, str] | None = None, *, config: object
     # told that, not sent looking for a missing YAML directory.
     settings.validate_for_model_call()
     if config is None:
-        # Imported here so `assembly` can import this module's neighbours
-        # without a cycle at package import time.
         from .assembly import load_worker_config
 
         config = load_worker_config(env)
-    return FastAgentDeepSeekRuntime(settings, config)
+    return FastAgentDeepSeekRuntime(settings, config, env)

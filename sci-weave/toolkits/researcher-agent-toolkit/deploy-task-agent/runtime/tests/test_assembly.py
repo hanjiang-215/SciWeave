@@ -51,7 +51,7 @@ class ShippedConfigurationTests(unittest.TestCase):
 
     def test_the_instruction_is_not_the_hardcoded_sentence(self) -> None:
         """The old runtime used a literal; this asserts the YAML is the source."""
-        self.assertIn("Complete the assigned research task", self.config.agent.instruction)
+        self.assertIn("一次交接给你的研究任务", self.config.agent.instruction)
         self.assertNotIn("SciWeave researcher-side Task Agent", self.config.agent.instruction)
 
     def test_the_mcp_cards_are_loaded_and_the_agent_only_names_real_ones(self) -> None:
@@ -69,7 +69,7 @@ class ShippedConfigurationTests(unittest.TestCase):
     def test_the_workflow_libs_are_loaded(self) -> None:
         self.assertEqual(
             sorted(self.config.project.workflows),
-            ["agents-as-tools-example", "orchestrator-example", "parallel-example", "router-example"],
+            ["agents-as-tools-example", "literature-agent", "orchestrator-example", "parallel-example", "router-example"],
         )
 
     def test_every_source_directory_is_reported(self) -> None:
@@ -206,7 +206,7 @@ class EnvironmentTests(unittest.TestCase):
                 encoding="utf-8",
             )
             config = load_worker_config(_env(AGENT_DEFINITIONS_PATH=empty))
-        self.assertEqual(len(config.project.workflows), 4)
+        self.assertEqual(len(config.project.workflows), 5)
         self.assertIn("research-wiki", {resource.name for resource in config.mcp.resources})
 
     def test_the_test_runner_environment_is_not_leaking_in(self) -> None:
@@ -264,6 +264,12 @@ class ConfigurationReachesTheModelTests(unittest.TestCase):
             "SCIWEAVE_AGENT_ID": "researcher-task-agent",
             "AGENT_DEFINITIONS_PATH": agent_definition_path,
             "SCIWEAVE_FAST_AGENT_HOME": str(Path(self._tmp.name) / "home"),
+            # The definitions these tests write declare MCP resources, so the
+            # URLs those servers need must exist: a missing one is now a startup
+            # error rather than a silently tool-less agent (ai4-x0ay).
+            "RESEARCH_MAPPING_MCP_URL": "https://mapping.invalid/mcp",
+            "LLM_WIKI_MCP_URL": "https://wiki.invalid/mcp",
+            "DRAFT_BUFFER_MCP_URL": "https://buffer.invalid/mcp",
         }
 
     def test_editing_the_agent_yaml_changes_the_model_instruction(self) -> None:
@@ -289,11 +295,80 @@ class ConfigurationReachesTheModelTests(unittest.TestCase):
         build_agent_runtime(env).run(Request())
         self.assertEqual(self.recorded[0]["model"], "openai.deepseek-chat")
 
+    def test_the_agent_is_given_exactly_the_servers_it_declares(self) -> None:
+        """`allowed_mcp_resources` must reach `@fast.agent(servers=...)`.
+
+        The generated `fast-agent.yaml` is what actually starts the servers, but
+        the decorator is what says which of the configured ones this agent may
+        use. Both halves are needed; either one alone leaves the agent with no
+        tools or with every tool.
+        """
+        directory = Path(self._tmp.name) / "defs-servers"
+        directory.mkdir()
+        (directory / "mine.yaml").write_text(
+            "version: 1.0.0\n"
+            "agents:\n"
+            "  researcher-task-agent:\n"
+            "    identity: reader\n"
+            "    instruction: read only\n"
+            "    model: deepseek-chat\n"
+            "    allowed_mcp_resources: [research-wiki]\n"
+            "    resources: []\n",
+            encoding="utf-8",
+        )
+        build_agent_runtime(self._env(str(directory))).run(Request())
+        self.assertEqual(self.recorded[0]["servers"], ["research-wiki"])
+        generated = (Path(self._tmp.name) / "home" / "fast-agent.yaml").read_text(encoding="utf-8")
+        self.assertIn("research-wiki:", generated)
+        self.assertNotIn("draft-buffer:", generated, "an agent must not get the cards it did not declare")
+
+    def test_an_agent_with_no_resources_gets_no_mcp_block(self) -> None:
+        directory = Path(self._tmp.name) / "defs-empty"
+        directory.mkdir()
+        (directory / "mine.yaml").write_text(
+            "version: 1.0.0\n"
+            "agents:\n"
+            "  researcher-task-agent:\n"
+            "    identity: bare\n"
+            "    instruction: nothing to call\n"
+            "    model: deepseek-chat\n"
+            "    allowed_mcp_resources: []\n"
+            "    resources: []\n",
+            encoding="utf-8",
+        )
+        build_agent_runtime(self._env(str(directory))).run(Request())
+        self.assertEqual(self.recorded[0]["servers"], [])
+        generated = (Path(self._tmp.name) / "home" / "fast-agent.yaml").read_text(encoding="utf-8")
+        self.assertNotIn("mcp:", generated)
+
+    def test_a_missing_server_url_refuses_to_build_the_worker(self) -> None:
+        """Better a startup failure than an agent that silently has fewer tools."""
+        from work_agent_runtime.mcp_servers import MCPServerConfigError
+
+        directory = Path(self._tmp.name) / "defs-needs-url"
+        directory.mkdir()
+        (directory / "mine.yaml").write_text(
+            "version: 1.0.0\n"
+            "agents:\n"
+            "  researcher-task-agent:\n"
+            "    identity: writer\n"
+            "    instruction: write\n"
+            "    model: deepseek-chat\n"
+            "    allowed_mcp_resources: [draft-buffer]\n"
+            "    resources: []\n",
+            encoding="utf-8",
+        )
+        env = self._env(str(directory))
+        env.pop("DRAFT_BUFFER_MCP_URL")
+        with self.assertRaises(MCPServerConfigError) as caught:
+            build_agent_runtime(env)
+        self.assertIn("DRAFT_BUFFER_MCP_URL", str(caught.exception))
+
     def test_the_default_instruction_is_not_compiled_into_the_runtime(self) -> None:
         """Shipping YAML, not a Python constant, decides what the model is told."""
         build_agent_runtime(self._env(str(KIT_ROOT / "agent-definitions" / "agents"))).run(Request())
         instruction = self.recorded[0]["instruction"]
-        self.assertIn("Complete the assigned research task", instruction)
+        self.assertIn("一次交接给你的研究任务", instruction)
         self.assertNotIn("SciWeave researcher-side Task Agent", instruction)
 
 

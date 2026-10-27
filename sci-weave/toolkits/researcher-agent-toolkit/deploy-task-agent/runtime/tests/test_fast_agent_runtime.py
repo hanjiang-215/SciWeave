@@ -271,13 +271,51 @@ class FactoryTests(unittest.TestCase):
             "DEEPSEEK_BASE_URL": "https://api.deepseek.com",
             "DEEPSEEK_MODEL": "deepseek-chat",
             "SCIWEAVE_AGENT_ID": "researcher-task-agent",
+            # The shipped definition grants MCP resources, and a missing URL is
+            # a startup error (ai4-x0ay) rather than a silently tool-less agent.
+            "RESEARCH_MAPPING_MCP_URL": "https://mapping.invalid/mcp",
+            "LLM_WIKI_MCP_URL": "https://wiki.invalid/mcp",
+            "DRAFT_BUFFER_MCP_URL": "https://buffer.invalid/mcp",
         }
         values.update(overrides)
         return values
 
     def test_passthrough_needs_an_explicit_switch(self) -> None:
-        runtime = build_agent_runtime({"SCIWEAVE_GATEWAY_PASSTHROUGH_RUNTIME": "1"})
+        runtime = build_agent_runtime(
+            {
+                "SCIWEAVE_GATEWAY_PASSTHROUGH_RUNTIME": "1",
+                "SCIWEAVE_AGENT_ID": "researcher-task-agent",
+            }
+        )
         self.assertIsInstance(runtime, PassthroughAgentRuntime)
+
+    def test_passthrough_still_loads_the_configuration(self) -> None:
+        """The workflow wiring must be exercisable without a model key.
+
+        The passthrough ignores the model, but it has to know which workflow and
+        which agents were configured — otherwise "does the worker run the
+        configured workflow" could only ever be tested with a real key, which is
+        why that wiring stayed broken (ai4-x0ay).
+        """
+        runtime = build_agent_runtime(
+            {
+                "SCIWEAVE_GATEWAY_PASSTHROUGH_RUNTIME": "1",
+                "SCIWEAVE_AGENT_ID": "researcher-task-agent",
+            }
+        )
+        self.assertEqual(runtime.config.agent.name, "researcher-task-agent")
+        self.assertIn("literature-agent", runtime.config.project.workflows)
+
+    def test_passthrough_still_refuses_an_unknown_agent(self) -> None:
+        from work_agent_runtime import WorkerConfigError
+
+        with self.assertRaises(WorkerConfigError):
+            build_agent_runtime(
+                {
+                    "SCIWEAVE_GATEWAY_PASSTHROUGH_RUNTIME": "1",
+                    "SCIWEAVE_AGENT_ID": "no-such-agent",
+                }
+            )
 
     def test_a_missing_key_fails_instead_of_falling_back(self) -> None:
         with self.assertRaises(ValueError):
@@ -305,7 +343,7 @@ class FactoryTests(unittest.TestCase):
         self.assertEqual(runtime.config.agent_name, "researcher-task-agent")
         self.assertEqual(
             sorted(runtime.config.project.workflows),
-            ["agents-as-tools-example", "orchestrator-example", "parallel-example", "router-example"],
+            ["agents-as-tools-example", "literature-agent", "orchestrator-example", "parallel-example", "router-example"],
         )
 
     def test_the_factory_refuses_an_agent_id_no_definition_declares(self) -> None:
