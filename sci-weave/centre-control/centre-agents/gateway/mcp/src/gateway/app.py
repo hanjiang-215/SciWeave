@@ -297,21 +297,53 @@ class GatewayApplication:
             execution_id, decision, reason, idempotency_key=idempotency_key
         )
 
+    # The front end validates these exact vocabularies (web-ui `isService` /
+    # `isEvent`), and dashboard-api strips any key outside its allow-list.
+    _SERVICE_ROLE = "centre-agent"
+    _RUNTIME_STATUS = {"ready": "online", "misconfigured": "unavailable", "not_configured": "unknown"}
+    _EVENT_TYPES = {
+        "execution_queued": "message_received",
+        "owner_command_received": "message_received",
+        "execution_completed": "execution_completed",
+        "worker_completed": "execution_completed",
+        "execution_failed": "mcp_failure",
+        "worker_failed": "mcp_failure",
+    }
+    _EVENT_TITLES = {
+        "execution_queued": "执行已入队",
+        "owner_command_received": "收到 Owner 指令",
+        "execution_completed": "执行完成",
+        "worker_completed": "Worker 执行完成",
+        "execution_failed": "执行失败",
+        "worker_failed": "Worker 执行失败",
+    }
+
     def dashboard_sources(self) -> dict[str, Any]:
-        """Read-only dashboard gateway/queue source fragment.
+        """Read-only dashboard gateway source fragment.
 
         The shape follows ``dashboard_api.aggregator`` expectations:
-        ``observedAt``/``sourceStatus`` plus the ``executions`` and ``services``
-        collections.  Only aggregated, non-sensitive facts are exposed; the
-        caller (dashboard-api) sanitizes fields again on its side.
+        ``observedAt``/``sourceStatus`` plus ``executions``/``services``/``events``.
+        Only aggregated, non-sensitive facts are exposed; dashboard-api sanitizes
+        again on its side.
+
+        ai4-nvuj: this fragment has to match what the browser validates. The
+        earlier version emitted ``label`` (dropped by dashboard-api's allow-list)
+        and ``role``/``status`` values the front end rejects, so once a gateway
+        source was configured the whole snapshot failed validation. Services now
+        carry ``name`` plus the ``centre-agent`` and
+        ``online|unknown|unavailable`` vocabularies, and ``events`` is projected
+        from the audit trail instead of being hard-coded empty.
         """
         status = "fresh"
         try:
             rows = self.store.list_executions(limit=50)
-            _ = self.store.list_recent_audit_events(limit=10)
+            audit_rows = self.store.list_recent_audit_events(limit=20)
+            storage_healthy = bool(self.store.health())
         except sqlite3.Error:
             status = "unavailable"
             rows = []
+            audit_rows = []
+            storage_healthy = False
         executions = [
             {
                 "id": row["execution_id"],
@@ -327,17 +359,49 @@ class GatewayApplication:
             for row in rows
         ]
         services = [
-            {"id": "mcp", "label": "处置面 MCP", "status": "ready", "role": "gateway"},
-            {"id": "storage", "label": "执行存储", "status": "ready" if self.store.health() else "unavailable", "role": "gateway"},
-            {"id": "worker_runtime", "label": "Worker 运行时", "status": self.runtime_state(), "role": "worker"},
-            {"id": "subscriber", "label": "消息监听", "status": "not_configured", "role": "listener"},
+            {"id": "mcp", "name": "处置面 MCP", "role": self._SERVICE_ROLE, "status": "online"},
+            {
+                "id": "storage",
+                "name": "执行存储",
+                "role": self._SERVICE_ROLE,
+                "status": "online" if storage_healthy else "unavailable",
+            },
+            {
+                "id": "worker_runtime",
+                "name": "Worker 运行时",
+                "role": self._SERVICE_ROLE,
+                "status": self._RUNTIME_STATUS.get(self.runtime_state(), "unknown"),
+            },
+            {
+                "id": "subscriber",
+                "name": "消息监听",
+                "role": self._SERVICE_ROLE,
+                "status": "unknown",
+            },
         ]
+        events: list[dict[str, Any]] = []
+        for row in audit_rows:
+            raw = str(row["event_type"] or "")
+            mapped = self._EVENT_TYPES.get(raw)
+            if mapped is None:
+                continue
+            task_node_id = str(row["task_node_id"] or "")
+            execution_id = str(row["execution_id"] or "")
+            events.append(
+                {
+                    "id": f"gateway:{raw}:{execution_id or task_node_id}:{row['created_at']}",
+                    "type": mapped,
+                    "title": self._EVENT_TITLES.get(raw, raw),
+                    "occurredAt": row["created_at"],
+                    "diagnostic": f"task {task_node_id}" if task_node_id else None,
+                }
+            )
         return {
             "observedAt": utc_now(),
             "sourceStatus": status,
             "executions": executions,
             "services": services,
-            "events": [],
+            "events": events,
         }
 
     def health(self) -> dict[str, Any]:
