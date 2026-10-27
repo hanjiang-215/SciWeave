@@ -2,18 +2,16 @@
 id: ai4-grlc
 status: open
 deps: []
-links: [ai4-g1km, ai4-58d0, ai4-b4zb, ai4-ced7]
+links: [ai4-g1km, ai4-58d0, ai4-b4zb, ai4-ced7, ai4-4r0h]
 created: 2026-10-27T04:01:17Z
 type: bug
 priority: 1
 assignee: Frank Qi
 tags: [toolkit, task-agent, dx, ready-for-agent]
 ---
-# 研究员套件出厂即用性缺陷：红测试、示例环境变量缺项与重复、Workflow YAML 双份
+# session_dir 校验在 Linux 上不生效：盘符与反斜杠逃逸都放行
 
-研究员套件在「拿到就能装就能跑」这条线上有四处硬伤，都在当前 HEAD（`feature/frank-qi`，已含 `origin/develop`）上可复现。四处彼此独立，可以分四个提交做。
-
-## 一、runtime 有一条红测试，且它在 Linux 上永远不会红
+`runtime` 有一条红测试，且它在 Linux 上永远不会红——因为测试本身是按 Windows 语义写的，而实现在 Linux 上确实是错的。
 
 ```
 cd sci-weave/toolkits/researcher-agent-toolkit/deploy-task-agent/runtime
@@ -34,77 +32,33 @@ if session_path.is_absolute() or any(part in {".", ".."} for part in session_pat
     raise ValueError("session_dir must stay within the agent home")
 ```
 
-在 POSIX 上 `Path("C:/absolute").is_absolute()` 是 `False`，`parts` 是 `('C:', 'absolute')`，两个条件都不成立。这条断言只在 Windows 上成立，所以写它的人在 Windows 上绿了，Linux 上一直红——或者更糟：本地一直是红的，只是没人跑。
+在 POSIX 上 `Path("C:/absolute").is_absolute()` 是 `False`，`parts` 是 `('C:', 'absolute')`，两个条件都不成立。这条断言只在 Windows 上成立。
 
-这不是「测试写错了」那么简单。`session_dir` 是要拼进 `--config-dir` 的路径；一个指向 `C:/absolute` 的配置在 Linux 上会被当成相对路径 `./C:/absolute`，静默落到工作目录里，既不拒绝也不按预期隔离。要修的是校验本身：
+## 这不是「测试写错了」
+
+`session_dir` 要拼进 `--config-dir`。一个指向 `C:/absolute` 的配置在 Linux 上会被当成相对路径 `./C:/absolute`，静默落到工作目录里，既不拒绝也不按预期隔离。要修的是校验本身：
 
 - 盘符形态（`^[A-Za-z]:[\\/]`）也要拒，不管在哪个平台；
 - 反斜杠形态的 `..\..\outside` 在 POSIX 上 `parts` 只有一个元素，同样逃逸，也一并覆盖；
 - 测试对上述两种输入都断言 `ValueError`，并补一条「合法的相对子目录仍被接受」，否则容易顺手写成全拒。
 
+同一段代码在 `sci-weave/centre-control/centre-agents/worker/src/task_agent_worker/runtime.py:38-40` 逐字存在，一起修。
+
 来源：`849f5ee`（hanjiang，2026-10-27）。那条提交的实现和测试一起进，测试在 Linux 上从落地起就是红的。
-
-## 二、按 `.env.example` 复制出来的配置起不了 subscriber
-
-`service-template/gateway/subscriber/src/main.py:100` 起要求两个变量：
-
-```python
-agent_id = required("SCIWEAVE_AGENT_ID")
-topics = [topic.strip() for topic in required("SCIWEAVE_SUBSCRIBER_TOPICS").split(",") if topic.strip()]
-```
-
-`.env.example` 里两个都没有。全量比对（`required(...)`、`os.environ.get(...)`、卡片 `environment` 三种来源）后，**真正缺的只有这两个**：
-
-| 变量 | 代码里的用法 | `.env.example` |
-| --- | --- | --- |
-| `SCIWEAVE_AGENT_ID` | `required`，订阅端与 worker 都读 | **缺** |
-| `SCIWEAVE_SUBSCRIBER_TOPICS` | `required`，缺了直接 `SystemExit` | **缺** |
-
-`OPENAI__API_KEY` / `OPENAI__BASE_URL` 看起来也缺，但**不该补**：它们由 `fast_agent_runtime.py:93-98` 在每次调用前从 `DEEPSEEK_API_KEY` / `DEEPSEEK_BASE_URL` 派生写入，原文只是用于保存与还原现场。写进 `.env.example` 会误导研究员以为要单独配一份 OpenAI 凭据。
-
-「复制 `.env.example` 就能跑」是套件出厂标准里最基础的一条，现在照做会在 `main()` 第一行 `raise SystemExit`。两个变量补进 `.env.example` 并各加一行说明（`SCIWEAVE_SUBSCRIBER_TOPICS` 是逗号分隔的 topic 列表，`SCIWEAVE_AGENT_ID` 要与交接消息里的 target 一致）。
-
-顺带一处重复：`.env.example` 第 12 行与第 19 行都是 `DRAFT_BUFFER_MCP_TOKEN=`，27 行声明里只有 26 个唯一变量。删掉第 19 行那一处（第 11-12 行那对在草稿箱注释块内，是有位置的）。
-
-## 三、四份 Workflow YAML 一字不差地存在两份
-
-```
-./agent-definitions/workflows/router-example.yaml        == ./libs/workflow-libs/router-example.yaml
-./agent-definitions/workflows/orchestrator-example.yaml  == ./libs/workflow-libs/orchestrator-example.yaml
-./agent-definitions/workflows/parallel-example.yaml      == ./libs/workflow-libs/parallel-example.yaml
-./agent-definitions/workflows/agents-as-tools-example.yaml == ./libs/workflow-libs/agents-as-tools-example.yaml
-```
-
-md5 相同，不是「长得像」。`README.md:7` 自己写着「`agent-definitions/`：兼容入口的 Agent 定义、schema；可复用 Workflow 资源位于 `libs/workflow-libs/`」——既然可复用的那份在 `libs/`，`agent-definitions/workflows/` 这四份就是迁移（`ai4-s2nb`）后没清的残留。
-
-改任意一份都不会同步另一份，而「改哪份生效」取决于读者读的是 README 还是目录。收敛成一份，在 `agent-definitions/workflows/README.md` 留一句指路，不要留软链（套件要能打成 zip 发给别人的 Agent，软链在解压后会坏）。
-
-## 四、两张领域卡片的 `append_prereview_log` 描述还是旧的三列键
-
-`ai4-b4zb` / `333cd12` 把卡片补到了 11/11，并把服务端描述改成了四列键（`candidate_id, candidate_head, rule_set_version, base_formal_revision_id`），但**卡片侧的描述没跟着改**：
-
-```
-research-mapping 卡片：... under the (candidate_id, candidate_head, rule_set_version) unique key.
-research-mapping 服务：... under the (candidate_id, candidate_head, rule_set_version, base_formal_revision_id) unique key.
-```
-
-`research-wiki` 同样。`input.properties` 里 `base_formal_revision_id` 是有的，只有描述漏了——所以这不是「卡片缺工具」那个已被修的问题，是同一处的描述残留。四张卡片里只有这两处不一致，其余的描述逐条比对全部相同。
 
 ## Acceptance Criteria
 
-- [ ] `session_dir` 校验拒绝 Windows 盘符形态与反斜杠 `..` 逃逸，在 Linux 上也成立；测试覆盖盘符、反斜杠逃逸、合法相对子目录三种输入。
-- [ ] `.env.example` 补上 `SCIWEAVE_AGENT_ID`、`SCIWEAVE_SUBSCRIBER_TOPICS`，并删掉重复的 `DRAFT_BUFFER_MCP_TOKEN`。
-- [ ] 照 `.env.example` 填最小值即可启动 `gateway/subscriber`，不再停在「缺必填变量」。
-- [ ] 四份重复的 Workflow YAML 收敛为一份，`agent-definitions/workflows/` 只留指路说明。
-- [ ] 两张领域卡片的 `append_prereview_log` 描述与服务端 `TOOL_DEFINITIONS` 逐字一致。
+- [ ] `session_dir` 校验拒绝 Windows 盘符形态（`C:/absolute`、`C:\absolute`）与反斜杠 `..` 逃逸（`..\..\outside`），在 Linux 上也成立。
+- [ ] 测试覆盖盘符、反斜杠逃逸、合法相对子目录三种输入；红测试转绿。
+- [ ] `centre-agents/worker` 中同一处校验同步修复，且有对应测试。
 - [ ] runtime 全量测试通过（当前 106 条，修完应仍为 106 或更多）；`compileall` 与 `git diff --check` 通过。
 
 ## Not in Scope
 
+- 配置层的其余缺口（agent 定义加载为空、重复 Workflow YAML、`WORKFLOW_LIBS_PATH` 未实现、`.env.example` 缺项）已挪到 [ai4-4r0h](ai4-4r0h.md)。
+- 卡片描述漂移（`append_prereview_log` 仍是旧的三列键）转 [ai4-tj83](ai4-tj83.md)：该工具会从只读卡中移出，漂移随移除自然消解，不需要单独改描述。
 - 不接口 MCP 客户端、不改 `load_mcp_registry` 的读法（`ai4-ced7` 的延后决定仍然有效）。
-- 不补 worker 的处置面契约差异（`answer_question` / `review_execution` 的幂等键与 resume 链），那需要先定研究员侧重放语义，是独立决策。
-- 不动 `custom-mcp/stdio-service`。
-- 不评审套件的 zip 打包与安装脚本，那是 wayfinder 地图的范围。
+- 不补 worker 处置面契约差异（`answer_question` / `review_execution` 的幂等键与 resume 链），那需要先定研究员侧重放语义，是独立决策。
 
 ## Notes
 
@@ -114,13 +68,10 @@ research-mapping 服务：... under the (candidate_id, candidate_head, rule_set_
 
 身份核对：assignee `Frank Qi`、分支 `feature/frank-qi`、`git config user.name=Frank Qi`，三者一致。
 
-四处缺陷都是复核套件「上传 zip 就能装就能跑」这条线时实测出来的，不是读代码猜的：
+**2026-10-27 范围收窄（Frank Qi）**
 
-- 红测试：`runtime` 目录跑 `.venv/bin/python3 -m unittest discover -s tests`，106 条里 1 条失败，连续两次复现；
-- env 缺项：从 `runtime/src`、`service-template`、`custom-mcp` 提取 `required(...)` / `os.environ.get(...)` / `env.get(...)` 读到的变量，与 `.env.example` 的声明行做差集，再用卡片 `environment` 字段交叉核对，确认只有两个真缺；
-- YAML 重复：`md5sum` 全树比对，四对完全相同；
-- 卡片描述：从 `management.py` 的 `TOOL_DEFINITIONS` 提取每条描述与 `mcp.json` 逐条对比。
+> *This was generated by AI during triage.*
 
-不设 `parent`：这四处的上游分别指向 `ai4-g1km`（runtime 与 worker）、`ai4-58d0`（service-template）、`ai4-b4zb`（卡片）三张不同票，挂到任何一张下面都会让另外两张的读者找不到。改用 `links` 关联。
+原票装了四处缺陷。按 2026-10-27 设计轮次的拆分决定，配置相关的三项（`.env.example` 缺项与重复、Workflow YAML 双份、以及同源新发现的三项）挪到 [ai4-4r0h](ai4-4r0h.md)，理由：本票是 P1 bug，混进配置清理会让它更难关闭；而那三项的根因是「出厂配置没有加载验收」，是另一件事。
 
-与 `ai4-58d0` / `ai4-g1km` 都不重复：那两张修的是「功能没实现」，本票修的是「实现了但拿给别人用会踩」，代码已经在了，问题在细节。
+保留在本票的只有 session_dir 校验这一条，因为它是一个独立可验证、独立可交付的修复，且红测试是「套件当前不绿」这个事实的唯一证据。原票四条实测证据的去向：第一条（红测试）留在本文并扩展到 centre 侧同一处代码；第二条（env 缺项）转 `ai4-4r0h`；第三条（YAML 重复）转 `ai4-4r0h`；第四条（卡片描述漂移）转 `ai4-tj83`，随该工具从只读卡移出而消解。
