@@ -31,3 +31,7 @@ research-map / research-wiki 的写工具 description 与 README 写着 'Require
 验证：research-map **134 passed**、research-wiki **141 passed**，均无回归。
 
 未改代码语义：`_TOOL_CAPABILITIES` 本来就是对的，这次只让文档与工具描述跟上实现。
+
+**2026-10-27T15:57:30Z**
+
+﻿**2026-10-27 提交 PR**：https://gitee.com/qi-yueran/ai4science/pulls/54（feature/hanjiang → develop）。

@@ -58,3 +58,7 @@ centre-control 矩阵 16/17 阶段、700 passed、22 skipped；唯一失败为 r
 未验证：未在 Linux 主机上跑过（只有 Windows + Docker Desktop）；未配置 SMTP 做真实发信；未配 DEEPSEEK_API_KEY 做真实模型执行；公网反代与 TLS 不在本票范围。
 
 遗留（未修，登记为已知缺口）：research-wiki 的 `WikiManagementService` 无治理事件端口，wiki 正式化不产生事件；`centre` 能力只解锁读工具，但 research-map README 与工具 description 文案仍写 "or centre"。
+
+**2026-10-27T15:57:30Z**
+
+﻿**2026-10-27 提交 PR**：https://gitee.com/qi-yueran/ai4science/pulls/54（feature/hanjiang → develop）。

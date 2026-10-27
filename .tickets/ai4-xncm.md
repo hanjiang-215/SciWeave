@@ -36,3 +36,7 @@ tags: [coordinator, kafka, reliability]
 验证：coordinator **87 passed**（新增 `test_a_broker_outage_does_not_kill_the_loop`，假 events 连续抛错 3 次后正常退出，断言轮询次数 ≥ 4 且进程收尾干净）；research-map **134 passed / 5 skipped**（新增惰性连接回归）；容器实跑 **11/12 RUNNING 稳定超过 100 秒**（此前 wiki-mcp 与 mapping-mcp 会在 60 秒后转 FATAL），Redpanda 中 `coordinator` 消费组状态 **Stable**。
 
 未验证：真实 broker 断开-恢复的长时间演练；只覆盖了单轮退避与恢复路径。
+
+**2026-10-27T15:57:30Z**
+
+﻿**2026-10-27 提交 PR**：https://gitee.com/qi-yueran/ai4science/pulls/54（feature/hanjiang → develop）。

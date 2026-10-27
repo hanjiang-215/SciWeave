@@ -31,3 +31,7 @@ research-wiki 的 WikiManagementService 早已接受 governance_events 端口并
 验证：research-wiki **141 passed / 12 skipped**（原 136，新增 `tests/test_config.py` 5 项：配置字段、未设情形、publisher 选择、惰性连接）。
 
 未验证：wiki 候选提交 → 事件 → 下游消费的真实端到端没有演练（只到单元级）。另：coordinator 的消费者只读 `mapping_domain_id`，wiki 事件不会触发交接派发，这是设计边界，不是漏做。
+
+**2026-10-27T15:57:30Z**
+
+﻿**2026-10-27 提交 PR**：https://gitee.com/qi-yueran/ai4science/pulls/54（feature/hanjiang → develop）。
