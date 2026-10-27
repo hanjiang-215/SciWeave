@@ -1,93 +1,138 @@
 ---
 id: ai4-u9gj
-status: open
+status: in_progress
 deps: []
-links: [ai4-0fwc, ai4-x0ay]
+links: [ai4-0fwc, ai4-x0ay, ai4-derq]
 created: 2026-10-27T13:26:22Z
 type: bug
 priority: 1
 assignee: Frank Qi
 tags: [toolkit, task-agent, subscriber, message-envelope, correctness]
 ---
-# 订阅端读不懂真实信封：同一 TaskNode 的第二封交接被静默吞掉
+# 订阅端读不懂真实信封：`target_id` 变成 `节点:版本` 复合串
 
-`gateway/subscriber` 是按一份**不存在的信封格式**写的。它对 `task_handoff_ready` 的实际后果不是「报错」，是**第二条消息被当成重复投递丢弃**，且状态显示 `completed`。
+`gateway/subscriber` 按一份仓库里**没有任何生产者使用的**信封格式取值。它对 `task_handoff_ready` 的实际后果有两个：执行记录的 `target_id` 是复合串而不是 TaskNode，以及两个准入守卫全是死代码。
 
-## 一、两边的信封不是同一个东西
+## 一、仓库里有三种信封格式，订阅端认的是第三种
 
-`service-template/gateway/subscriber/src/main.py:75-88`：
+| 出处 | 形状 | 谁在用 |
+| --- | --- | --- |
+| `coordinator/src/coordinator/adapter_publisher.py:53-62` | **扁平**：`message_type` / `task_node_id` / `target_node_version_ref` / `target_agent_id` / `pending_handoff_id` / `trigger_revision_id` 全在顶层 | 交接协调服务**实际发出**的 `task_handoff_ready` |
+| `shared/message-envelope/`（`ai4-3zxu`，`docs/data-flow/message-queue.md` 称其为权威） | **分层**：`message_id` / `dedupe_key` / `routing.target_agent_id` / `payload.task_node_id` | **零个调用方**（见下） |
+| `service-template/gateway/subscriber/src/main.py:75-88` | 读 `envelope["target"]["id"]` 与 `envelope["event_id"]` | 套件订阅端 |
+
+订阅端读的那两个键，三种格式里**一种都没有**。
+
+信封包「零调用方」是实测的：
+
+```
+$ grep -rn "message_envelope" --include=*.py sci-weave/ | grep -v '\.venv' | grep -v tests
+(空)
+```
+
+协调器不用它（`adapter_publisher.py` 手写 dict），中央侧订阅端不用它，套件订阅端也不用它。它测得很全，但线上没有一条消息经过它。
+
+## 二、实际后果
+
+### 2.1 `target_id` 变成 `节点:版本`
+
+真实生产者设置的 Kafka key 是（`adapter_publisher.py:61`）：
+
+```python
+key = f"{message.task_node_id}:{message.target_node_version_ref}"
+```
+
+订阅端取不到 `target.id`，回退到 `message.key`，于是：
+
+```
+task_node_id  = "node-1"
+Kafka key     = "node-1:cv-1"
+target_id     = "node-1:cv-1"   ← 错了
+event_id      = "node-1:cv-1"   ← 与 key 相同
+```
+
+这个 `target_id` 一路传到下游三处，都要求它是 TaskNode：
+
+| 落点 | 代码 | 后果 |
+| --- | --- | --- |
+| 草稿 | `draft_writer.py:118,121,123`：`title`、`idempotency_key`、`source_target_node_id` | 中央草稿箱收到 `source_target_node_id = "node-1:cv-1"`，指向一个不存在的 TaskNode |
+| 执行记录 | `durable.py:27,93` 的 `target_id` 列 | `list_pending` 按 target 过滤失灵 |
+| Worker Lease | `runtime.py:224` `lease.acquire(target_id)` | **同一 TaskNode 的两个版本各拿一把租约，并发跑**（实测：`acquire('node-1:cv-1')` 与 `acquire('node-1:cv-2')` 双双成功；若 `target_id` 正确，第二个会被挡住） |
+
+Lease 那条是并发保护失效，不只是数据难看。
+
+### 2.2 两个准入守卫都是死代码
+
+`main.py:75-85`：
 
 ```python
 target = envelope.get("target") or {}
-target_agent = target.get("agent_id")
-...
-target_id = target.get("id") or (message.key or "")
-event_id = str(envelope.get("event_id") or message.key or message.offset)
-runtime.handle_inbound(str(target_id), event_id)
+target_agent = target.get("agent_id")          # 真实信封无 target -> None
+if target_agent and agent_id and ...:          # None 是假值 -> 整个条件跳过
+    ...skip...
+schema_version = envelope.get("schema_version") # 真实信封无此键 -> None
+if schema_version is not None and ...:          # None -> 整个条件跳过
+    ...skip...
 ```
 
-真实信封（`sci-weave/centre-control/shared/message-envelope/`，`ai4-3zxu` 已交付，schema 由 `payloads.py` 校验）顶层只有：
+两个守卫在真实消息上**永远不成立**，任何 `schema_version` 都会被接受。实测输出：
 
 ```
-dedupe_key, message_id, message_type, occurred_at, payload, producer, published_at, routing, schema_version
+'target'         in envelope -> False
+'event_id'       in envelope -> False
+'schema_version' in envelope -> False
+guard 1 target_agent = None -> 条件为 False
+guard 2 schema_version = None -> 条件为 False
 ```
 
-**没有 `target`，也没有 `event_id`。** 两者都被写在了别处：
+`target_agent_id` 那条被「topic 按 agent 分」部分兜住（`_topic_for` 只在 topic 里带 agent 名），但版本守卫没有任何兜底。
 
-- 目标节点：`payload.task_node_id`（必填字段，`payloads.py:33`），Agent 在 `routing.target_agent_id`；
-- 事件：`message_id` 或 `payload.trigger_revision_id`。
+### 2.3 撤回：不存在「第二封被吞」
 
-实测（用信封包自己 `encode()` 出来的合法 `task_handoff_ready` 喂给订阅端的取值逻辑）：
+本票初版写的是「同一 TaskNode 的第二封交接被静默吞掉」，**这个结论是错的**，撤回。当时用的信封是 `message-envelope.encode()` 产出的分层形状，而真实生产者不发那个形状。按 `adapter_publisher.py` 的原样重跑：两封 `target_node_version_ref` 不同的消息得到 `node-1:cv-1:node-1:cv-1` 与 `node-1:cv-2:node-1:cv-2` 两个不同去重键，**都会执行**。版本被 key 带进去了，反而是订阅端「错得有救」的地方。
 
-```
-subscriber target    = None
-subscriber target_id = None          ← 回退到 message.key
-subscriber event_id  = None          ← 回退到 message.key
-```
-
-但 `docs/data-flow/message-queue.md:65` 规定「任务交接消息以 `target_node_id` 作为分区键」。于是 `message.key` 就是 `node-1`，两个值**同时塌缩成同一个字符串**，`dedupe_key = f"{target_id}:{event_id}"` 变成 `node-1:node-1`。
-
-## 二、后果：第二封交接无声消失
-
-实测（两封 `trigger_revision_id` 分别为 `rev-1` / `rev-2` 的合法信封，key 按规范设为目标节点 id）：
-
-```
-rev-1 -> status='completed'  actual executions so far=0
-rev-2 -> status='completed'  actual executions so far=0
-
-inbox rows: [('node-1:node-1', 'processed')]
-```
-
-两封不同的交接消息只留一行 inbox、零次执行，第二封返回 `completed`。
-
-这条比 `ai4-0fwc`（从不调用模型）更隐蔽：`ai4-0fwc` 至少每次消息都写一条草稿，问题肉眼可见；这里是**第二次之后全部静默丢失**，而且返回值是成功。一个 TaskNode 在真实项目里会被上游反复触发（返修、上游版本更新），只有第一次能过。
+真正的坑是 `target_id` 与租约，不是丢消息。初版结论保留在 Notes 里作历史。
 
 ## 三、为什么测试没抓到
 
-`runtime/tests/test_subscriber_loop.py` 用 `deliver()` 造消息，payload 是手写的 `{"target": {...}, "event_id": ...}`，正好是订阅端期待的形状，也是信封包里不存在的形状。测试与实现互为镜像，一起错了。
+`runtime/tests/test_subscriber_loop.py` 手写 payload：
 
-`grep -rn '"target"\|"event_id"'` 全仓非测试代码里，产出这个形状的只有中央侧 `gateway/ingest`（那是 MCP 入站事件，不是 Redpanda 信封）。**没有任何生产者发出订阅端读的那两个键。**
+```python
+{"target": {"id": "node-1", "agent_id": "researcher-1"}, "event_id": "handoff-1"}
+```
+
+正好是订阅端期待的形状，也是三种格式里唯一不存在的一种。测试与实现互为镜像，一起错了。四条测试全部通过，没有一条碰过真实生产者的输出。
 
 ## 四、范围
 
-改 `service-template/gateway/subscriber/src/main.py` 的信封解析，按真实信封取值：
+改 `service-template/gateway/subscriber/src/main.py` 的信封解析。采用**按字段名跨位置容忍**，而不是钉死某一种布局：
 
-- `target_id` ← `payload.task_node_id`（缺失时才是格式错误，不能回退到 key）；
-- `event_id` ← `message_id`（`payload.trigger_revision_id` 作为业务键参与去重，但不要顶替 `message_id`）；
-- `target_agent_id` 校验改用 `routing.target_agent_id`；
-- `schema_version` 在真实信封里是**整数** `1`，订阅端拿 `str(schema_version) != supported_schema_version`（字符串 `"1"`）比较，整数 `1` 恰好也能通过 `str()`，这一条是巧合正确，但要补测试钉住。
+- `task_node_id` ← `payload.task_node_id` 或顶层 `task_node_id`（两者同名，只是嵌套位置不同）；
+- `event_id` ← `message_id` 或顶层 `event_id`，都缺失时用 `message.key`（key 至少唯一，但**不再顶替 `target_id`**）；
+- `target_agent_id` ← `routing.target_agent_id` 或顶层 `target_agent_id`；
+- `schema_version` ← 顶层；真实生产者不发这个字段，缺失时的语义要明确定下来（见 AC 第 4 条），不能像现在这样静默放行。
 
-同时修 `test_subscriber_loop.py`：构造消息改用 `message_envelope.encode()`，而不是手写字典。
+这样协调器（现在）与信封包（若将来接入）两种生产者都能被正确消费，且 `task_node_id` 缺失时是硬错误而不是回退。
 
-**不在本票范围**：worker 装配（`ai4-0fwc`）。本票只保证「消息被正确识别为一条新的交接」，识别之后跑到哪里仍归 0fwc。
+**不在本票范围**：
+
+- worker 装配 → `ai4-0fwc`；
+- 配置层不生效 → `ai4-z3yq`；
+- 信封格式三分叉本身（谁该统一到谁）→ `ai4-t2vk`，本票只保证订阅端能吃下真实生产者现在发的东西。
 
 ## Acceptance Criteria
 
-- [ ] `target_id` 取自 `payload.task_node_id`，`event_id` 取自 `message_id`；两者缺失时报格式错误并写可观察状态，不静默回退到 `message.key`。
-- [ ] `target_agent_id` 校验改读 `routing.target_agent_id`。
-- [ ] 测试用 `message_envelope.encode()` 构造真实信封，覆盖：正常处理、同一节点两封不同 `trigger_revision_id` 的消息产生两条不同 inbox 行（各一次执行）、`payload.task_node_id` 缺失。
-- [ ] 整数 `schema_version` 与字符串 `"1"` 都能正确判定；不相等时写出可观察的跳过状态（现有 `print` 改为不退化为静默）。
+- [ ] `target_id` 取 `task_node_id`，不再使用 `message.key`；缺失时报格式错误并写出可观察状态，不回退。
+- [ ] `event_id` 优先 `message_id`，其次 `event_id`，最后 `message.key`。
+- [ ] `target_agent_id` 与 `schema_version` 的读取位置修正，两个守卫在真实信封上**真的会触发**（各补一条会命中的测试，不是只补一条不命中的）。
+- [ ] `schema_version` 缺失时的语义写进代码注释与测试：是拒绝、是放行、还是按「生产者尚未携带」放行但记录一次告警——三个选项里选一个并说明理由。
+- [ ] 测试改用 `coordinator/src/coordinator/adapter_publisher.py` 的**真实形状**构造消息，覆盖：正常处理、`task_node_id` 缺失、`target_agent_id` 不匹配、`schema_version` 不支持。
+- [ ] 补一条测试钉住 `target_id` 就是 `task_node_id`（不是 key），避免再退回复合串。
 - [ ] runtime 全量测试通过；`compileall` 与 `git diff --check` 通过。
+
+## Not in Scope
+
+见第四节。
 
 ## Notes
 
@@ -95,7 +140,22 @@ inbox rows: [('node-1:node-1', 'processed')]
 
 > *This was generated by AI during triage.*
 
-发现于 `ai4-x0ay` 动手前的链路复查。与 `ai4-0fwc` 是**两个独立缺陷**：0fwc 是「识别对了之后不去调模型」，本票是「根本识别不对」。先修本票，否则 0fwc 修完后仍会丢消息。
+身份核对：assignee `Frank Qi`、分支 `feature/frank-qi`、`git config user.name=Frank Qi`。
 
-pending
+发现于 `ai4-x0ay` 动手前的链路复查。与 `ai4-0fwc`、`ai4-z3yq` 构成同一条链上的三个独立断点：本票（认错了目标）、0fwc（认对之后不调模型）、z3yq（调了也不按配置走）。
 
+与 `ai4-9k0m` 不重复：那张票修的是「坏信封打死进程」与「逐条 commit 实际提交整批」，都在中央侧 `gateway/subscriber`，且它假设读到的就是 `target` / `event_id` 形状。本票是套件订阅端读不到任何真实形状。
+
+---
+
+**2026-10-27 修订（Frank Qi）——撤回初版的核心结论**
+
+> *This was generated by AI during triage.*
+
+初版写「同一 TaskNode 的第二封交接被静默吞掉」，并用 `message-envelope.encode()` 的产物做了复现。**该结论撤回**，原因是我把「文档称权威的格式」当成了「线上实际在跑的格式」。
+
+复核 `coordinator/src/coordinator/adapter_publisher.py:53-62` 后确认：真实生产者发的是**扁平**信封，且 Kafka key 是 `f"{task_node_id}:{target_node_version_ref}"`——key 里带版本。所以两封不同版本的消息去重键不同，都会执行，不存在丢消息。
+
+按真实形状重跑后暴露的是另外两个问题：`target_id` 变成复合串（打穿 Worker Lease 的并发保护、脏了草稿的 `source_target_node_id`），以及两个准入守卫在真实信封上都是死代码。
+
+初版全文与错误复现保留在 Git 历史（提交 `75b4c4b`），不删除。这次错误的性质值得记一笔：**「文档说这是权威格式」不等于「生产者在用这个格式」**，我当时只核了信封包的 `validate()` 能过，没核它的调用方数量。
