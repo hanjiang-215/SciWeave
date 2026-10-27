@@ -63,3 +63,16 @@ AssertionError: ValueError not raised
 - 第一、三条缺陷（session_dir 校验、Workflow YAML 双份）在原票范围内，可直接按原票 AC 修复；
 - 本票结论已进入 `ai4-grlc` 的处置路径；若需在本仓库落地 Linux 侧验证，可后续在 docs/ci.md 的待决项落地时顺带纳入矩阵。
 
+### 修复方案可行性验证（2026-10-28，Linux 容器 python:3.12-slim）
+
+按 `ai4-grlc` 第一条缺陷提出的校验思路（盘符形态 + 反斜杠逃逸 + 保留 is_absolute/dot 检查）在 Linux 上模拟三种输入 + 一条合法路径：
+
+```text
+C:/absolute (盘符)           → reject=True (drive_letter)
+C:\absolute (盘符反斜杠)     → reject=True (drive_letter)
+..\..\outside (反斜杠逃逸)   → reject=True (backslash_escape)
+relative/subdir (合法相对)   → reject=False (accepted)
+```
+
+**结论**：提议方案在 POSIX 上可正确拦截全部三种逃逸形态、不误伤合法相对子目录，修复路径可行。注意补测试时除 `C:/absolute` 外还应覆盖 `C:\absolute` 与 `..\..\outside` 两种输入（`ai4-grlc` AC 第一条已列）。
+
