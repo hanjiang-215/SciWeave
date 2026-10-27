@@ -37,17 +37,24 @@ def sha256_of(path: Path) -> str:
 
 
 def check(path: Path) -> dict[str, object]:
-    with path.open("r", encoding="utf-8", newline="") as handle:
-        reader = csv.DictReader(handle)
-        columns = reader.fieldnames or []
-        if set(EXPECTED_FEATURE_COLUMNS) - set(columns) or EXPECTED_CLASS_COLUMN not in columns:
-            return _failed("missing_columns", {"columns": columns})
-        rows = list(reader)
+    """Structural checks first, provenance last.
 
-    observed_sha256 = sha256_of(path)
-    if observed_sha256 != EXPECTED_SHA256:
-        return _failed("source_hash_mismatch",
-                       {"observed_sha256": observed_sha256, "expected_sha256": EXPECTED_SHA256})
+    Every reason code stays reachable: any file that passes the hash *is* the
+    pinned snapshot, so a hash check placed earlier would silently swallow the
+    row-count, missing-value and class-count failures. Provenance still gates
+    success — it just speaks last, after the more specific diagnosis.
+    """
+    try:
+        with path.open("r", encoding="utf-8", newline="") as handle:
+            reader = csv.DictReader(handle)
+            columns = reader.fieldnames or []
+            if set(EXPECTED_FEATURE_COLUMNS) - set(columns) or EXPECTED_CLASS_COLUMN not in columns:
+                return _failed("missing_columns", {"columns": columns})
+            rows = list(reader)
+    except UnicodeDecodeError:
+        return _failed("unreadable_input", {"reason": "not valid UTF-8"})
+    except OSError as error:
+        return _failed("unreadable_input", {"reason": str(error)})
 
     if len(rows) != EXPECTED_ROWS:
         return _failed("row_count_mismatch", {"observed": len(rows), "expected": EXPECTED_ROWS})
@@ -74,6 +81,11 @@ def check(path: Path) -> dict[str, object]:
         return _failed("missing_values", {"missing_rows": missing, "sample_line_numbers": malformed})
     if class_counts != EXPECTED_CLASS_COUNTS:
         return _failed("class_count_mismatch", {"observed": class_counts, "expected": EXPECTED_CLASS_COUNTS})
+
+    observed_sha256 = sha256_of(path)
+    if observed_sha256 != EXPECTED_SHA256:
+        return _failed("source_hash_mismatch",
+                       {"observed_sha256": observed_sha256, "expected_sha256": EXPECTED_SHA256})
 
     return {
         "status": "ok",

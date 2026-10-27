@@ -15,6 +15,7 @@ import csv
 import hashlib
 import json
 import math
+import random
 import sys
 from collections import Counter
 from datetime import datetime, timezone
@@ -25,7 +26,16 @@ K = 3
 TEST_RATIO = 0.3
 FEATURE_COLUMNS = ("sepal length", "sepal width", "petal length", "petal width")
 CLASS_COLUMN = "class"
-SNAPSHOT_SHA256 = "ea110d42c2240c77fd292751dfdc4db00c699fee569528ed33ca270838b6f9f4"
+EXPECTED_SHA256 = "ea110d42c2240c77fd292751dfdc4db00c699fee569528ed33ca270838b6f9f4"
+
+
+class InvalidInputError(ValueError):
+    """输入不可解析；属于结构错误，不进入分类计算。"""
+
+    def __init__(self, reason_code: str, detail: dict[str, object]) -> None:
+        super().__init__(reason_code)
+        self.reason_code = reason_code
+        self.detail = detail
 
 
 def sha256_of(path: Path) -> str:
@@ -38,18 +48,28 @@ def sha256_of(path: Path) -> str:
 
 
 def load(path: Path) -> tuple[list[tuple[float, ...]], list[str]]:
-    with path.open("r", encoding="utf-8", newline="") as handle:
-        reader = csv.DictReader(handle)
-        columns = reader.fieldnames or []
-        missing = [column for column in (*FEATURE_COLUMNS, CLASS_COLUMN) if column not in columns]
-        if missing:
-            raise MissingColumnsError(missing, columns)
-        features: list[tuple[float, ...]] = []
-        labels: list[str] = []
-        for row in reader:
-            values = tuple(float(row[column]) for column in FEATURE_COLUMNS)
-            features.append(values)
-            labels.append(row[CLASS_COLUMN])
+    """Parse the snapshot, raising a reason code for anything unparseable."""
+    try:
+        handle = path.open("r", encoding="utf-8", newline="")
+    except OSError as error:
+        raise InvalidInputError("unreadable_input", {"reason": str(error)}) from error
+    with handle:
+        try:
+            reader = csv.DictReader(handle)
+            columns = reader.fieldnames or []
+            missing = [column for column in (*FEATURE_COLUMNS, CLASS_COLUMN) if column not in columns]
+            if missing:
+                raise InvalidInputError("missing_columns", {"missing": missing, "columns": columns})
+            features: list[tuple[float, ...]] = []
+            labels: list[str] = []
+            for index, row in enumerate(reader, start=2):
+                try:
+                    features.append(tuple(float(row[column]) for column in FEATURE_COLUMNS))
+                except (TypeError, ValueError) as error:
+                    raise InvalidInputError("invalid_values", {"line": index, "reason": str(error)}) from error
+                labels.append(row[CLASS_COLUMN])
+        except UnicodeDecodeError:
+            raise InvalidInputError("unreadable_input", {"reason": "not valid UTF-8"}) from None
     return features, labels
 
 
@@ -82,40 +102,18 @@ def _euclidean(left: tuple[float, ...], right: tuple[float, ...]) -> float:
     return math.sqrt(sum((a - b) ** 2 for a, b in zip(left, right)))
 
 
-class MissingColumnsError(ValueError):
-    """输入缺少必需列；属于结构错误，不进入分类计算。"""
+def _failed(reason_code: str, detail: dict[str, object]) -> int:
+    print(json.dumps({
+        "status": "failed",
+        "reason_code": reason_code,
+        "detail": detail,
+        "run_at": datetime.now(timezone.utc).isoformat(),
+    }, ensure_ascii=False, indent=2))
+    return 1
 
-    def __init__(self, missing: list[str], columns: list[str]) -> None:
-        super().__init__(f"missing columns: {', '.join(missing)}")
-        self.missing = missing
-        self.columns = columns
 
-
-def main() -> int:
-    if len(sys.argv) != 2:
-        print("usage: run_iris_baseline.py <path-to-data.csv>", file=sys.stderr)
-        return 2
-    path = Path(sys.argv[1])
-    try:
-        features, labels = load(path)
-    except MissingColumnsError as error:
-        print(json.dumps({
-            "status": "failed",
-            "reason_code": "missing_columns",
-            "detail": {"missing": error.missing, "columns": error.columns},
-            "run_at": datetime.now(timezone.utc).isoformat(),
-        }, ensure_ascii=False, indent=2))
-        return 1
-    observed_sha256 = sha256_of(path)
-    if observed_sha256 != SNAPSHOT_SHA256:
-        print(json.dumps({
-            "status": "failed",
-            "reason_code": "source_hash_mismatch",
-            "detail": {"observed_sha256": observed_sha256, "expected_sha256": SNAPSHOT_SHA256},
-            "run_at": datetime.now(timezone.utc).isoformat(),
-        }, ensure_ascii=False, indent=2))
-        return 1
-    rng = __import__("random").Random(SEED)
+def evaluate(features: list[tuple[float, ...]], labels: list[str]) -> dict[str, object]:
+    rng = random.Random(SEED)
     xtrain, ytrain, xtest, ytest = stratified_split(features, labels, rng)
     trained = list(zip(xtrain, ytrain))
     predictions = [predict_one(trained, point, K) for point in xtest]
@@ -126,6 +124,32 @@ def main() -> int:
         confusion[actual][predicted] += 1
     correct = sum(1 for actual, predicted in zip(ytest, predictions) if actual == predicted)
 
+    return {
+        "train_size": len(ytrain),
+        "test_size": len(ytest),
+        "accuracy": round(correct / len(ytest), 6),
+        "correct": correct,
+        "confusion_matrix": confusion,
+    }
+
+
+def main() -> int:
+    if len(sys.argv) != 2:
+        print("usage: run_iris_baseline.py <path-to-data.csv>", file=sys.stderr)
+        return 2
+    path = Path(sys.argv[1])
+    try:
+        features, labels = load(path)
+    except InvalidInputError as error:
+        return _failed(error.reason_code, error.detail)
+
+    # Provenance gate last: a structurally valid file is not necessarily the
+    # pinned snapshot, and no metric may be produced for a substitute.
+    observed_sha256 = sha256_of(path)
+    if observed_sha256 != EXPECTED_SHA256:
+        return _failed("source_hash_mismatch",
+                       {"observed_sha256": observed_sha256, "expected_sha256": EXPECTED_SHA256})
+
     record = {
         "status": "ok",
         "method": "knn",
@@ -134,16 +158,12 @@ def main() -> int:
         "test_ratio": TEST_RATIO,
         "feature_columns": list(FEATURE_COLUMNS),
         "input_snapshot_sha256": observed_sha256,
-        "train_size": len(ytrain),
-        "test_size": len(ytest),
-        "accuracy": round(correct / len(ytest), 6),
-        "correct": correct,
-        "confusion_matrix": confusion,
+        **evaluate(features, labels),
         "tool_versions": {"python": sys.version.split()[0], "libraries": "standard-library-only"},
         "run_at": datetime.now(timezone.utc).isoformat(),
     }
     print(json.dumps(record, ensure_ascii=False, indent=2))
-    return 0 if record["status"] == "ok" else 1
+    return 0
 
 
 if __name__ == "__main__":
