@@ -327,6 +327,7 @@ class ShippedWorkerEntryPointTests(unittest.TestCase):
         environment.update(
             {
                 "DATABASE_PATH": self.db,
+                "SCIWEAVE_AGENT_ID": "researcher-task-agent",
                 "SCIWEAVE_GATEWAY_PASSTHROUGH_RUNTIME": "1",
                 "PYTHONPATH": str(RUNTIME_SRC),
             }

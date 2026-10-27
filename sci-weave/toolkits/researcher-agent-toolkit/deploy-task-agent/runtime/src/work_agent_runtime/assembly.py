@@ -87,6 +87,28 @@ class WorkerConfig:
     def resource(self, reference: str):
         return self.resources.resolve(reference)
 
+    def with_agent(self, name: str) -> "WorkerConfig":
+        """The same configuration, pinned to a different agent definition.
+
+        A workflow runs several agents, each with its own instruction, model and
+        `allowed_mcp_resources` (ai4-x0ay). The runtime reads the agent it should
+        use from ``config.agent``, so "run step `literature-searcher`" is the
+        same config with a different ``agent`` — everything else (MCP catalog,
+        sources, resources) is shared and must not be reloaded per step.
+        """
+        if name == self.agent.name:
+            return self
+        try:
+            agent = self.project.agents[name]
+        except KeyError as error:
+            known = ", ".join(sorted(self.project.agents)) or "(none)"
+            raise WorkerConfigError("SCIWEAVE_WORKFLOW", name, f"no definition declares this agent; known agents: {known}") from error
+        return WorkerConfig(agent, self.project, self.resources, self.mcp, dict(self.sources))
+
+    @property
+    def workflow_names(self) -> tuple[str, ...]:
+        return tuple(sorted(self.project.workflows))
+
 
 def kit_root() -> Path:
     """The kit directory: four levels above ``runtime/src/work_agent_runtime``."""

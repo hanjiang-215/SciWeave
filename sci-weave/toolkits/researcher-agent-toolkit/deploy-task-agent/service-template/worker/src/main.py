@@ -34,6 +34,8 @@ from work_agent_runtime import (
     build_agent_runtime,
 )
 from work_agent_runtime.worker_shell import run_one_queued, run_queued_once
+from work_agent_runtime.workflow_agent import AgentRunFailure, WorkflowAgent, plan_for
+from work_agent_runtime.workflows import WorkflowExecutor
 
 
 def argument(name: str) -> str:
@@ -56,6 +58,52 @@ def required(name: str) -> str:
     if not value or not value.strip():
         raise SystemExit(f"{name} must be configured through the environment")
     return value.strip()
+
+
+def workflow_callable(agent, runtime: WorkAgentRuntime, environ: dict[str, str]):
+    """The multi-agent entry, or ``None`` to stay on the single-agent path.
+
+    ``SCIWEAVE_WORKFLOW`` names the workflow to run. Without it a configuration
+    that declares exactly one workflow runs that one, which is what makes the
+    shipped preset work with no extra setting (see `plan_for`).
+
+    Each step builds its own runtime pinned to that agent's definition: its own
+    instruction, model and `allowed_mcp_resources`. Sharing one runtime would
+    send every step's prompt to whichever agent happened to be configured and
+    hand a reader the writer's `create_draft`.
+    """
+    config = getattr(agent, "config", None)
+    if config is None:
+        return None
+    try:
+        plan = plan_for(config, os.environ.get("SCIWEAVE_WORKFLOW", "").strip() or None)
+    except AgentRunFailure as error:
+        raise SystemExit(f"worker workflow is not configured: {error}") from error
+    if plan is None:
+        return None
+
+    def factory(name: str):
+        return build_agent_runtime(environ, config=config.with_agent(name))
+
+    # `WorkflowExecutor` needs one `(name, prompt)` callable for every step. A
+    # stepper is created per run because execution identity and session ids are
+    # per handoff: reusing one would make two handoffs share a session history.
+    def run(prompt: str, target_id: str, execution_id: str = ""):
+        execution_id = execution_id or target_id
+        stepper = WorkflowAgent(
+            factory,
+            execution_id=execution_id,
+            task_node_id=target_id,
+            session_id=execution_id,
+        )
+        executor = WorkflowExecutor(plan.config, stepper, runtime.drafts)
+        return executor.run(
+            plan.name, prompt, target_id=target_id, execution_id=execution_id
+        )
+
+    run.workflow_name = plan.name
+    run.agents = plan.agent_names
+    return run
 
 
 def build_runtime() -> WorkAgentRuntime:
@@ -100,13 +148,21 @@ def main() -> int:
         ),
         flush=True,
     )
+    workflow = workflow_callable(agent, runtime, dict(os.environ))
+    if workflow is not None:
+        print(json.dumps({"workflow": workflow.workflow_name, "agents": list(workflow.agents)}, ensure_ascii=False), flush=True)
     # One handoff by key when the subscriber started us (ai4-0fwc); a batch scan
     # only for the standalone bring-up run.
     dedupe_key = argument("--dedupe-key")
     if dedupe_key:
-        results = run_one_queued(runtime, agent, dedupe_key)
+        results = run_one_queued(runtime, agent, dedupe_key, workflow=workflow)
     else:
-        results = run_queued_once(runtime, agent, limit=int(os.environ.get("SCIWEAVE_WORKER_BATCH", "1")))
+        results = run_queued_once(
+            runtime,
+            agent,
+            limit=int(os.environ.get("SCIWEAVE_WORKER_BATCH", "1")),
+            workflow=workflow,
+        )
     print(json.dumps({"ran": len(results), "results": results}, ensure_ascii=False))
     # `not_found` and `already_processed` are not failures: the subscriber
     # commits before it dispatches, so a replay that finds a finished row, or a

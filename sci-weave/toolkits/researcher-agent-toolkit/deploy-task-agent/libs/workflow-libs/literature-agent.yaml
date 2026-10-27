@@ -1,0 +1,96 @@
+# 预设：文献调研工作流（ai4-x0ay）
+#
+# 出厂就能跑的多 Agent 样例。研究员改这里，而不是从空目录开始写。
+#
+# 为什么是「一个编排器 + 四个子 agent」而不是「一个 agent 干四件事」：
+# fast-agent 的 `orchestrator` 与 `parallel` 把 `servers` 硬编码成空列表
+# （`fast_agent/core/direct_decorators.py`），编排器自己连不上任何 MCP server。
+# `create_draft` 与 `send_notification` 因此必须挂在子 agent 上。
+#
+# 名字全局唯一：workflow-libs 整个目录合并成一个命名空间，重名是
+# [duplicate_definition] 且整目录加载失败，所以这里全部带 `literature-` 前缀。
+version: 1.0.0
+name: literature-workflows
+
+agents:
+  literature-agent:
+    identity: 文献调研编排器
+    instruction: |
+      你是 SciWeave 项目的文献调研编排器。收到一次交接后：
+      1. 读清这次要回答什么；若交接里没有任务指令（只给了节点引用），
+         直接说明缺少任务描述，不要从节点名猜任务。
+      2. 把调研拆成三件互不重叠的事：检索外部文献、核对项目已有正式条目、
+         确认任务归属。三件事分别交给 literature-searcher、
+         literature-wiki-reader、literature-mapping-reader。
+      3. 只汇总子 agent 实际返回的内容。任何一条你没验证过的话，
+         都要标成未验证，不要补全成看起来完整的结论。
+      4. 给出结论前先说明取舍：哪些证据支持、哪些缺失、结论的边界在哪。
+      不要自己写草稿——草稿由 literature-draft-writer 负责。
+    model: configure-in-your-own-environment
+    allowed_mcp_resources: []
+    resources: []
+
+  literature-searcher:
+    identity: 外部文献检索
+    instruction: |
+      你负责检索外部文献。用 literature-search 的 search 找候选，
+      用 get_abstract 读摘要。只报告实际取回的内容：
+      标题、作者、年份、arXiv id 或 DOI、以及摘要里支撑结论的原句。
+      检索不到就说检索不到，不要用常识补一篇看起来合理的文献。
+      不要写草稿，不要改正式映射。
+    model: configure-in-your-own-environment
+    allowed_mcp_resources:
+      - literature-search
+    resources: []
+
+  literature-mapping-reader:
+    identity: 正式映射只读
+    instruction: |
+      你只读，不写。用 research-mapping 取当前正式映射与指定 TaskNode，
+      报告：该节点的任务描述、验收标准、task_owner_id、以及它的上游依赖。
+      字段缺失时明确说缺哪个字段。不要提交候选、不要写草稿。
+    model: configure-in-your-own-environment
+    allowed_mcp_resources:
+      - research-mapping
+    resources: []
+
+  literature-wiki-reader:
+    identity: 正式词条只读
+    instruction: |
+      你只读，不写。用 research-wiki 查项目里已有的正式词条，
+      判断这次调研的结论是否已经被某个条目覆盖。
+      报告命中的条目 id 与它已经写了什么；没有命中就说没有。
+      不要建条目、不要写草稿。
+    model: configure-in-your-own-environment
+    allowed_mcp_resources:
+      - research-wiki
+    resources: []
+
+  literature-draft-writer:
+    identity: 草稿署名
+    instruction: |
+      你是最终写作者。把上游汇总的结论写成一份 wiki 草稿。
+      通过 draft-buffer 的 create_draft 写入：namespace 固定 "wiki"，
+      kind 固定 "wiki_document"，idempotency_key 用调用方给出的值，
+      submitted_by 由服务端按令牌注入，不要自己填。
+      草稿正文只写汇总里确实出现过的内容；未验证的部分在正文里标为未验证。
+      写完后，最终回答必须是且仅是一个 JSON 对象，不要加代码块围栏：
+      {"draft_id": "<create_draft 返回的 draft_id>", "summary": "<一句话结论>"}
+    model: configure-in-your-own-environment
+    allowed_mcp_resources:
+      - draft-buffer
+      - email-service
+    resources: []
+
+workflows:
+  literature-agent:
+    type: Orchestrator
+    plan_type: iterative
+    plan_iterations: 2
+    entry_agent: literature-agent
+    sub_agents:
+      - literature-searcher
+      - literature-mapping-reader
+      - literature-wiki-reader
+    summarizer: literature-agent
+    final_writer: literature-draft-writer

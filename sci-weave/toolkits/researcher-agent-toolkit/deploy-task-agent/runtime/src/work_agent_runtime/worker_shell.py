@@ -15,7 +15,7 @@ worker that scanned would race a second subscriber for the same row.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Any, Callable, Protocol
 
 
 class AgentRuntime(Protocol):
@@ -60,7 +60,34 @@ def task_instruction(row: dict) -> str:
     return NO_TASK_TEXT.format(task_node_id=row.get("target_id", ""))
 
 
-def run_one_queued(runtime, agent: AgentRuntime, dedupe_key: str) -> list[dict]:
+#: ``(prompt, target_id, execution_id) -> object with status/draft_id`` for a
+#: configured workflow. Passing one switches the row from the single-agent path
+#: to the multi-agent one (ai4-x0ay).
+WorkflowCallable = Callable[..., Any]
+
+
+def _workflow_outcome(row: dict, prompt: str, workflow: WorkflowCallable) -> tuple[str, str, str | None]:
+    """Run one row through a workflow; returns ``(status, draft_id, error_code)``.
+
+    The workflow writes its own draft — `WorkflowExecutor` calls `final_writer`
+    and, when that agent holds the `draft-buffer` card, reads the id the agent
+    reported. Either way this must **not** write a second draft, which is why
+    the middle value is a draft id rather than a payload.
+    """
+    result = workflow(prompt, row["target_id"], row["dedupe_key"])
+    status = str(getattr(result, "status", "failed"))
+    if status != "completed":
+        return status, "", getattr(result, "error_code", None)
+    return "completed", getattr(result, "draft_id", None), None
+
+
+def run_one_queued(
+    runtime,
+    agent: AgentRuntime,
+    dedupe_key: str,
+    *,
+    workflow: WorkflowCallable | None = None,
+) -> list[dict]:
     """Run exactly one inbox row, by key.
 
     Returns a single-element list so callers can print one identical JSON shape
@@ -68,6 +95,10 @@ def run_one_queued(runtime, agent: AgentRuntime, dedupe_key: str) -> list[dict]:
 
     The instruction comes from the row's `command_text`; see `task_instruction`
     for what happens when the handoff carried none.
+
+    ``workflow`` runs the configured multi-agent workflow instead of the single
+    agent. It writes the draft itself, so this function only records the outcome
+    in that case.
     """
     if getattr(runtime, "inbox", None) is None:
         return []
@@ -86,6 +117,15 @@ def run_one_queued(runtime, agent: AgentRuntime, dedupe_key: str) -> list[dict]:
         session_id=row["dedupe_key"],
         command_text=task_instruction(row),
     )
+    if workflow is not None:
+        status, draft_id, error_code = _workflow_outcome(
+            row, request.command_text, workflow
+        )
+        if status != "completed":
+            return [_result(row, status, error_code=error_code)]
+        runtime.inbox.mark_processed(row["dedupe_key"])
+        return [_result(row, "completed", draft_id=draft_id)]
+
     outcome = agent.run(request)
     status = getattr(outcome, "status", "failed")
     if status != "completed":
@@ -96,7 +136,13 @@ def run_one_queued(runtime, agent: AgentRuntime, dedupe_key: str) -> list[dict]:
     return [_result(row, "completed", draft_id=draft_id)]
 
 
-def run_queued_once(runtime, agent: AgentRuntime, *, limit: int = 1) -> list[dict]:
+def run_queued_once(
+    runtime,
+    agent: AgentRuntime,
+    *,
+    limit: int = 1,
+    workflow: WorkflowCallable | None = None,
+) -> list[dict]:
     """Run up to ``limit`` queued handoffs and report what happened to each.
 
     The batch form, kept for the one-shot bring-up run
@@ -107,5 +153,5 @@ def run_queued_once(runtime, agent: AgentRuntime, *, limit: int = 1) -> list[dic
         return []
     results: list[dict] = []
     for row in runtime.inbox.list_status("queued")[:limit]:
-        results.extend(run_one_queued(runtime, agent, row["dedupe_key"]))
+        results.extend(run_one_queued(runtime, agent, row["dedupe_key"], workflow=workflow))
     return results
