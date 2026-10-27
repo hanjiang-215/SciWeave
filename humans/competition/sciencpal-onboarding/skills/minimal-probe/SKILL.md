@@ -19,10 +19,12 @@ python --version
 
 ### 2. 运行 T1 数据检查（脚本执行探测）
 
-在沙箱内对 `checks/iris_data.csv` 运行：
+先把 `humans/competition/demo-evidence/` 下的 `check_iris_input.py` 与 `iris_data.csv` 上传到沙箱的同一目录。仓库里不再维护 `checks/` 副本，`demo-evidence/` 是唯一来源。
+
+在沙箱内运行（脚本与数据同目录）：
 
 ```bash
-python checks/check_iris_input.py checks/iris_data.csv
+python check_iris_input.py iris_data.csv
 ```
 
 记录输出。预期 `status: ok`。若文件缺失，先检查上传；仍失败则如实记录错误文本。
