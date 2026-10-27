@@ -83,7 +83,8 @@
         "required": ["run_id"],
         "properties": {
           "run_id": {"type": "string"},
-          "names_json": {"type": "string", "description": "optional JSON array of basenames"}
+          "names_json": {"type": "string", "description": "optional JSON array of basenames"},
+          "roots_json": {"type": "string", "description": "optional JSON array of sandbox roots; defaults to [\"/workspace\", \"/outputs\"]"}
         }
       },
       "output": {

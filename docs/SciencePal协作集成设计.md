@@ -3,12 +3,14 @@
 > 状态：方案（2026-10-27），面向 2026-10-31 提交窗口。
 > 关联：`ai4-v869`（SciencePal 执行面与中央 MCP 对接预案）、`ai4-aaff`（演示场景与证据）、`ai4-v19u`（套件边界）。
 > 本文只定集成边界与落地顺序，不替代实现票；实现前按 `docs/agents/issue-tracker.md` 拆票。
+>
+> **2026-10-27 修订（宿主变更）**：协作者不再限定 SciWeave Task Agent。主路径改为外部 harness（WorkBuddy、DSH、其他集成 Agent）安装 Skill + bridge，在科研执行段调用 SciencePal；SciWeave 保留地图、草稿与治理。§4.1 的 runtime 改造降级为“仍用 SciWeave Task Agent 时”的可选项。
 
 ## 1. 结论
 
 **把 SciencePal 作为「科研执行面」套件接入现有 Work Agent，不要反过来把协作与治理搬进 SciencePal。**
 
-- 协作者 = 现有 Task Agent 实例（一角色一实例），加载 `sciencepal-research` 套件。
+- 协作者 = 外部 harness 中的 Agent（WorkBuddy / DSH / 其他集成 Agent），安装 `sciencepal-research` Skill 与 bridge；SciWeave Task Agent 是可选的本地宿主。
 - 套件 = 1 个 Skill（决策协议）+ 1 个 MCP bridge（确定性执行能力）+ 1 份 MCP 工具卡 + N 份协作者 Agent 定义 + 启动检查 hook。
 - 地图 → 协作者：沿用现有 `task_handoff_ready` 与 `TaskNode.executor_refs`，不新增下发通道。
 - 协作者 → SciencePal：bridge 通过官方 SDK 上传输入、发起 run、轮询状态、下载产物。
@@ -116,7 +118,9 @@ SCIENCEPAL_MAX_UPLOAD_MB=25
 SCIENCEPAL_DEFAULT_AGENT_ID=
 ```
 
-### 4.1 运行时现状与改动点
+### 4.1 运行时现状与改动点（仅当宿主是 SciWeave Task Agent）
+
+若协作者运行在 WorkBuddy / DSH / 其他 harness，**跳过本节**：直接用 §4 的 MCP 或 CLI，不需要改 SciWeave runtime。以下仅适用于仍把 SciWeave Task Agent 当宿主的场景。
 
 读现有代码后的硬事实：`runtime/src/work_agent_runtime/fast_agent_runtime.py` 目前每次执行只创建一个裸 fast-agent agent——静态 instruction、`use_history=True`、**没有 `servers`、没有加载 Agent 定义、没有 Skill**；`worker_shell.py` 只把 `result_summary` 写成 `{result_summary: ...}` 的草稿。也就是说，套件装进去，协作者现在也“看不见”这些工具。
 
@@ -336,7 +340,7 @@ run failed / timeout / 缺产物 / 验收不满足
 | --- | --- | --- |
 | 10/27（今天） | 生成 token；SDK 冒烟：`agents.list`、带文件 `runs.initiate`、`runs.get`、`sandbox` 下载；确认输出目录、时长、失败形态 | 冒烟记录（run/thread id、产物清单） |
 | 10/28 | bridge 四工具 + 单测（假 SDK）；Skill 初稿；`mcp.json`；协作者定义；T1 真跑通 | T1 报告 + 产物哈希 |
-| 10/29 | 接入 runtime（MCP servers + skill instruction + 结构化报告写草稿）；T2 真跑通；缺列失败注入 | T2 报告 + 失败报告 |
+| 10/29 | 把 Skill + bridge 装进 WorkBuddy/DSH（MCP 或 CLI）；T2 真跑通；缺列失败注入。仅当仍用 SciWeave Task Agent 时才改 runtime | T2 报告 + 失败报告 |
 | 10/30 | 草稿 → 候选 T4 → 正式化；演示脚本计时；证据卡与 5 页说明回填；录屏 | `iris_platform_pipeline` 新链路 + 视频 |
 | 10/31 | 提交；链接自检；备份 | 提交材料 |
 
@@ -383,14 +387,14 @@ SciWeave conductor（读正式图、发任务、收结果、写草稿）
 
 ## 13. 今天必须验证的清单
 
-- [ ] token 可用；401 的返回形态
-- [ ] `agents.list` 的内置 `agent_id` 与学科映射
-- [ ] 带文件 `runs.initiate` 成功；文件落在沙箱哪个目录
-- [ ] 输出目录约定；`report.md` 是否可写、在哪
-- [ ] T1/T2 run 的典型时长（决定轮询与演示节奏）
-- [ ] 失败 run 的 `status` / `error` 字段
-- [ ] 沙箱根目录是否含系统文件，产物过滤规则
-- [ ] SDK 在本机 Python 版本上的兼容
+- [x] token 可用；401 的返回形态（`sciencepal_unauthorized`）
+- [ ] `agents.list` 的内置 `agent_id` 与学科映射（当前账号返回空数组；默认/auto 仍可发起）
+- [x] 带文件 `runs.initiate` 成功；上传文件落在 `/workspace/<name>`
+- [x] 输出目录约定；产物在 `/outputs` 与 `/workspace/outputs`（同一份，按 sha256 去重）
+- [ ] T1/T2 run 的典型时长（最小 run 15.8s，带文件 probe 32.2s；T1/T2 待测）
+- [ ] 失败 run 的 `status` / `error` 字段（待注入）
+- [x] 沙箱根目录是否含系统文件，产物过滤规则（跳过 `skills/`、`memory/`、`_refs/`）
+- [x] SDK 在本机 Python 版本上的兼容（bridge 用 httpx；官方 SDK 要求 Python ≥3.11）
 - [ ] 并发 run 限制
 - [ ] 是否有可分享的 Replay/项目链接（证据用）
 
@@ -402,23 +406,31 @@ SciWeave conductor（读正式图、发任务、收结果、写草稿）
 
 | 位置 | 内容 |
 | --- | --- |
-| `custom-mcp/sciencepal-bridge/` | 独立 uv 子项目；HTTP 客户端、run ledger、5 个 MCP 工具、单测、smoke 脚本 |
+| `custom-mcp/sciencepal-bridge/` | 独立 uv 子项目；HTTP 客户端、run ledger、5 个 MCP 工具、stdio/HTTP 两种传输、CLI、单测 |
+| `custom-mcp/sciencepal-bridge/harness/` | 跨 harness 接入矩阵与 generic MCP 配置 |
 | `libs/mcp-libs/sciencepal/mcp.json` | stdio 工具卡，已通过 runtime `mcp_resources` 校验 |
-| `deploy-task-agent-skills/sciencepal-research/` | Skill 与任务包/证据参考 |
+| `deploy-task-agent-skills/sciencepal-research/` | Skill 与任务包/证据/harness 参考 |
 | `agent-definitions/agents/*-collaborator.yaml` | data / biology / materials 三个协作者定义 |
-| `.env`（gitignored） | `SCIENCEPAL_ACCESS_TOKEN` 占位，等待替换 |
+| `.env`（gitignored） | 真实 token 已填入；工作区指向本地 `var/sciencepal-workspace` |
 
-验证结果：
+验证结果（2026-10-27，真实 token）：
 
 ```text
-uv run python -m unittest discover -s tests -v   # 11 项通过
-MCP tools: sciencepal_start, sciencepal_status, sciencepal_collect, sciencepal_cancel, sciencepal_agents
+uv run python -m unittest discover -s tests -v          # 11 项通过
+run 670a5341…：15.8s 完成（纯文本，无产物）
+run 2772f7b7…：32.2s 完成；/outputs 与 /workspace/outputs 各 2 个产物，按 sha256 去重
+CLI：sciencepal agents / status / collect 均返回单行 JSON
+HTTP MCP：initialize 200、tools/list 5 个工具，serverInfo.name=sciencepal-bridge
+错误：无 token → sciencepal_token_missing；错误 token → sciencepal_unauthorized
 ```
+
+证据见 `humans/competition/demo-evidence/sciencepal-smoke.md`。
 
 未完成：
 
-- runtime 尚未把 `sciencepal` MCP 挂给协作者（需要 `SCIEWEAVE_SCIENCEPAL_KIT=1` 的 opt-in 改动）；
-- 尚未用真实 token 跑过 SciencePal（等 token 后先跑 `scripts/smoke.py`）；
-- 草稿 payload 仍是 `{result_summary}`，尚未接结构化 ExecutionReport。
+- WorkBuddy / DSH 的**实际安装**未验证（本机只有通用 CLI 与 DSH shell 路径）；需要各自环境各跑一次；
+- 执行报告 → 草稿 → 候选 → 地图进度（已在工单拆分）；
+- T1/T2 真实执行与失败注入；
+- 运行状态投影（L2）不在本阶段。
 
-下一步顺序：真实 smoke → 按实际输出目录调整 `collect` → runtime opt-in → 草稿结构化。
+下一步：装进第一个真实 harness（DSH 或 WorkBuddy）→ 跑 T1 → 用报告回写草稿。

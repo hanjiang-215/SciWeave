@@ -6,6 +6,7 @@ them without generated schemas: start, status, collect, cancel, agents.
 
 from __future__ import annotations
 
+import argparse
 import json
 from typing import Any
 
@@ -99,15 +100,20 @@ def sciencepal_status(run_id: str) -> str:
         "verify sha256 and write a manifest. Optional names_json filters basenames."
     )
 )
-def sciencepal_collect(run_id: str, names_json: str = "") -> str:
+def sciencepal_collect(run_id: str, names_json: str = "", roots_json: str = "") -> str:
     def action() -> dict[str, Any]:
         try:
             names = json.loads(names_json) if names_json.strip() else []
+            roots = json.loads(roots_json) if roots_json.strip() else []
         except json.JSONDecodeError:
-            raise SciencePalError("invalid_arguments", "names_json must be a JSON array") from None
-        if not isinstance(names, list):
-            raise SciencePalError("invalid_arguments", "names_json must be a JSON array")
-        return _get_service().collect(run_id, names=[str(name) for name in names])
+            raise SciencePalError("invalid_arguments", "names_json/roots_json must be JSON arrays") from None
+        if not isinstance(names, list) or not isinstance(roots, list):
+            raise SciencePalError("invalid_arguments", "names_json/roots_json must be JSON arrays")
+        return _get_service().collect(
+            run_id,
+            names=[str(name) for name in names],
+            roots=[str(root) for root in roots] or None,
+        )
 
     return _guard(action)
 
@@ -123,7 +129,17 @@ def sciencepal_agents() -> str:
 
 
 def main() -> None:
-    server.run()
+    parser = argparse.ArgumentParser(description="SciencePal bridge MCP server")
+    parser.add_argument("--transport", choices=["stdio", "http"], default="stdio")
+    parser.add_argument("--host", default="127.0.0.1")
+    parser.add_argument("--port", type=int, default=8791)
+    args = parser.parse_args()
+    if args.transport == "http":
+        # Local harnesses only: the bridge has no remote auth layer. Keep the
+        # bind address on loopback unless a reverse proxy adds authentication.
+        server.run("streamable-http", host=args.host, port=args.port)
+    else:
+        server.run()
 
 
 if __name__ == "__main__":

@@ -44,9 +44,9 @@ class FakeSciencePalClient:
         self.listed_dirs.append(path)
         if path == "/":
             return [SandboxFile("outputs", "/outputs", True, 0, None)]
-        if path == "/outputs":
+        if path in {"/outputs", "/workspace/outputs"}:
             return [
-                SandboxFile(name, f"/outputs/{name}", False, len(content), None)
+                SandboxFile(name, f"{path}/{name}", False, len(content), None)
                 for name, content in self.files.items()
             ]
         return []
@@ -130,10 +130,19 @@ class ServiceTests(unittest.TestCase):
         self.assertEqual(len(result["artifacts"]), 2)
         report = next(item for item in result["artifacts"] if item["name"] == "report.md")
         self.assertEqual(report["kind"], "report")
-        downloaded = self.workspace / "runs" / "run-1" / "outputs" / "report.md"
+        downloaded = self.workspace / "runs" / "run-1" / "report.md"
         self.assertEqual(downloaded.read_bytes(), b"# report\n")
         self.assertEqual(report["sha256"], hashlib.sha256(b"# report\n").hexdigest())
         self.assertTrue(Path(result["manifest_path"]).is_file())
+
+    def test_collect_deduplicates_mirrored_outputs(self) -> None:
+        started = self.service.start(instruction="run", idempotency_key="exec-dedupe")
+        self.store.update_status(started["run_id"], "completed")
+        result = self.service.collect(started["run_id"])
+        self.assertEqual(len(result["artifacts"]), 2)
+        self.assertEqual(len(result["skipped"]), 2)
+        self.assertTrue(all(item["reason"] == "duplicate" for item in result["skipped"]))
+        self.assertEqual({item["path"] for item in result["artifacts"]}, {"report.md", "result.json"})
 
     def test_collect_requires_completed_run(self) -> None:
         started = self.service.start(instruction="run", idempotency_key="exec-running")

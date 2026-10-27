@@ -1,0 +1,17 @@
+{
+  "mcpServers": {
+    "sciencepal": {
+      "command": "uv",
+      "args": [
+        "run",
+        "--project",
+        "<bridge-dir>",
+        "--env-file",
+        "<bridge-dir>/.env",
+        "python",
+        "src/main.py"
+      ],
+      "cwd": "<bridge-dir>"
+    }
+  }
+}

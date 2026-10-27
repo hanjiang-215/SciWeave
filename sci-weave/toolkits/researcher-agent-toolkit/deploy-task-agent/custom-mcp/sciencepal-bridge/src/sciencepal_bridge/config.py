@@ -63,7 +63,12 @@ class BridgeConfig:
         ):
             raise ConfigError("invalid_config", "SCIENCEPAL_BASE_URL must be an https endpoint")
 
-        workspace = Path(env.get("SCIENCEPAL_WORKSPACE") or "var/sciencepal-workspace").expanduser()
+        workspace_raw = (env.get("SCIENCEPAL_WORKSPACE") or "").strip()
+        workspace = (
+            Path(workspace_raw).expanduser()
+            if workspace_raw
+            else Path.home() / ".sciweave" / "sciencepal-workspace"
+        )
         workspace = workspace.resolve()
         run_db = Path(env.get("SCIENCEPAL_RUN_DB") or str(workspace / "runs.sqlite")).expanduser()
         if not run_db.is_absolute():

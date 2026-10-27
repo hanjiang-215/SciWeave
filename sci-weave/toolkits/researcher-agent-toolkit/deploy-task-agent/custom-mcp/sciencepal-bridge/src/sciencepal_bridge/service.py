@@ -12,6 +12,7 @@ import hashlib
 import json
 import os
 import time
+from datetime import datetime
 from pathlib import Path, PurePosixPath
 from typing import Any
 
@@ -43,7 +44,15 @@ _SKIP_DIR_NAMES = {
     "__pycache__",
     "node_modules",
     "site-packages",
+    # SciencePal's sandbox /workspace contains its own skill library and
+    # runtime memory; those are not task artifacts.
+    "skills",
+    "memory",
+    "_refs",
 }
+
+DEFAULT_ROOTS = ("/outputs", "/workspace/outputs")
+_MAX_PATH_LENGTH = 240
 _SKIP_FILE_NAMES = {".DS_Store"}
 _SKIP_FILE_SUFFIXES = {".pyc", ".pyo", ".lock", ".tmp"}
 
@@ -80,6 +89,25 @@ def _safe_relative(path: str) -> Path | None:
     if any(part in {"..", "."} for part in parts):
         return None
     return Path(*parts) if parts else None
+
+
+def _parse_timestamp(value: str | None) -> float | None:
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00")).timestamp()
+    except ValueError:
+        return None
+
+
+def _relative_from_roots(path: str, roots: list[str]) -> Path | None:
+    normalized = _normalize(path)
+    for root in sorted((_normalize(item).rstrip("/") for item in roots), key=len, reverse=True):
+        if normalized == root:
+            return None
+        if normalized.startswith(root + "/"):
+            return _safe_relative(normalized[len(root):])
+    return _safe_relative(normalized)
 
 
 def _skip_dir(path: str) -> bool:
@@ -172,6 +200,8 @@ class SciencePalService:
         record = self._require_run(run_id)
         state = self.client.get_run(run_id)
         self.store.update_status(run_id, state.status, state.error)
+        started = _parse_timestamp(state.started_at)
+        completed = _parse_timestamp(state.completed_at)
         return {
             "run_id": state.run_id,
             "thread_id": state.thread_id or record["thread_id"],
@@ -181,9 +211,17 @@ class SciencePalService:
             "started_at": state.started_at,
             "completed_at": state.completed_at,
             "elapsed_s": round(max(0.0, self._now() - float(record["created_at"])), 1),
+            "run_elapsed_s": round(completed - started, 1) if started and completed else None,
+            "queue_s": round(max(0.0, started - float(record["created_at"])), 1) if started else None,
         }
 
-    def collect(self, run_id: str, *, names: list[str] | None = None) -> dict[str, Any]:
+    def collect(
+        self,
+        run_id: str,
+        *,
+        names: list[str] | None = None,
+        roots: list[str] | None = None,
+    ) -> dict[str, Any]:
         self._require_token()
         record = self._require_run(run_id)
         if record["status"] != "completed":
@@ -211,7 +249,7 @@ class SciencePalService:
         if not thread_id:
             raise SciencePalError("sciencepal_no_sandbox", "run has no thread_id")
         sandbox_id = self.client.get_sandbox_id(thread_id)
-        entries = self._walk(sandbox_id)
+        entries = self._walk(sandbox_id, roots or list(DEFAULT_ROOTS))
         if names:
             wanted = {str(name).strip() for name in names if str(name).strip()}
             entries = [
@@ -227,6 +265,7 @@ class SciencePalService:
         output_dir.mkdir(parents=True, exist_ok=True)
         artifacts: list[dict[str, Any]] = []
         skipped: list[dict[str, Any]] = []
+        seen: set[tuple[str, str]] = set()
         total_bytes = 0
 
         for entry in entries:
@@ -236,7 +275,7 @@ class SciencePalService:
             if entry.size > self.config.max_download_bytes:
                 skipped.append({"path": entry.path, "reason": "file_too_large"})
                 continue
-            relative = _safe_relative(entry.path)
+            relative = _relative_from_roots(entry.path, roots or list(DEFAULT_ROOTS))
             if relative is None:
                 skipped.append({"path": entry.path, "reason": "unsafe_path"})
                 continue
@@ -244,11 +283,19 @@ class SciencePalService:
                 skipped.append({"path": entry.path, "reason": "total_size_limit"})
                 continue
 
-            content = self.client.read_file(sandbox_id, entry.path)
             destination = output_dir / relative
+            if len(str(destination)) > _MAX_PATH_LENGTH:
+                skipped.append({"path": entry.path, "reason": "path_too_long"})
+                continue
+            content = self.client.read_file(sandbox_id, entry.path)
+            digest = hashlib.sha256(content).hexdigest()
+            identity = (entry.name, digest)
+            if identity in seen:
+                skipped.append({"path": entry.path, "reason": "duplicate"})
+                continue
+            seen.add(identity)
             destination.parent.mkdir(parents=True, exist_ok=True)
             destination.write_bytes(content)
-            digest = hashlib.sha256(content).hexdigest()
             artifacts.append(
                 {
                     "name": entry.name,
@@ -350,13 +397,19 @@ class SciencePalService:
             )
         return prepared
 
-    def _walk(self, sandbox_id: str) -> list[Any]:
-        pending = ["/"]
+    def _walk(self, sandbox_id: str, roots: list[str]) -> list[Any]:
+        pending = [_normalize(root) for root in roots]
         visited_dirs = 0
         files: list[Any] = []
         while pending and visited_dirs < 50 and len(files) < 500:
             directory = pending.pop()
-            for entry in self.client.list_files(sandbox_id, directory):
+            try:
+                entries = self.client.list_files(sandbox_id, directory)
+            except SciencePalError as error:
+                if error.code in {"sciencepal_not_found", "sciencepal_api_error"}:
+                    continue
+                raise
+            for entry in entries:
                 normalized = _normalize(entry.path)
                 if entry.is_dir:
                     if _skip_dir(normalized):

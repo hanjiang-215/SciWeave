@@ -24,8 +24,18 @@ description: 把需要真实计算的科研任务委派给 SciencePal 领域 Age
 ## 前置检查
 
 1. 确认 `SCIENCEPAL_ACCESS_TOKEN` 已配置；没有就返回 `sciencepal_token_missing`，不要重试。
-2. 用 `sciencepal_agents` 确认目标领域 Agent 的 `agent_id`；不确定时让 `agent_select_type=auto`，并在报告里记录实际 Agent。
+2. 用 `sciencepal_agents` 确认目标领域 Agent 的 `agent_id`；不确定时让 `agent_select_type=auto`，并在报告里记录实际 Agent。当前账号的内置 Agent 可能不出现在列表里，`agents` 为空不影响发起。
 3. 从地图读取**固定 revision** 的任务切片，不要读“最新图”。
+
+## 调用方式
+
+按 harness 能力选一种，行为等价：
+
+- **MCP（优先）**：直接调 `sciencepal_start` / `sciencepal_status` / `sciencepal_collect` / `sciencepal_cancel` / `sciencepal_agents`。
+- **CLI（有 shell 时）**：`sciencepal start ...`、`sciencepal status ...`、`sciencepal collect ...`；输出一行 JSON，退出码 0/1/2。
+- **两者都没有**：停止并报告 `sciencepal_harness_unsupported`，不要声称已执行。
+
+安装与配置见 `references/harness.md`。
 
 ## 协议
 
