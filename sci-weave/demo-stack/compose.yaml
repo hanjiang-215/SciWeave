@@ -1,0 +1,130 @@
+# 演示链路最小容器编排。
+#
+# 只编排 SciWeave 自己的三个进程角色：research-map 的看板来源、dashboard-api、
+# web-ui。TerminusDB 与 Redpanda 是第三方服务，按既有约定留在
+# sci-weave/service/<服务名>/，由本栈按宿主机地址复用，不在这里重复定义。
+#
+# 起停见 README.md。所有端口、地址、令牌都来自环境变量（默认值只用于本地）。
+
+name: sciweave-dashboard-demo
+
+services:
+  research-map:
+    build:
+      context: ../centre-control
+      dockerfile: research-map/Dockerfile
+      args:
+        # 受限网络下把基础镜像指向代理；默认走官方地址。
+        PYTHON_IMAGE: ${PYTHON_IMAGE:-python:3.13-slim}
+    environment:
+      SCIWEAVE_MAPPING_DASHBOARD_MODE: "1"
+      SCIWEAVE_MAPPING_DASHBOARD_HOST: 0.0.0.0
+      SCIWEAVE_MAPPING_DASHBOARD_PORT: "8701"
+      SCIWEAVE_MAPPING_DASHBOARD_TOKEN: ${SCIWEAVE_MAPPING_DASHBOARD_TOKEN:-}
+      SCIWEAVE_MAPPING_TERMINUSDB_URL: ${SCIWEAVE_MAPPING_TERMINUSDB_URL:-http://host.docker.internal:6363}
+      SCIWEAVE_MAPPING_TERMINUSDB_STORE: ${SCIWEAVE_MAPPING_TERMINUSDB_STORE:-admin}
+      SCIWEAVE_MAPPING_TERMINUSDB_DATABASE: ${SCIWEAVE_MAPPING_TERMINUSDB_DATABASE:-sciweave_dashboard_demo}
+      SCIWEAVE_MAPPING_TERMINUSDB_USERNAME: ${SCIWEAVE_MAPPING_TERMINUSDB_USERNAME:-admin}
+      SCIWEAVE_MAPPING_TERMINUSDB_PASSWORD: ${SCIWEAVE_MAPPING_TERMINUSDB_PASSWORD:-root}
+      SCIWEAVE_MAPPING_DOMAIN_ID: ${SCIWEAVE_MAPPING_DOMAIN_ID:-iris-demo}
+      SCIWEAVE_MAPPING_SQLITE_PATH: /data/dashboard.sqlite
+    extra_hosts:
+      # 让容器能访问宿主机上的 TerminusDB；Linux 上 host.docker.internal 需要显式声明。
+      - host.docker.internal:host-gateway
+    volumes:
+      - mapping-data:/data
+    ports:
+      - "${MAPPING_HOST_PORT:-8701}:8701"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8701/health', timeout=3).status==200 else 1)"
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  dashboard-api:
+    build:
+      context: ../centre-control
+      dockerfile: dashboard-api/Dockerfile
+      args:
+        PYTHON_IMAGE: ${PYTHON_IMAGE:-python:3.13-slim}
+    environment:
+      SCIWEAVE_DASHBOARD_HOST: 0.0.0.0
+      SCIWEAVE_DASHBOARD_PORT: "8702"
+      # 容器间用服务名互访，不经过宿主机回环。
+      SCIWEAVE_DASHBOARD_SOURCE_MAPPING_URL: http://research-map:8701/api/dashboard/source/mapping
+      SCIWEAVE_DASHBOARD_SOURCE_QUEUE_URL: ${SCIWEAVE_DASHBOARD_SOURCE_QUEUE_URL:-}
+      # 浏览器在宿主机上访问页面，因此 CORS 来源必须是宿主机视角的地址。
+      SCIWEAVE_DASHBOARD_CORS_ORIGIN: ${SCIWEAVE_DASHBOARD_CORS_ORIGIN:-http://127.0.0.1:5173}
+    ports:
+      - "${DASHBOARD_HOST_PORT:-8702}:8702"
+    depends_on:
+      research-map:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8702/health', timeout=3).status==200 else 1)"
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  web-ui:
+    build:
+      context: ../centre-control/web-ui
+      dockerfile: Dockerfile
+      args:
+        NODE_IMAGE: ${NODE_IMAGE:-node:22-slim}
+    environment:
+      # 前端在浏览器里跑，指向宿主机暴露的 dashboard-api 端口。
+      VITE_DASHBOARD_API_URL: ${VITE_DASHBOARD_API_URL:-http://127.0.0.1:8702/}
+    ports:
+      - "${WEB_HOST_PORT:-5173}:5173"
+    depends_on:
+      dashboard-api:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:5173/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  # 一次性播种，按需执行：
+  #   docker compose --profile seed run --rm seed
+  # 默认带 --reset：容器卷与 TerminusDB 两侧一起重建，结果可复现。
+  seed:
+    profiles: ["seed"]
+    build:
+      context: ../centre-control
+      dockerfile: research-map/Dockerfile
+      args:
+        PYTHON_IMAGE: ${PYTHON_IMAGE:-python:3.13-slim}
+    entrypoint: ["python", "/scripts/seed_dashboard_demo.py", "--reset"]
+    environment:
+      SCIWEAVE_MAPPING_TERMINUSDB_URL: ${SCIWEAVE_MAPPING_TERMINUSDB_URL:-http://host.docker.internal:6363}
+      SCIWEAVE_MAPPING_TERMINUSDB_STORE: ${SCIWEAVE_MAPPING_TERMINUSDB_STORE:-admin}
+      SCIWEAVE_MAPPING_TERMINUSDB_DATABASE: ${SCIWEAVE_MAPPING_TERMINUSDB_DATABASE:-sciweave_dashboard_demo}
+      SCIWEAVE_MAPPING_TERMINUSDB_USERNAME: ${SCIWEAVE_MAPPING_TERMINUSDB_USERNAME:-admin}
+      SCIWEAVE_MAPPING_TERMINUSDB_PASSWORD: ${SCIWEAVE_MAPPING_TERMINUSDB_PASSWORD:-root}
+      SCIWEAVE_MAPPING_DOMAIN_ID: ${SCIWEAVE_MAPPING_DOMAIN_ID:-iris-demo}
+      SCIWEAVE_MAPPING_SQLITE_PATH: /data/dashboard.sqlite
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    volumes:
+      - mapping-data:/data
+      - ../../scripts:/scripts:ro
+
+volumes:
+  mapping-data:

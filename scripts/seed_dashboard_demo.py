@@ -207,7 +207,10 @@ def seed(*, reset: bool) -> int:
         auth.at(database_url, method="DELETE")
 
     status, body = auth.at(database_url, method="POST", payload={"label": "SciWeave dashboard", "comment": "dashboard seed"})
-    if status not in (200, 409):
+    # 「库已存在」在不同 TerminusDB 版本上分别是 409 和 400 + api:DatabaseAlreadyExists。
+    # 只要库已存在就沿用，不再报错——否则换一个 SQLite（例如容器卷）重新播种会直接失败。
+    already_exists = b"DatabaseAlreadyExists" in body or status == 409
+    if status not in (200, 409) and not already_exists:
         print(json.dumps({"status": "failed", "error": f"database creation failed ({status}): {body[:300]!r}"}, ensure_ascii=False), file=sys.stderr)
         return 1
 

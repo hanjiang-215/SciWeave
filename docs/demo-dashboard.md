@@ -120,4 +120,4 @@ mapping   : fresh
 
 - `ai4-c22u`：本脚本
 - `ai4-nvuj`：queue 来源（补齐后 `部分来源` 才会只剩 wiki / gateway）
-- `ai4-0uu6`：容器编排（把这条链路搬进 compose）
+- `ai4-0uu6`：容器编排——同一链路也可以用 `sci-weave/demo-stack/` 的 compose 起，见该目录 README

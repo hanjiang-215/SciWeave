@@ -1,0 +1,15 @@
+# 构建上下文是 sci-weave/centre-control；这里排掉本机产物，避免把宿主机的
+# .venv / node_modules / 数据库文件复制进镜像。web-ui 里的 node_modules 尤其致命：
+# pnpm 的 node_modules 是指向全局 store 的符号链接，复制进镜像后链接全部失效。
+.venv
+**/.venv
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/data
+**/*.sqlite
+**/*.sqlite3
+node_modules
+**/node_modules
+.env
+**/.env
