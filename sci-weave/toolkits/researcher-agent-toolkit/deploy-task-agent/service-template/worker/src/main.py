@@ -1,10 +1,16 @@
-"""Worker entry shell: run queued handoffs once, then exit.
+"""Worker entry point: run one handoff, then exit.
 
-The durable queue-driven path lives in ``gateway/subscriber``; this shell is for
-one-shot runs during bring-up. It builds the real fast-agent runtime from the
-environment and drives the queued inbox rows through it, writing each answer to
-the draft box. A missing key fails at startup instead of producing a fake
-completion, and the passthrough runtime is only reachable through
+Two callers, one contract (exit code + JSON on stdout):
+
+- ``gateway/subscriber`` starts this with ``--dedupe-key <key>`` for each
+  handoff it claims (ai4-0fwc). One key, one row, one process — a worker that
+  scanned for queued rows would race a second subscriber for the same row.
+- A human runs it bare during bring-up, which takes the batch path below.
+
+It builds the real fast-agent runtime from the environment, runs the handoff
+and writes the answer to the draft box. This is the only process that holds the
+draft-box credential. A missing model key fails at startup instead of producing
+a fake completion, and the passthrough runtime is only reachable through
 ``SCIWEAVE_GATEWAY_PASSTHROUGH_RUNTIME=1`` (ai4-g1km).
 
 Startup loads the researcher's configuration (ai4-z3yq). `build_agent_runtime`

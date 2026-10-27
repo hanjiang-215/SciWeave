@@ -104,6 +104,23 @@ def default_command() -> list[str]:
     return [sys.executable, str(main)]
 
 
+class LeaveQueued:
+    """A dispatcher that deliberately runs nothing.
+
+    This is what `SCIWEAVE_WORKER_DISPATCH=0` installs. Returning None from
+    `build_dispatcher` instead would fall back to the inline path, which writes
+    a fabricated draft and marks the row processed — the opposite of "the two
+    roles are separate services". Deferring keeps the row durable so the
+    standalone worker can pick it up.
+    """
+
+    #: Read by `WorkAgentRuntime._dispatch` before it starts anything.
+    deferred = True
+
+    def __call__(self, dedupe_key: str) -> WorkerRun:
+        return WorkerRun(dedupe_key, "queued", None, "worker dispatch is disabled in this process")
+
+
 class WorkerSubprocess:
     """Start one worker process for one handoff, and wait for it.
 

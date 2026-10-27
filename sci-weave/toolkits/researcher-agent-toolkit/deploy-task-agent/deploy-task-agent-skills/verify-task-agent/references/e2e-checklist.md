@@ -29,7 +29,10 @@
 | 改 YAML 会改变模型收到的 instruction | `test_assembly.py::ConfigurationReachesTheModelTests` | 通过 |
 | **模型真的产出答案** | —— | **未验证**：需要真实 `DEEPSEEK_API_KEY`，当前测试全用 passthrough 或替身 |
 | **worker 按工作流跑多 Agent** | —— | **未实现**：worker 现在跑单个 agent，`WorkflowExecutor` 已测但未接入，见 `ai4-x0ay` |
-| **模型收到的任务文本** | —— | **未实现**：`command_text` 仍是裸 node id，见 `ai4-1e9e` |
+| 任务文本不丢：信封 → inbox → `agent.run` | `test_subscriber_loop.py::SubscriberTaskTextTests`、`test_inbox.py::TaskTextTests` | 通过 |
+| 没有任务文本时**不**拿 node id 冒充 | `test_worker_shell.py::TaskInstructionTests` | 通过 |
+| 已装机的旧库能升级出 `command_text` 列 | `test_inbox.py::InboxMigrationTests` | 通过 |
+| 生产端会发任务文本 | —— | **未发生**：协调器发布的信封里没有该字段，见 `ai4-derq`；现在到达模型的是显式的「本条没有任务指令」 |
 
 ## 真实队列验证（可选，本地 Redpanda）
 

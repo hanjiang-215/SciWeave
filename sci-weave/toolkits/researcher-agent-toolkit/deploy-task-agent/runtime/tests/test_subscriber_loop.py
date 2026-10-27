@@ -19,6 +19,7 @@ from pathlib import Path
 from unittest import mock
 
 from work_agent_runtime import (
+    AgentOutcome,
     FakeDraftBox,
     FakeQueue,
     QueueMessage,
@@ -249,6 +250,94 @@ class SubscriberDraftBoundaryTests(unittest.TestCase):
         self.assertNotIn("DRAFT_BUFFER_MCP_TOKEN", source)
 
 
+class SubscriberTaskTextTests(unittest.TestCase):
+    """ai4-1e9e end to end: the envelope's task text reaches the model."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.main = _load_main()
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.db = str(Path(self._tmp.name) / "kit.sqlite3")
+
+    def _run(self, payload: dict, *, offset: int = 1) -> dict:
+        with mock.patch.dict(
+            os.environ,
+            {
+                "DATABASE_PATH": self.db,
+                "SCIWEAVE_AGENT_ID": "researcher-1",
+                "SCIWEAVE_WORKER_DISPATCH": "0",
+            },
+            clear=False,
+        ):
+            runtime = self.main.build_runtime()
+            self.addCleanup(runtime.inbox.close)
+            self.addCleanup(runtime.lease.close)
+            queue = FakeQueue()
+            queue.messages = [
+                QueueMessage(topic="t", partition=0, offset=offset, key="node-1:cv-1", payload=payload)
+            ]
+            self.main.run_loop(runtime, queue, ["t"], max_messages=1, agent_id="researcher-1")
+            # Dispatch is off here, so the inline path already ran and marked
+            # the row: read it back by key rather than looking for a queued one.
+            return dict(runtime.inbox.get("node-1:node-1:cv-1"))
+
+    def test_a_flat_envelope_task_text_is_recorded(self) -> None:
+        row = self._run({"task_node_id": "node-1", "task_text": "Summarise the RAG papers."})
+        self.assertEqual(row["command_text"], "Summarise the RAG papers.")
+
+    def test_a_payload_nested_task_text_is_recorded(self) -> None:
+        """Both envelope shapes are in use; the reader must cover both."""
+        row = self._run(
+            {"payload": {"task_node_id": "node-1", "command_text": "Compare the baselines."}}
+        )
+        self.assertEqual(row["command_text"], "Compare the baselines.")
+
+    def test_the_alternate_field_names_are_recognised(self) -> None:
+        for name in ("task_text", "command_text", "task_brief", "instruction", "task_description"):
+            with self.subTest(field=name):
+                self.setUp()
+                row = self._run({"task_node_id": "node-1", name: f"text via {name}"})
+                self.assertEqual(row["command_text"], f"text via {name}")
+
+    def test_an_envelope_without_task_text_records_an_empty_string(self) -> None:
+        """Every envelope published today is this case; recording "" is the point."""
+        row = self._run({"task_node_id": "node-1", "target_agent_id": "researcher-1"})
+        self.assertEqual(row["command_text"], "")
+
+    def test_the_node_id_is_not_promoted_to_the_task_text(self) -> None:
+        row = self._run({"task_node_id": "node-1"})
+        self.assertNotEqual(row["command_text"], "node-1")
+        self.assertEqual(row["command_text"], "")
+
+    def test_the_full_chain_from_envelope_to_the_model(self) -> None:
+        """Envelope -> subscriber -> inbox -> worker shell -> `agent.run`."""
+        from work_agent_runtime.worker_shell import run_one_queued
+
+        payload = {"task_node_id": "node-1", "task_text": "Draft a related-work section."}
+        row = self._run(payload)
+        self.assertEqual(row["command_text"], "Draft a related-work section.")
+
+        requests: list[object] = []
+
+        class _Agent:
+            def run(self, request):
+                requests.append(request)
+                return AgentOutcome("completed", result_summary="done")
+
+        class _Runtime:
+            inbox = None
+            drafts = FakeDraftBox()
+
+        runtime = _Runtime()
+        runtime.inbox = mock.Mock()
+        runtime.inbox.get.return_value = {**row, "status": "queued"}
+        run_one_queued(runtime, _Agent(), row["dedupe_key"])
+        self.assertEqual(requests[0].command_text, "Draft a related-work section.")
+
+
 class SubscriberDispatchTests(unittest.TestCase):
     """ai4-0fwc: the subscriber starts a worker process per handoff.
 
@@ -299,9 +388,40 @@ class SubscriberDispatchTests(unittest.TestCase):
         self.assertTrue(any("DATABASE_PATH is unset" in str(call) for call in printed.call_args_list))
 
     def test_dispatch_can_be_disabled_for_a_two_service_deployment(self) -> None:
+        """Off means "leave it for the other service", not "run it here".
+
+        Returning no dispatcher at all would fall through to the inline path,
+        which writes a fabricated draft and marks the row processed — silently
+        the opposite of what the operator asked for.
+        """
         runtime = self._runtime({"SCIWEAVE_WORKER_DISPATCH": "0"})
         self.assertIsNotNone(runtime.inbox, "the inbox still records the handoff")
-        self.assertIsNone(runtime.dispatcher, "but no worker is started")
+        self.assertTrue(getattr(runtime.dispatcher, "deferred", False))
+
+    def test_a_disabled_dispatch_leaves_the_row_queued_and_writes_nothing(self) -> None:
+        with mock.patch.dict(
+            os.environ,
+            {"DATABASE_PATH": self.db, "SCIWEAVE_AGENT_ID": "researcher-1", "SCIWEAVE_WORKER_DISPATCH": "0"},
+            clear=False,
+        ):
+            runtime = self.main.build_runtime()
+            self.addCleanup(runtime.inbox.close)
+            self.addCleanup(runtime.lease.close)
+            runtime.drafts.write = lambda **kwargs: self.fail(f"a draft was written: {kwargs}")
+            queue = FakeQueue()
+            queue.messages = [
+                QueueMessage(
+                    topic="t",
+                    partition=0,
+                    offset=1,
+                    key="node-1:cv-1",
+                    payload={"task_node_id": "node-1", "task_text": "do the thing"},
+                )
+            ]
+            self.main.run_loop(runtime, queue, ["t"], max_messages=1, agent_id="researcher-1")
+            row = runtime.inbox.get("node-1:node-1:cv-1")
+        self.assertEqual(row["status"], "queued", "the row is handed to the worker service, untouched")
+        self.assertEqual(row["command_text"], "do the thing")
 
     def test_a_real_handoff_through_the_subscriber_starts_the_worker(self) -> None:
         """The end-to-end shape: message -> inbox -> subprocess -> processed row.

@@ -38,7 +38,7 @@ from work_agent_runtime import (
     WorkerLease,
     WorkAgentRuntime,
 )
-from work_agent_runtime.worker_dispatch import WorkerSubprocess
+from work_agent_runtime.worker_dispatch import LeaveQueued, WorkerSubprocess
 
 #: Envelope positions this consumer understands. ``payload``-nested first: that
 #: is the shape ``message-envelope`` defines, and the flat one is what the
@@ -108,6 +108,31 @@ def message_id(envelope: Mapping[str, Any], key: str | None, offset: int) -> str
     return field(envelope, "message_id") or field(envelope, "event_id") or (key or "") or str(offset)
 
 
+#: Where a producer might put the text this handoff asks for. There is no
+#: single answer yet: the message-envelope package defines none, and the
+#: coordinator publishes none (ai4-derq arbitrates the shape, ai4-1e9e the
+#: storage). Reading the names a producer plausibly chose is a stopgap, and
+#: `TASK_TEXT_FIELDS` being a list at all is the record that the protocol has
+#: a hole.
+TASK_TEXT_FIELDS = ("task_text", "command_text", "task_brief", "instruction", "task_description")
+
+
+def task_text(envelope: Mapping[str, Any]) -> str:
+    """The handoff's instruction text, or "" when the producer sent none.
+
+    Empty is a fact, not a failure: every message published today carries no
+    task text, so raising here would refuse every real handoff. The subscriber
+    records the emptiness and `worker_shell.task_instruction` turns it into an
+    explicit "only a node reference arrived" instruction rather than letting
+    the node id masquerade as one.
+    """
+    for name in TASK_TEXT_FIELDS:
+        value = field(envelope, name)
+        if value:
+            return value
+    return ""
+
+
 def build_runtime() -> WorkAgentRuntime:
     """Assemble the subscriber-side runtime: inbox, lease and worker dispatch.
 
@@ -146,7 +171,10 @@ def build_dispatcher():
     """
     if os.environ.get("SCIWEAVE_WORKER_DISPATCH", "1").strip() == "0":
         print("notice: worker dispatch is disabled; handoffs stay queued", flush=True)
-        return None
+        # Not None: falling back to the inline path would write a fabricated
+        # draft and mark the row processed, which is the opposite of handing it
+        # to a separate worker service.
+        return LeaveQueued()
     return WorkerSubprocess()
 
 
@@ -211,7 +239,11 @@ def run_loop(runtime: WorkAgentRuntime, queue, topics: list[str], *, poll_timeou
                 print(f"skip {message.offset}: {error}", flush=True)
                 queue.commit()
                 continue
-            runtime.handle_inbound(target_id, message_id(envelope, message.key, message.offset))
+            runtime.handle_inbound(
+                target_id,
+                message_id(envelope, message.key, message.offset),
+                task_text=task_text(envelope),
+            )
             queue.commit()
             processed += 1
     return processed

@@ -50,7 +50,7 @@ systemctl --user enable --now sciweave-task-agent-subscriber.service
 ```
 Redpanda topic
   └─ subscriber  run_loop         读信封 -> target_id / event_id
-       ├─ inbox.enqueue           写 queued 行（dedupe_key 幂等）
+       ├─ inbox.enqueue           写 queued 行（dedupe_key 幂等，含任务文本）
        ├─ WorkerLease.acquire     SQLite 持久锁，跨进程有效
        ├─ 拉起 worker 子进程       service-template/worker/src/main.py --dedupe-key <key>
        │    └─ build_agent_runtime -> 加载四套配置 -> fast-agent
@@ -64,7 +64,15 @@ Redpanda topic
 - **Worker Lease 是 SQLite 里的一行，不是内存里的 `set`。** 内存在子进程模型下等于没有锁。租约在拉起子进程**之前**取得、跑完之后释放，期间同一 TaskNode 的第二次投递会被拒绝。租约带 TTL（默认 1800 秒），被 `kill -9` 的 subscriber 不会永久占住一个节点。
 - **subscriber 不持有草稿箱凭据。** 草稿由 worker 通过 `draft-buffer` MCP 写入（见 `ai4-z3z4`、`ai4-4zjz`）；subscriber 里出现 `DRAFT_BUFFER_MCP_TOKEN` 就说明边界被破坏了。
 
-`DATABASE_PATH` 未设置时没有持久 inbox，子进程也无行可跑，此时 subscriber 退回内联模式并打印一行提示——这是显式降级，不是静默回退。
+`DATABASE_PATH` 未设置时没有持久 inbox，子进程也无行可跑，此时 subscriber 退回内联模式并打印一行提示——这是显式降级，不是静默回退。`SCIWEAVE_WORKER_DISPATCH=0` 是另一种：subscriber 只入队、不派发，把行留给独立部署的 worker 服务（`LeaveQueued`），**不是**回退到内联——回退会写一份编造的草稿并把行标成已完成，正好与「分成两个服务」相反。
+
+### 模型收到的那句话从哪来
+
+`inbox_messages.command_text`（`ai4-1e9e`）。subscriber 从信封里按若干候选字段名读任务文本，读不到就存空串——空串是事实，不是失败。worker 侧的 `task_instruction()` 把空串变成一句显式的说明（「本条交接没有任务指令，只收到节点引用，不要从标识符推断任务」），**不再**回退成 `target_id`。
+
+那个回退曾经存在，代价是：模型拿到 `"node-2"`，从名字里编出一个任务，返回一份看起来完整的草稿，于是没人发现载荷是空的。现在没有任务文本时，草稿会明说它不知道要做什么。
+
+真实信封里现在**没有**任务文本字段（`ai4-derq` 在裁信封形状），所以接生产后模型会收到那句说明，直到生产端开始发任务文本。这是刻意选择的可见失败。
 
 ## 本地验证
 

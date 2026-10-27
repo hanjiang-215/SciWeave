@@ -133,19 +133,36 @@ class WorkAgentRuntime:
     def handle_message(self, target_id: str, event_id: str, agent_definition: str = "") -> ExecutionRecord:
         return run_one(self.store, self.lease, self.drafts, target_id, event_id, agent_definition)
 
-    def handle_inbound(self, target_id: str, event_id: str, agent_definition: str = "") -> ExecutionRecord:
+    def handle_inbound(
+        self,
+        target_id: str,
+        event_id: str,
+        agent_definition: str = "",
+        *,
+        task_text: str = "",
+    ) -> ExecutionRecord:
         """Durable inbox-first path; falls back to ``handle_message`` without an inbox.
 
         Returns an ``ExecutionRecord`` whose ``status`` is
         ``awaiting_workflow_binding`` when the workflow binding is missing, or
         the completed/completed-or-duplicate execution otherwise.
+
+        ``task_text`` is this handoff's instruction, recorded so the worker can
+        hand it to the model (ai4-1e9e). It is stored even when empty: an empty
+        value says "the producer sent no task text", which the worker turns into
+        an explicit instruction instead of letting a node id pass for one.
         """
         if self.inbox is None:
             return self.handle_message(target_id, event_id, agent_definition)
         dedupe_key = f"{target_id}:{event_id}"
         bound = self.binding_resolver(target_id) if self.binding_resolver is not None else True
         status, _created = self.inbox.enqueue(
-            dedupe_key, target_id, event_id, agent_definition, binding_present=bound
+            dedupe_key,
+            target_id,
+            event_id,
+            agent_definition,
+            binding_present=bound,
+            command_text=task_text,
         )
         if status == "awaiting_workflow_binding":
             return ExecutionRecord(dedupe_key, target_id, "awaiting_workflow_binding")
@@ -182,6 +199,12 @@ class WorkAgentRuntime:
         inline path, only with a wider window.
         """
         execution = self.store.enqueue(target_id, event_id)
+        if getattr(self.dispatcher, "deferred", False):
+            # Dispatch is switched off in this process (`SCIWEAVE_WORKER_DISPATCH=0`):
+            # the two roles run as separate services, so the row is left alone
+            # for the standalone worker. Nothing is started and nothing is
+            # marked, which is what "separate services" has to mean.
+            return execution
         if not self.lease.acquire(target_id):
             # Another live owner: leave the row queued for whoever holds it.
             return execution
@@ -208,7 +231,12 @@ class WorkAgentRuntime:
         if row is None:
             return None
         self.inbox.bind(dedupe_key)
-        return self.handle_inbound(row["target_id"], row["event_id"], row["agent_definition"])
+        return self.handle_inbound(
+            row["target_id"],
+            row["event_id"],
+            row["agent_definition"],
+            task_text=row.get("command_text", ""),
+        )
 
     def drain_queued(self) -> list[ExecutionRecord]:
         """Re-drive persisted ``queued`` rows (restart recovery) and return executions."""
@@ -216,7 +244,14 @@ class WorkAgentRuntime:
             return []
         results: list[ExecutionRecord] = []
         for row in self.inbox.list_status("queued"):
-            results.append(self.handle_inbound(row["target_id"], row["event_id"], row["agent_definition"]))
+            results.append(
+                self.handle_inbound(
+                    row["target_id"],
+                    row["event_id"],
+                    row["agent_definition"],
+                    task_text=row.get("command_text", ""),
+                )
+            )
         return results
 
     def run_workflow(self, target_id: str, event_id: str, config: object, agent: Callable[..., str], workflow_name: str, prompt: str) -> ExecutionRecord:

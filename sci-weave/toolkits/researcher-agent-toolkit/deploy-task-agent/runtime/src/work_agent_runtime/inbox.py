@@ -9,6 +9,14 @@ startup instead of silently dropping them, and duplicate deliveries are
 blocked by the ``dedupe_key`` primary key.
 
 States: ``awaiting_workflow_binding`` -> ``queued`` -> ``processed``.
+
+``command_text`` is what the handoff asks for — the text the model receives.
+It is a separate column from ``agent_definition`` on purpose (ai4-1e9e): which
+agent runs and what this one handoff is about are different questions, and
+overloading one field made the second unanswerable. It is allowed to be empty:
+the envelope the coordinator publishes today carries no task text at all, and an
+empty value is the honest record of that. Consumers must not paper over it —
+see `worker_shell.task_instruction`.
 """
 
 from __future__ import annotations
@@ -57,12 +65,30 @@ class InboxStore:
                 target_id TEXT NOT NULL,
                 event_id TEXT NOT NULL,
                 agent_definition TEXT NOT NULL DEFAULT '',
+                command_text TEXT NOT NULL DEFAULT '',
                 status TEXT NOT NULL CHECK(status IN ('awaiting_workflow_binding', 'queued', 'processed')),
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
             );
             """
         )
+        self.migrate()
+
+    def migrate(self) -> None:
+        """Bring a pre-existing database up to the current schema.
+
+        `CREATE TABLE IF NOT EXISTS` silently does nothing on an old database,
+        and the installed kits already have one, so the column has to be added
+        explicitly. `ALTER TABLE ... ADD COLUMN` with a constant default is the
+        one form SQLite accepts without a table rewrite, and it is safe to run
+        repeatedly because the column list is checked first.
+        """
+        with self.transaction() as connection:
+            columns = {row["name"] for row in connection.execute("PRAGMA table_info(inbox_messages)")}
+            if "command_text" not in columns:
+                connection.execute(
+                    "ALTER TABLE inbox_messages ADD COLUMN command_text TEXT NOT NULL DEFAULT ''"
+                )
 
     @contextmanager
     def transaction(self) -> Iterator[sqlite3.Connection]:
@@ -74,7 +100,16 @@ class InboxStore:
                 self.connection.rollback()
                 raise
 
-    def enqueue(self, dedupe_key: str, target_id: str, event_id: str, agent_definition: str = "", *, binding_present: bool) -> Tuple[str, bool]:
+    def enqueue(
+        self,
+        dedupe_key: str,
+        target_id: str,
+        event_id: str,
+        agent_definition: str = "",
+        *,
+        binding_present: bool,
+        command_text: str = "",
+    ) -> Tuple[str, bool]:
         """Record one inbound message; returns ``(status, created_new)``.
 
         ``status`` is ``queued`` when a workflow binding is present and
@@ -90,9 +125,10 @@ class InboxStore:
             if existing is not None:
                 return existing["status"], False
             connection.execute(
-                """INSERT INTO inbox_messages (dedupe_key, target_id, event_id, agent_definition, status, created_at, updated_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                (dedupe_key, target_id, event_id, agent_definition, status, now, now),
+                """INSERT INTO inbox_messages
+                   (dedupe_key, target_id, event_id, agent_definition, command_text, status, created_at, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (dedupe_key, target_id, event_id, agent_definition, command_text, status, now, now),
             )
             return status, True
 
@@ -124,7 +160,7 @@ class InboxStore:
             raise InboxError(f"invalid_inbox_status: {status}")
         with self.lock:
             rows = self.connection.execute(
-                "SELECT dedupe_key, target_id, event_id, agent_definition, status FROM inbox_messages WHERE status = ? ORDER BY created_at",
+                "SELECT dedupe_key, target_id, event_id, agent_definition, command_text, status FROM inbox_messages WHERE status = ? ORDER BY created_at",
                 (status,),
             ).fetchall()
             return [dict(row) for row in rows]
@@ -132,7 +168,7 @@ class InboxStore:
     def get(self, dedupe_key: str) -> dict | None:
         with self.lock:
             row = self.connection.execute(
-                "SELECT dedupe_key, target_id, event_id, agent_definition, status FROM inbox_messages WHERE dedupe_key = ?",
+                "SELECT dedupe_key, target_id, event_id, agent_definition, command_text, status FROM inbox_messages WHERE dedupe_key = ?",
                 (dedupe_key,),
             ).fetchone()
             return dict(row) if row is not None else None

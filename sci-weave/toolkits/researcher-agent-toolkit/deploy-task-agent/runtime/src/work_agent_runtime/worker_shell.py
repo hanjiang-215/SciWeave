@@ -34,15 +34,40 @@ def _result(row: dict, status: str, **extra) -> dict:
     return {"dedupe_key": row["dedupe_key"], "status": status, **extra}
 
 
+#: What the model is told when the handoff carried no instruction.
+#:
+#: Writing the node id here would be worse than saying nothing: a model handed
+#: `"node-2"` invents a task from the name, and the draft looks like an answer,
+#: so nobody notices the payload was empty. This sentence is deliberately
+#: unusable as a task — it names the defect and asks for the missing input.
+NO_TASK_TEXT = (
+    "This handoff carried no task instruction: only the node reference {task_node_id} "
+    "arrived. Do not infer the task from the identifier or from the entity name. "
+    "Report what information is missing and stop."
+)
+
+
+def task_instruction(row: dict) -> str:
+    """The instruction text for one inbox row.
+
+    Never falls back to ``target_id`` (ai4-1e9e): that fallback is how a node
+    id became a task earlier, and it fails silently. An empty row produces an
+    instruction that is explicit about being empty.
+    """
+    text = (row.get("command_text") or "").strip()
+    if text:
+        return text
+    return NO_TASK_TEXT.format(task_node_id=row.get("target_id", ""))
+
+
 def run_one_queued(runtime, agent: AgentRuntime, dedupe_key: str) -> list[dict]:
     """Run exactly one inbox row, by key.
 
     Returns a single-element list so callers can print one identical JSON shape
     whether they asked for one row or a batch.
 
-    ``command_text`` still falls back to the task node id when the row carries no
-    instruction. That is a placeholder, not a design: the payload that would
-    carry the real task text is dropped before the row is written (ai4-1e9e).
+    The instruction comes from the row's `command_text`; see `task_instruction`
+    for what happens when the handoff carried none.
     """
     if getattr(runtime, "inbox", None) is None:
         return []
@@ -59,7 +84,7 @@ def run_one_queued(runtime, agent: AgentRuntime, dedupe_key: str) -> list[dict]:
         execution_id=row["dedupe_key"],
         task_node_id=row["target_id"],
         session_id=row["dedupe_key"],
-        command_text=row["agent_definition"] or row["target_id"],
+        command_text=task_instruction(row),
     )
     outcome = agent.run(request)
     status = getattr(outcome, "status", "failed")
