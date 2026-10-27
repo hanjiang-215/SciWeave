@@ -20,7 +20,20 @@ _AGENT_KEYS = frozenset({
     "name", "identity", "instruction", "model", "allowed_mcp_resources", "resources",
     "references", "tools", "allowed_domain_mcps", "children",
 })
-_WORKFLOW_KEYS = frozenset({"name", "type", "entry_agent", "sub_agents", "summarizer", "final_writer"})
+_WORKFLOW_KEYS = frozenset({
+    "name", "type", "entry_agent", "sub_agents", "summarizer", "final_writer",
+    "plan_type", "plan_iterations",
+})
+
+#: fast-agent's own planning modes for the Orchestrator type. `full` plans once
+#: up front; `iterative` re-plans after each round of sub-agent results.
+PLAN_TYPES = ("full", "iterative")
+
+#: fast-agent's defaults, used when a workflow does not state them. Repeating
+#: them here is deliberate: the YAML is the contract, and a config that omits a
+#: key should behave the same whether the framework default changes or not.
+DEFAULT_PLAN_TYPE = "full"
+DEFAULT_PLAN_ITERATIONS = 5
 
 
 class ConfigError(ValueError):
@@ -53,6 +66,11 @@ class WorkflowDefinition:
     sub_agents: tuple[str, ...]
     summarizer: str
     final_writer: str
+    #: Orchestrator planning mode (ai4-x0ay). Carried for every type because a
+    #: workflow's type can change without the rest of the YAML changing, and a
+    #: key that is accepted for one type and rejected for another is a trap.
+    plan_type: str = DEFAULT_PLAN_TYPE
+    plan_iterations: int = DEFAULT_PLAN_ITERATIONS
 
 
 @dataclass(frozen=True)
@@ -143,7 +161,32 @@ def load_config(source: Mapping[str, Any] | str | Path, *, known_mcp_resources: 
         sub_agents = _strings(_required(data, "sub_agents", f"config.workflows.{name}"), "missing_sub_agents", f"config.workflows.{name}.sub_agents")
         if not sub_agents:
             raise ConfigError("missing_sub_agents", f"config.workflows.{name}.sub_agents", "at least one required")
-        workflows[name] = WorkflowDefinition(name, workflow_type, str(_required(data, "entry_agent", f"config.workflows.{name}")), sub_agents, str(_required(data, "summarizer", f"config.workflows.{name}")), str(_required(data, "final_writer", f"config.workflows.{name}")))
+        plan_type = str(data.get("plan_type", DEFAULT_PLAN_TYPE))
+        if plan_type not in PLAN_TYPES:
+            raise ConfigError(
+                "invalid_plan_type",
+                f"config.workflows.{name}.plan_type",
+                f"must be one of {', '.join(PLAN_TYPES)}",
+            )
+        plan_iterations = data.get("plan_iterations", DEFAULT_PLAN_ITERATIONS)
+        # JSON/YAML booleans are `int` in Python, so `plan_iterations: true`
+        # would otherwise be accepted as 1 and quietly plan once.
+        if isinstance(plan_iterations, bool) or not isinstance(plan_iterations, int) or plan_iterations < 1:
+            raise ConfigError(
+                "invalid_plan_iterations",
+                f"config.workflows.{name}.plan_iterations",
+                "must be a positive integer",
+            )
+        workflows[name] = WorkflowDefinition(
+            name,
+            workflow_type,
+            str(_required(data, "entry_agent", f"config.workflows.{name}")),
+            sub_agents,
+            str(_required(data, "summarizer", f"config.workflows.{name}")),
+            str(_required(data, "final_writer", f"config.workflows.{name}")),
+            plan_type,
+            plan_iterations,
+        )
     _validate_references(agents, workflows)
     return TaskAgentConfig(dict(agents), dict(workflows), mcp_catalog or {})
 
@@ -253,6 +296,8 @@ def workflow_to_fast_agent_input(config: TaskAgentConfig, workflow_name: str) ->
         "sub_agents": list(workflow.sub_agents),
         "summarizer": workflow.summarizer,
         "final_writer": workflow.final_writer,
+        "plan_type": workflow.plan_type,
+        "plan_iterations": workflow.plan_iterations,
         "agents": {
             name: {
                 "instruction": agent.instruction,

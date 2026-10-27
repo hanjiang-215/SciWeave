@@ -157,7 +157,7 @@ agents:
             local_path=KIT_ROOT / "libs" / "local-workflow-libs",
             known_mcp_resources=bundled_mcp_names(),
         )
-        self.assertEqual(len(config.workflows), 4, "an empty local directory must not remove shipped workflows")
+        self.assertEqual(len(config.workflows), 5, "an empty local directory must not remove shipped workflows")
 
     def test_a_missing_standard_directory_still_fails(self) -> None:
         with TemporaryDirectory() as directory:
@@ -170,7 +170,7 @@ class BundledConfigTests(unittest.TestCase):
 
     def test_workflow_libs_directory_loads_as_a_whole(self) -> None:
         config = load_workflow_libs(standard_path=WORKFLOW_LIBS, known_mcp_resources=bundled_mcp_names())
-        self.assertEqual(len(config.workflows), 4, f"expected the four shipped examples, got {sorted(config.workflows)}")
+        self.assertEqual(len(config.workflows), 5, f"expected the four shipped examples plus the literature preset, got {sorted(config.workflows)}")
 
     def test_workflow_libs_load_together_with_every_shipped_mcp_card(self) -> None:
         """The real deployment loads both directories; the cards must satisfy the config."""
