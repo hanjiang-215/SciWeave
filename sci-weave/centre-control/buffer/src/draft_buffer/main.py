@@ -96,7 +96,25 @@ def _tool_definitions() -> list[dict[str, Any]]:
 
 def main() -> int:
     if os.environ.get("SCIWEAVE_BUFFER_DEMO") == "1":
-        print(json.dumps({"status": "ready", "protocol": "stdio JSON-RPC", "tools": 7}))
+        # 演示短路：不建服务、不监听端口、不连存储。状态必须是 stub 而不是
+        # ready，否则调用方会把「什么都没起」当成「草稿箱就绪」（同 ai4-c61f
+        # 修掉的静默降级）。
+        print(
+            json.dumps(
+                {
+                    "status": "stub",
+                    "serving": False,
+                    "reason_code": "buffer_demo_short_circuit",
+                    "protocol": "stdio JSON-RPC",
+                    "tools": 7,
+                }
+            )
+        )
+        print(
+            "SCIWEAVE_BUFFER_DEMO=1：本进程只打印自检信息，不提供任何草稿箱服务。"
+            "去掉该变量才会真正启动。",
+            file=sys.stderr,
+        )
         return 0
     try:
         config = BufferConfig.from_environment()
