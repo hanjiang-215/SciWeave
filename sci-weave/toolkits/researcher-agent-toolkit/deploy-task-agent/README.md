@@ -74,6 +74,46 @@ Redpanda topic
 
 真实信封里现在**没有**任务文本字段（`ai4-derq` 在裁信封形状），所以接生产后模型会收到那句说明，直到生产端开始发任务文本。这是刻意选择的可见失败。
 
+### 多 Agent 工作流
+
+`SCIWEAVE_WORKFLOW` 指定跑哪一个工作流（`libs/workflow-libs/` 里的名字）。留空时，**只有一个**工作流的配置会直接跑那个；套件自带五个（一个是预设、四个是 fast-agent 的写法样例），所以出厂要在 `.env` 里写：
+
+```bash
+SCIWEAVE_WORKFLOW=literature-agent
+```
+
+预设 `literature-agent` 是「一个编排器 + 三个只读 reader + 一个写作者」：
+
+| agent | fast-agent 类型 | 挂的卡 | 职责 |
+| --- | --- | --- | --- |
+| `literature-agent` | `orchestrator` | **无** | 拆解调研、派活、汇总；不写草稿 |
+| `literature-searcher` | `agent` | `literature-search` | 联网检索、读摘要 |
+| `literature-mapping-reader` | `agent` | `research-mapping` | 读 TaskNode、取 `task_owner_id` |
+| `literature-wiki-reader` | `agent` | `research-wiki` | 查已有正式词条 |
+| `literature-draft-writer` | `agent` | `draft-buffer` + `email-service` | 写草稿、发通知、回传 `draft_id` |
+
+**为什么一定要拆成子 agent：** `fast_agent/core/direct_decorators.py` 里 `orchestrator` 与 `parallel` 把 `servers` 硬编码成空列表（注释是 “Orchestrators don't connect to servers directly”），`router` 与 `agent` 才接受 `servers`。所以编排器拿不到 `create_draft`，写草稿的能力只能挂在子 agent 上。这条约束在 `runtime/tests/test_workflow_agent.py` 里有一条断言钉着：`literature-agent` 的 `allowed_mcp_resources` 必须是空元组。
+
+每一步都**按该 agent 的定义单独装配一个 runtime**（`WorkerConfig.with_agent`），不是共用一个：instruction、model、`allowed_mcp_resources` 都是逐 agent 的，共用会把三个 reader 的指令发给同一个 agent，并把写作者的 `create_draft` 交到 reader 手里。代价是每步写一次 `fast-agent.yaml`——一次文件写，不是一次模型调用。
+
+`final_writer` 由 runtime 在编排结束后**确定性地调一次**，不看 plan 里有没有它：模型可能规划出「检索、读、完」，那样就没人生成草稿，而 plan 本身看起来毫无问题。这一步是真实的模型调用（把结论改写成草稿署名格式），四类工作流都会多这一次，`Router` 与 `Agents as Tools` 那一次不产出新信息。
+
+### 草稿与通知的归属
+
+写作者有 `draft-buffer` 卡，所以**草稿由它写**，runtime 只接收它回传的 id：
+
+```json
+{"draft_id": "<create_draft 返回的 uuid>", "summary": "<一句话结论>"}
+```
+
+runtime 用 `json.loads` 解析（容忍代码块围栏）并校验是规范 UUID；解析失败或非 UUID 记 `draft_id_missing` 并让执行 `failed`，**不写伪造的 id**。这种 id 是 agent 的自述、runtime 没有独立验证过，所以落库时带 `draft_id_source: "agent_reported"`，`query_execution` 一并返回——不要把它当成「runtime 验过」。
+
+写作者没有 `draft-buffer` 卡时，runtime 自己写草稿并读回 id，此时标记是 `runtime`。判断依据是 agent 自己的 `allowed_mcp_resources`，不是额外的 YAML 开关：多一个布尔值就多一处能和卡片互相矛盾的地方。
+
+通知同理，由写作者通过 `email-service` 发，但三个字段是 runtime 的账、由 `notifications.notification_brief()` 原样交给它：`dedupe_key`（`draft-ready:<execution_id>`，重放只发一次）、`related`（含 `execution_id` / `task_node_id`）、`schema_version`（**字符串** `"1"`，整数会被服务端拒绝）。`recipients` 的 `principal_id` 用 agent 从映射里读到的 `task_owner_id`——runtime 不知道谁是负责人，编一个就是把邮件发给陌生人。`notification_kind` 只有 `draft_ready` 可用（`CONFIGURED_NOTIFICATION_KINDS` 是封闭的 13 个值，没有 `task_agent_run_finished`）。
+
+`notifications.notification_problem()` 在本地按 `_content_problem` 的四条硬规则（长度、HTML、控制字符、`related` 是对象）预检一遍，只是为了让研究员看到「subject 超了 40 个字」而不是服务端一句 `invalid`；服务端仍是权威，这个预检不能用来跳过调用。
+
 ## 本地验证
 
 ```bash
