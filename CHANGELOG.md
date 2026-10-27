@@ -92,6 +92,7 @@
 - *(sciencepal)* Make bridge harness-agnostic with CLI and HTTP MCP
 - *(sciencepal-bridge)* Write execution reports into the draft buffer
 - *(centre-stack)* Run every central service in one container
+- *(demo)* Add the SciencePal T1/T2 run package for the hard-gate evidence
 
 ### 🐛 Bug Fixes
 
@@ -142,6 +143,7 @@
 - *(mapping)* Publish governance events when a kafka bootstrap is configured
 - *(events)* Publish wiki governance events without blocking on the broker
 - *(coordinator)* Keep polling when the broker is briefly unreachable
+- *(demo)* Read collected artifacts from disk and assert the real T1 key
 
 ### 📚 Documentation
 
@@ -481,6 +483,11 @@
 - *(deploy)* Record the single-container decision for the central services
 - *(mcp)* Stop claiming the centre capability unlocks write tools
 - *(deploy)* Record the follow-up fixes for wiki events and broker outages
+- *(changelog)* Regenerate for the 2026-10-28 branch state
+- *(competition)* Backfill project summary with the 2026-10-27 verified numbers
+- *(tickets)* Record the verified fix approach for the cross-platform escape
+- *(tickets)* Check the first three acceptance items on ai4-0vnn
+- *(demo)* Point the evidence card at the ready-to-run SciencePal package
 
 ### 🚜 Refactor
 
@@ -557,6 +564,7 @@
 - *(tickets)* File and close the four 2026-10-27 review fixes
 - *(tickets)* Close ai4-e1jk after the container run verification
 - *(tickets)* Link the deployment PR into the four tickets
+- *(tickets)* File the Linux cross-platform verification evidence linked to ai4-grlc
 
 ### 💼 Other
 
