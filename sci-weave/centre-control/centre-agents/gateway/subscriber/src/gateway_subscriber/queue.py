@@ -34,7 +34,7 @@ class QueueMessage:
 class QueueClient(Protocol):
     def subscribe(self, topics: list[str]) -> None: ...
     def poll(self, timeout_ms: int) -> list[QueueMessage]: ...
-    def commit(self) -> None: ...
+    def commit(self, message: QueueMessage | None = None) -> None: ...
     def close(self) -> None: ...
 
 
@@ -45,6 +45,7 @@ class FakeQueueClient:
         self.topics: list[str] = []
         self.messages: list[QueueMessage] = []
         self.committed = False
+        self.commits: list[tuple[str, int, int] | None] = []
 
     def publish(self, topic: str, key: str, payload: dict) -> QueueMessage:
         message = QueueMessage(
@@ -64,8 +65,9 @@ class FakeQueueClient:
         batch, self.messages = self.messages, []
         return batch
 
-    def commit(self) -> None:
+    def commit(self, message: QueueMessage | None = None) -> None:
         self.committed = True
+        self.commits.append(None if message is None else (message.topic, message.partition, message.offset))
 
     def close(self) -> None:
         self.topics = []
@@ -112,8 +114,19 @@ class KafkaQueueClient:
                 )
         return batch
 
-    def commit(self) -> None:
-        self.consumer.commit()
+    def commit(self, message: QueueMessage | None = None) -> None:
+        if message is None:
+            self.consumer.commit()
+            return
+        from kafka import OffsetAndMetadata, TopicPartition
+
+        self.consumer.commit(
+            {
+                TopicPartition(message.topic, message.partition): OffsetAndMetadata(
+                    message.offset + 1, None
+                )
+            }
+        )
 
     def close(self) -> None:
         self.consumer.close()

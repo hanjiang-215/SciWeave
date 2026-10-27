@@ -75,4 +75,26 @@ class Reviews(unittest.TestCase):
         result = self.service.decide("mr", actor_id="owner", decision="approved", reason="publish", selected_solution_id="cc")
         self.assertEqual((result.status, result.reason_code), ("rejected", "candidate_head_changed"))
 
+    def test_preview_refuses_a_base_revision_that_has_no_record(self):
+        # ai4-qstm: the pointer and the proposal can agree on a revision id whose
+        # row is gone (deleted, or an empty base written before any formal
+        # revision existed). preview used to raise AttributeError on base.*.
+        with self.db.connection() as c:
+            c.execute("DELETE FROM formal_wiki_revision WHERE formal_wiki_revision_id = 'base'")
+            c.commit()
+
+        result = self.service.preview("p")
+
+        self.assertEqual((result.status, result.reason_code), ("unavailable", "base_missing"))
+
+    def test_a_missing_base_also_blocks_the_owner_decision(self):
+        with self.db.connection() as c:
+            c.execute("DELETE FROM formal_wiki_revision WHERE formal_wiki_revision_id = 'base'")
+            c.commit()
+
+        result = self.service.create_merge_request("p", "mr", "curator")
+
+        self.assertNotEqual(result.status, "ready_for_owner")
+
+
 if __name__ == "__main__": unittest.main()

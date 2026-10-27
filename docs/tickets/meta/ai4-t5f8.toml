@@ -1,2 +1,2 @@
 module = "infra"
-summary = "将 Pi 与容器配置收敛为 AI4Sci 可复现的无凭据开发环境。"
+summary = "裁定 Pi 开发环境留在本地不进仓库，并跟踪泄漏密钥的撤销。"

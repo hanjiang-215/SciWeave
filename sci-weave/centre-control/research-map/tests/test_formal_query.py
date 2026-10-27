@@ -77,6 +77,8 @@ class FormalQueryTestCase(unittest.TestCase):
         self.assertEqual(result.branch_id, BRANCH_ID)
         self.assertEqual(result.commit_hash, COMMIT_HASH)
         self.assertEqual(result.content_digest, self.snapshot.content_digest)
+        # ai4-2raq: the approver comes from the revision row, not the graph.
+        self.assertEqual(result.published_by, "owner-1")
         self.assertEqual(result.documents, GRAPH_DOCUMENTS)
         self.assertEqual(len(result.nodes), 1)
         self.assertEqual(len(result.edges), 1)
@@ -102,6 +104,7 @@ class FormalQueryTestCase(unittest.TestCase):
         self.assertEqual(result.reason_code, errors.OK)
         self.assertEqual(result.formal_revision_id, FORMAL_REVISION_ID)
         self.assertEqual(result.commit_hash, COMMIT_HASH)
+        self.assertEqual(result.published_by, "owner-1")
         self.assertEqual(result.documents, GRAPH_DOCUMENTS)
         self.assertEqual(
             self.terminus.calls,
@@ -114,6 +117,7 @@ class FormalQueryTestCase(unittest.TestCase):
         self.assertEqual(result.status, "no_such_revision")
         self.assertEqual(result.reason_code, errors.REVISION_NOT_FOUND)
         self.assertEqual(result.documents, ())
+        self.assertIsNone(result.published_by)
         self.assertEqual(self.terminus.calls, [])
 
     def test_get_by_revision_keeps_all_activated_revision_gates(self) -> None:

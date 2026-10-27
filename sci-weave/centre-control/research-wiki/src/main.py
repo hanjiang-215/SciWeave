@@ -9,9 +9,9 @@ from llm_wiki.config import WikiConfig
 from llm_wiki.dashboard_source import build_wiki_fragment, project_candidate_references, run_wiki_dashboard_from_environment
 from llm_wiki.formal_query import WikiFormalQueryService
 from llm_wiki.formal_domain import WikiSnapshotRead
-from llm_wiki.resource_review import ResourceReviewService
+from llm_wiki.resource_review import ResourceReviewService, SqliteResourceVersionLocationSource
 from llm_wiki.sqlite_store import SqliteStore
-from llm_wiki.terminus_store import TerminusDBResourceStore
+from llm_wiki.terminus_store import TerminusDBWikiCandidateStore
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -19,13 +19,24 @@ def main(argv: list[str] | None = None) -> int:
     config = WikiConfig.from_environment()
     sqlite_store = SqliteStore(config.sqlite_path)
     sqlite_store.initialize()
-    terminus_store = TerminusDBResourceStore(
+    # ai4-n7js: the candidate -> review -> formalize chain needs the candidate
+    # store. With the read-only resource store every write tool answered
+    # result_unknown / candidate_head_changed and no candidate could be
+    # created, approved or formalized -- silently, because those failures are
+    # result codes rather than exceptions.
+    terminus_store = TerminusDBWikiCandidateStore(
+        store_id=config.terminusdb_store,
+        database=config.terminusdb_database,
         base_url=config.terminusdb_url,
         token=config.terminusdb_token,
         username=config.terminusdb_username,
         password=config.terminusdb_password,
     )
-    service = ResourceReviewService(sqlite_store=sqlite_store, terminus_store=terminus_store)
+    service = ResourceReviewService(
+        sqlite_store=sqlite_store,
+        terminus_store=terminus_store,
+        location_source=SqliteResourceVersionLocationSource(sqlite_store),
+    )
     formal_query = WikiFormalQueryService(
         sqlite_store=sqlite_store,
         terminus_store=terminus_store,

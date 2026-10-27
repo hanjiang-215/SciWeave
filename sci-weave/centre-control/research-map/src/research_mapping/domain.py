@@ -116,6 +116,12 @@ class FormalQueryResult:
     branch_id: str | None = None
     commit_hash: str | None = None
     content_digest: str | None = None
+    # The principal that approved this revision (ai4-2raq). It is the only
+    # recorded answer to "who is the project owner here" -- there is no PO
+    # roster -- and the handoff coordinator needs it to address the terminal
+    # summary. Optional because a failure result has no revision to read it
+    # from.
+    published_by: str | None = None
     documents: tuple[dict[str, Any], ...] = field(default_factory=tuple)
 
     def __post_init__(self) -> None:

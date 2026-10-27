@@ -1,5 +1,5 @@
 [Unit]
-Description=SciWeave researcher-owned Work Agent MCP gateway
+Description=SciWeave researcher-owned Work Agent disposition MCP
 After=network-online.target
 
 [Service]

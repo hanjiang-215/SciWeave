@@ -14,6 +14,7 @@ from coordinator.adapter_publisher import KafkaHandoffPublisher
 from coordinator.adapter_registry import RegistryMcpAvailabilityPort
 from coordinator.adapter_snapshot import ResearchMapMcpSnapshotPort
 from coordinator.ports import (
+    AgentState,
     DependencyEdgeDoc,
     FormalSnapshot,
     HandoffReadyMessage,
@@ -82,6 +83,12 @@ def _make_handler(stub: McpStub):
                     if isinstance(handler, Exception):
                         self._reply(200, json.dumps({"error": {"message": str(handler)}}).encode())
                         return
+                    if isinstance(handler, dict) and "__error__" in handler:
+                        # The Registry reports domain failures as JSON-RPC
+                        # errors carrying a code; the adapter needs that code
+                        # to tell "no such agent" from "could not ask".
+                        self._reply(200, json.dumps({"error": {"code": handler["__error__"]}}).encode())
+                        return
                     text = json.dumps(handler, ensure_ascii=False) if not isinstance(handler, str) else handler
                     body = json.dumps(
                         {
@@ -141,6 +148,8 @@ def _mapping_documents() -> list[dict[str, Any]]:
             "logical_id": "E1",
             "version_id": "e1-v1",
             "dependency_kind": "blocking",
+            "required_outputs": ["data.csv"],
+            "blocks_until": "data-check/output",
             "source_node_version_ref": {"logical_id": "T1", "version_id": "t1-v1", "mapping_domain_id": "iris-demo"},
             "target_node_version_ref": {"logical_id": "T2", "version_id": "t2-v1", "mapping_domain_id": "iris-demo"},
         },
@@ -168,6 +177,15 @@ def test_snapshot_adapter_reads_revision_and_projects_graph() -> None:
         assert edge.source_node_id == "T1"
         assert edge.source_version_id == "t1-v1"
         assert edge.target_node_id == "T2"
+        assert edge.target_version_id == "t2-v1"
+        # ai4-fu4i: the edge's own identity is projected, not discarded.
+        assert edge.logical_id == "E1"
+        assert edge.version_id == "e1-v1"
+        # ai4-quvy: the four judgement fields are projected whole.
+        assert edge.dependency_kind == "blocking"
+        assert edge.required_outputs == ("data.csv",)
+        assert edge.blocks_until == "data-check/output"
+        assert edge.activation_condition is None
         # the correct tool was called with exact arguments
         assert ("get_formal_mapping_at_revision", {"mapping_domain_id": "iris-demo", "formal_revision_id": "rev-2"}) in stub.calls
 
@@ -199,35 +217,50 @@ def test_snapshot_adapter_unreachable_endpoint_raises_unavailable() -> None:
 
 def test_registry_adapter_requires_active_and_online() -> None:
     with McpStub() as stub:
+        # The Registry nests the registration row and its instances; the
+        # adapter must read that shape, not a flattened one.
         stub.responses["get_agent_registration"] = {
-            "agent_id": "agent-1",
-            "status": "active",
-            "agent_instances": [{"agent_instance_id": "i1", "runtime_status": "online"}],
+            "agent": {"agent_id": "agent-1", "status": "active"},
+            "instances": [{"agent_instance_id": "i1", "runtime_status": "online"}],
         }
         port = RegistryMcpAvailabilityPort(endpoint=stub.endpoint, token="tok")
+        assert port.state_of("agent-1") is AgentState.AVAILABLE
         assert port.is_available("agent-1") is True
 
         stub.responses["get_agent_registration"] = {
-            "agent_id": "agent-1",
-            "status": "active",
-            "agent_instances": [{"agent_instance_id": "i1", "runtime_status": "offline"}],
+            "agent": {"agent_id": "agent-1", "status": "active"},
+            "instances": [{"agent_instance_id": "i1", "runtime_status": "offline"}],
         }
-        assert port.is_available("agent-1") is False
+        assert port.state_of("agent-1") is AgentState.UNAVAILABLE
 
         stub.responses["get_agent_registration"] = {
-            "agent_id": "agent-1",
-            "status": "revoked",
-            "agent_instances": [{"agent_instance_id": "i1", "runtime_status": "online"}],
+            "agent": {"agent_id": "agent-1", "status": "retired"},
+            "instances": [{"agent_instance_id": "i1", "runtime_status": "online"}],
         }
-        assert port.is_available("agent-1") is False
+        assert port.state_of("agent-1") is AgentState.UNAVAILABLE
+
+
+def test_registry_adapter_separates_unregistered_from_unreachable() -> None:
+    # The coordinator tells the task owner to fix a bad agent id only when the
+    # Registry actually said "no such agent"; an outage must not be reported
+    # as a claim about the agent's existence (ai4-xkbd).
+    with McpStub() as stub:
+        stub.responses["get_agent_registration"] = {"__error__": "agent_not_found"}
+        port = RegistryMcpAvailabilityPort(endpoint=stub.endpoint, token="tok")
+        assert port.state_of("agent-missing") is AgentState.UNREGISTERED
+
+        stub.responses["get_agent_registration"] = {"__error__": "registry_unavailable"}
+        assert port.state_of("agent-1") is AgentState.UNKNOWN
 
 
 def test_registry_adapter_failures_are_conservative() -> None:
     with McpStub() as stub:
         stub.responses["get_agent_registration"] = RuntimeError("registry unavailable")
         port = RegistryMcpAvailabilityPort(endpoint=stub.endpoint, token="tok")
+        assert port.state_of("agent-1") is AgentState.UNKNOWN
         assert port.is_available("agent-1") is False
     port = RegistryMcpAvailabilityPort(endpoint="http://127.0.0.1:1/mcp", token="tok", timeout_seconds=0.2)
+    assert port.state_of("agent-1") is AgentState.UNKNOWN
     assert port.is_available("agent-1") is False
 
 
@@ -270,3 +303,59 @@ def test_email_publisher_submits_intent() -> None:
         assert args["notification_kind"] == "agent_unavailable"
         assert args["recipients"] == [{"principal_id": "principal-1"}]
         assert args["schema_version"] == "1"
+
+# ------------------------------------------------ governance event routing (ai4-3gvf)
+
+class _RecordingService:
+    """Minimal CoordinatorServiceLike stand-in that records routed calls."""
+
+    def __init__(self) -> None:
+        self.formal_revisions: list[tuple[str, str]] = []
+        self.completions: list[tuple[str, str, str]] = []
+
+    def on_formal_revision_published(self, mapping_domain_id: str, formal_revision_id: str) -> None:
+        self.formal_revisions.append((mapping_domain_id, formal_revision_id))
+
+    def on_task_completed(self, mapping_domain_id: str, task_node_id: str, version_ref: str) -> None:
+        self.completions.append((mapping_domain_id, task_node_id, version_ref))
+
+
+def test_task_completed_event_releases_downstream():
+    """A finished node must reach the coordinator; a revision edit is not the only trigger."""
+    from coordinator.adapter_events import GovernanceEventConsumer
+
+    service = _RecordingService()
+    consumer = GovernanceEventConsumer(service)
+
+    event = consumer.handle(
+        {
+            "event_type": "task_completed",
+            "mapping_domain_id": "iris",
+            "dedupe_key": "iris:T1:v1:task_completed",
+            "payload": {"task_node_id": "T1", "node_version_ref": "v1"},
+        }
+    )
+
+    assert service.completions == [("iris", "T1", "v1")]
+    assert event is not None and event.event_type == "task_completed"
+
+
+def test_task_completed_without_a_version_is_ignored():
+    """A completion without the exact node version cannot release anything."""
+    from coordinator.adapter_events import GovernanceEventConsumer
+
+    service = _RecordingService()
+    consumer = GovernanceEventConsumer(service)
+
+    assert consumer.handle({"event_type": "task_completed", "mapping_domain_id": "iris", "payload": {"task_node_id": "T1"}}) is None
+    assert service.completions == []
+
+
+def test_unknown_event_types_are_ignored():
+    from coordinator.adapter_events import GovernanceEventConsumer
+
+    service = _RecordingService()
+    consumer = GovernanceEventConsumer(service)
+
+    assert consumer.handle({"event_type": "candidate_created", "mapping_domain_id": "iris"}) is None
+    assert service.formal_revisions == [] and service.completions == []

@@ -296,3 +296,135 @@ class SubscriberTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+class PerRecordCommitTests(unittest.TestCase):
+    """ai4-9k0m: commit the handled record, not the whole polled batch."""
+
+    def test_fake_queue_records_the_committed_record(self) -> None:
+        from gateway_subscriber.queue import FakeQueueClient
+
+        queue = FakeQueueClient()
+        first = queue.publish("sciweave.governance-events", "k1", {"a": 1})
+        second = queue.publish("sciweave.governance-events", "k2", {"a": 2})
+
+        queue.commit(first)
+        queue.commit(second)
+
+        self.assertEqual(
+            queue.commits,
+            [
+                ("sciweave.governance-events", 0, first.offset),
+                ("sciweave.governance-events", 0, second.offset),
+            ],
+        )
+
+    def test_run_loop_commits_each_handled_record(self) -> None:
+        from gateway_subscriber import cli
+        from gateway_subscriber.queue import FakeQueueClient
+
+        handled: list[Any] = []
+
+        class _Service:
+            def handle_message(self, message):
+                handled.append(message.key)
+
+            def queued_targets(self):
+                return []
+
+        class _Runner:
+            def run_once(self, target):
+                raise AssertionError("no queued target expected")
+
+        queue = FakeQueueClient()
+        queue.publish("sciweave.governance-events", "k1", {"a": 1})
+        queue.publish("sciweave.governance-events", "k2", {"a": 2})
+
+        processed = cli.run_loop(_Service(), _Runner(), queue, poll_timeout_ms=0, max_messages=2)
+
+        self.assertEqual(processed, 2)
+        self.assertEqual(handled, ["k1", "k2"])
+        self.assertEqual([entry[2] for entry in queue.commits], [0, 1])
+
+class RuntimeSelectionTests(unittest.TestCase):
+    """ai4-c61f: the passthrough runtime must be an explicit choice."""
+
+    def _settings(self, api_key: str = ""):
+        from task_agent_worker.config import WorkerSettings
+
+        return WorkerSettings(
+            home=Path(tempfile.mkdtemp()),
+            session_dir="sessions",
+            connection_scope="local",
+            base_url="https://api.example.invalid",
+            model="deepseek-chat",
+            api_key=api_key,
+        )
+
+    def test_missing_api_key_without_the_switch_fails_fast(self) -> None:
+        import os
+
+        from gateway_subscriber.cli import build_runtime
+
+        previous = os.environ.pop("SCIWEAVE_GATEWAY_PASSTHROUGH_RUNTIME", None)
+        try:
+            with self.assertRaises(SystemExit):
+                build_runtime(self._settings())
+        finally:
+            if previous is not None:
+                os.environ["SCIWEAVE_GATEWAY_PASSTHROUGH_RUNTIME"] = previous
+
+    def test_the_switch_enables_the_passthrough_runtime(self) -> None:
+        import os
+
+        from gateway_subscriber.cli import build_runtime
+        from task_agent_worker.runtime import FastAgentPassthroughRuntime
+
+        os.environ["SCIWEAVE_GATEWAY_PASSTHROUGH_RUNTIME"] = "1"
+        try:
+            runtime = build_runtime(self._settings())
+        finally:
+            os.environ.pop("SCIWEAVE_GATEWAY_PASSTHROUGH_RUNTIME", None)
+
+        self.assertIsInstance(runtime, FastAgentPassthroughRuntime)
+
+class CancelGuardTests(unittest.TestCase):
+    """ai4-k6m2: a cancel that lands mid-run must survive the terminal write."""
+
+    def setUp(self) -> None:
+        from gateway_subscriber.queue import QueueMessage
+
+        self.temp = tempfile.TemporaryDirectory()
+        self.store = ExecutionStore(str(Path(self.temp.name) / "centre.sqlite3"))
+        self.service = SubscriberService(self.store, agent_id="agent-1")
+        self.runner = SubscriberWorkerRunner(self.store, self.service, DeterministicRuntime())
+        self.message = QueueMessage(
+            topic="sciweave.task-handoff.agent-1",
+            partition=0,
+            offset=0,
+            key="event-1",
+            payload=task_handoff("node-1", "event-1"),
+        )
+
+    def tearDown(self) -> None:
+        self.store.close()
+        self.temp.cleanup()
+
+    def test_cancelled_record_is_not_overwritten_by_completion(self) -> None:
+        self.service.handle_message(self.message)
+        claimed = self.runner._claim("node-1")
+        self.assertIsNotNone(claimed)
+        with self.store.transaction() as connection:
+            connection.execute(
+                "UPDATE execution_records SET status = 'cancelled' WHERE execution_id = ?",
+                (claimed["execution_id"],),
+            )
+
+        result = self.runner._persist(claimed, "completed", result_summary="done")
+
+        self.assertEqual(result["status"], "cancelled")
+        stored = self.store.get_execution(claimed["execution_id"])
+        self.assertEqual(stored["execution_status"], "cancelled")
+        self.assertIsNone(stored["result_summary"])
+        with self.store.transaction() as connection:
+            leases = connection.execute("SELECT COUNT(*) FROM worker_leases").fetchone()[0]
+        self.assertEqual(leases, 0)

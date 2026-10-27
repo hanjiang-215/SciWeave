@@ -12,7 +12,7 @@ class RecordingDraftBox(FakeDraftBox):
     def __init__(self):
         self.calls = []
 
-    def create_draft(self, target_id, payload):
+    def write(self, *, target_id, payload):
         self.calls.append((target_id, payload))
         return "draft-1"
 

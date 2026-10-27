@@ -548,7 +548,7 @@ TOOL_DEFINITIONS = [
     },
     {
         "name": "append_prereview_log",
-        "description": "Append one prereview report, or one invalidation decision, to the Mapping governance log. Append-only: reports and decisions are never edited. Passing ``reason`` (head_moved/base_moved) appends an invalidation decision; otherwise a report row is appended under the (candidate_id, candidate_head, rule_set_version) unique key. Requires the centre capability.",
+        "description": "Append one prereview report, or one invalidation decision, to the Mapping governance log. Append-only: reports and decisions are never edited. Passing ``reason`` (head_moved/base_moved) appends an invalidation decision; otherwise a report row is appended under the (candidate_id, candidate_head, rule_set_version, base_formal_revision_id) unique key. Requires the centre capability.",
         "inputSchema": {
             "type": "object",
             "required": ["candidate_id", "candidate_head"],
@@ -630,6 +630,9 @@ def _digest(arguments: dict[str, Any]) -> str:
 
 def _formal_query_result(result: FormalQueryResult) -> dict[str, Any]:
     if result.status != "available":
+        # Failure shapes stay exactly as they were: there is no revision, so
+        # there is no published_by to report, and callers key their handling
+        # off the absence of graph content rather than off a null field.
         return {"status": result.status, "reason_code": result.reason_code}
     return {
         "status": result.status,
@@ -640,6 +643,10 @@ def _formal_query_result(result: FormalQueryResult) -> dict[str, Any]:
         "branch_id": result.branch_id,
         "commit_hash": result.commit_hash,
         "content_digest": result.content_digest,
+        # Both formal entry points share this projection, so exposing the
+        # approver here is what keeps get_formal_mapping and
+        # get_formal_mapping_at_revision from disagreeing (ai4-2raq).
+        "published_by": result.published_by,
         "documents": list(result.documents),
     }
 

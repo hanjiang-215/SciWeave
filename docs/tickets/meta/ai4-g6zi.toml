@@ -1,0 +1,3 @@
+# ai4-g6zi 的索引归属与简介（人工维护）
+module = ["gateway"]
+summary = "Centre Agent 的 answer_question 与 review_execution 从 unimplemented 变为真实实现"

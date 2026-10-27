@@ -2,12 +2,14 @@
 
 The Centre Agent writes prereview conclusions back into the domain governance
 record. This module owns the append-only semantics: a report row is never
-edited, the unique key (candidate_id, candidate_head, rule_set_version) makes
-re-review idempotent, and invalidation is an appended decision row rather than
-a mutation of the old report. Rule-set resolution is delegated to a
-repository-managed rule file located through configuration; an unresolvable
-version must fail with ``rule_set_missing`` instead of writing an
-unjustifiable report.
+edited, the unique key (candidate_id, candidate_head, rule_set_version,
+base_formal_revision_id) makes re-review idempotent, and invalidation is an
+appended decision row rather than a mutation of the old report. The base
+revision is in the key so a re-review after ``base_moved`` appends a new report
+instead of colliding with the invalidated one (ai4-sf8l). Rule-set resolution
+is delegated to a repository-managed rule file located through configuration;
+an unresolvable version must fail with ``rule_set_missing`` instead of writing
+an unjustifiable report.
 """
 
 from __future__ import annotations
@@ -114,7 +116,12 @@ class MappingPrereviewLog:
                 raise PrereviewLogError("invalid_arguments", "each check needs name and verdict")
         resolve_rule_set(self._rules_dir, rule_set_version)
         existing = self._store.current_prereview_report(candidate_id, candidate_head)
-        if existing is not None and existing.get("rule_set_version") == rule_set_version:
+        if (
+            existing is not None
+            and existing.get("rule_set_version") == rule_set_version
+            and (existing.get("base_formal_revision_id") or "") == (base_formal_revision_id or "")
+        ):
+            # Same head, same rules, same base: the conclusion cannot differ.
             return PrereviewOutcome("ok", report_id=str(existing["report_id"]),
                                     candidate_id=candidate_id, duplicate=True)
         report_id = "prereview-" + uuid.uuid4().hex

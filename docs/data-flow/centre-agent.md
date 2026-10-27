@@ -1,6 +1,6 @@
 # 中央 Agent 职责汇聚
 
-从已有工单摘出 Centre Agent 的职责，并记录 2026-10-21 讨论后的两次收窄与 2026-10-22 的形态定稿。`centre-agents`、`buffer`、`registery` 都仍是空目录或只有说明。这里不增加新能力。
+从已有工单摘出 Centre Agent 的职责，并记录 2026-10-21 讨论后的两次收窄与 2026-10-22 的形态定稿。`centre-agents`、`buffer`、`registry` 都已落地实现：`sci-weave/centre-control/centre-agents/gateway/{ingest,mcp,subscriber}` 与 `sci-weave/centre-control/buffer/` 各有源码、测试与 README。这里不增加新能力。
 
 形态与进程划分见 [`work-agent.md`](work-agent.md)：Centre Agent 是 Work Agent 的中央实例，与 Task Agent 共用三组件架构。
 
@@ -99,12 +99,12 @@
 
 | 组成 | 内容 | 现状 |
 | --- | --- | --- |
-| Mapping 管理 MCP | 读候选、写入时机检校验、追加预审日志、新建混合候选 | `centre-control/research-map` 在实现，需补三项能力 |
-| Wiki 管理 MCP | 同上，但只谈 Wiki | `centre-control/research-wiki` 在实现，需补三项能力 |
-| 候选读接口 | 按同一时点返回全部可送审候选（未放弃、未正式化、未驳回） | 未实现，两套 MCP 都要 |
-| 预审报告日志 | 只追加；报告表与失效判定表各领域一张，唯一键 `(candidate_id, candidate_head, rule_set_version)`，失效由追加判定表达 | 未实现，契约已定案见 `ai4-oz3s` |
-| 触发订阅 | 消费领域 MCP 发出的候选事件与正式版本发布事件，短窗口去抖后拉全量快照 | 未实现，消息语义见 `ai4-te1v` |
-| 草稿箱 | 中央 Agent 不进草稿箱；一审由人在 `centre-control/buffer` 完成 | 未实现，契约见 `draft-buffer.md` |
+| Mapping 管理 MCP | 读候选、写入时机检校验、追加预审日志、新建混合候选 | 已实现，见 `centre-control/research-map/src/research_mapping/candidate_reader.py`、`prereview.py`、`merged_candidate.py` |
+| Wiki 管理 MCP | 同上，但只谈 Wiki | 已实现，见 `centre-control/research-wiki/src/llm_wiki/candidate_reader.py`、`prereview.py`、`merged_candidate.py` |
+| 候选读接口 | 按同一时点返回全部可送审候选（未放弃、未正式化、未驳回） | 已实现，两套 MCP 各一份 `candidate_reader.py` |
+| 预审报告日志 | 只追加；报告表与失效判定表各领域一张，唯一键 `(candidate_id, candidate_head, rule_set_version)`，失效由追加判定表达 | 已实现，见两领域的 `prereview.py`；契约见 `ai4-oz3s` |
+| 触发订阅 | 消费领域 MCP 发出的候选事件与正式版本发布事件，短窗口去抖后拉全量快照 | 已实现，见 `centre-agents/gateway/subscriber`；消息语义见 `ai4-te1v` |
+| 草稿箱 | 中央 Agent 不进草稿箱；一审由人在 `centre-control/buffer` 完成 | 已实现，见 `sci-weave/centre-control/buffer/`；契约见 `draft-buffer.md` |
 | 留痕工具 | 接口层调用账本：中央各 MCP 的对外工具调用统一记录 | 规格见 `ai4-tg3v`，代码落地见 `ai4-gvan` |
 | 技能 | 预审判据（受 Git 版本化）、冲突矩阵、混合候选生成 | `toolkits/centre-agent-toolkit` 只有标题 |
 

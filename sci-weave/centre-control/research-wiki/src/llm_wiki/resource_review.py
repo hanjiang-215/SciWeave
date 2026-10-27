@@ -51,6 +51,32 @@ class ExactVersionLocationSource(Protocol):
     def locate(self, resource_version_id: str) -> ResourceVersionLocation | None: ...
 
 
+class SqliteResourceVersionLocationSource:
+    """Reads the exact location from a governance record that already pinned it.
+
+    The Wiki domain reviews ResourceVersions but does not store them, so it has
+    no way to derive a historical location on its own (ai4-jr5v). Recording a
+    decision with a verified snapshot pins the location in
+    ``resource_version_review.target_location``; this source replays that record
+    so later decisions on the same version -- a revocation, or a re-review after
+    an expiry -- can read the same immutable snapshot instead of failing with
+    ``exact_version_location_unknown``.
+
+    The first decision for a version still needs the location to come from the
+    domain that stored it; until such a record exists, ``locate`` returns
+    ``None`` and the review refuses to read rather than guessing a branch head.
+    """
+
+    def __init__(self, sqlite_store: SqliteStore) -> None:
+        self._sqlite = sqlite_store
+
+    def locate(self, resource_version_id: str) -> ResourceVersionLocation | None:
+        record = self._sqlite.latest_review(resource_version_id)
+        if record is None:
+            return None
+        return record.target_location
+
+
 def _utc_now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 

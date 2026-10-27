@@ -14,7 +14,7 @@ tags: [audit, shared, ready-for-agent]
 
 ## Parent
 
-[中央留痕工具共享包实现规格](ai4-tg3v)
+[中央留痕工具共享包实现规格](ai4-tg3v.md)
 
 ## What to build
 

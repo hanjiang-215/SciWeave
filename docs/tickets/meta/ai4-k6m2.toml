@@ -1,0 +1,3 @@
+# ai4-k6m2 的索引归属与简介（人工维护）
+module = ["agent"]
+summary = "list_pending 语义与 cancel_execution 行为不符契约"

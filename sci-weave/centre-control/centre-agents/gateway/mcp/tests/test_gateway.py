@@ -51,6 +51,17 @@ class CentreAgentTests(unittest.TestCase):
         content = payload["result"]["content"][0]["text"]
         return json.loads(content)
 
+    def call_raw(self, name: str, arguments: dict[str, Any] | None = None) -> dict[str, Any]:
+        body = json.dumps({
+            "jsonrpc": "2.0", "id": "test", "method": "tools/call",
+            "params": {"name": name, "arguments": arguments or {}},
+        }).encode()
+        request = urllib.request.Request(self.base + "/mcp", data=body, method="POST")
+        request.add_header("Authorization", "Bearer test-token")
+        request.add_header("Content-Type", "application/json")
+        with urllib.request.urlopen(request) as response:
+            return json.loads(response.read())
+
     def wait_for(self, execution_id: str, status: str) -> dict[str, Any]:
         deadline = time.monotonic() + 15
         while time.monotonic() < deadline:
@@ -100,10 +111,29 @@ class CentreAgentTests(unittest.TestCase):
         self.assertNotIn("submit_owner_command", names)
         self.assertNotIn("accept", names)
 
-    def test_disposition_tools_return_unimplemented(self) -> None:
+    def test_disposition_tools_require_their_arguments(self) -> None:
         for name in ("answer_question", "review_execution"):
-            result = self.call(name, {"execution_id": "missing"})
-            self.assertEqual(result["error"]["code"], "unimplemented")
+            payload = self.call_raw(name, {"execution_id": "missing"})
+            self.assertEqual(payload["error"]["code"], -32602)
+
+    def test_answering_an_unknown_execution_is_not_found(self) -> None:
+        result = self.call(
+            "answer_question",
+            {"execution_id": "missing", "answer": "v3", "idempotency_key": "key-1"},
+        )
+        self.assertEqual(result["error"]["code"], "not_found")
+
+    def test_reviewing_an_unknown_execution_is_not_found(self) -> None:
+        result = self.call(
+            "review_execution",
+            {
+                "execution_id": "missing",
+                "decision": "reject",
+                "reason": "no evidence",
+                "idempotency_key": "key-2",
+            },
+        )
+        self.assertEqual(result["error"]["code"], "not_found")
 
     def test_dashboard_sources_requires_auth_and_returns_fragment(self) -> None:
         unauthenticated = urllib.request.Request(self.base + "/sources", method="GET")
@@ -131,3 +161,78 @@ class CentreAgentTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RuntimeConfigurationVisibilityTests(unittest.TestCase):
+    """ai4-c61f: a runtime that failed to configure must not look healthy."""
+
+    def setUp(self) -> None:
+        self.temp = tempfile.TemporaryDirectory()
+        self.app = create_app(
+            str(Path(self.temp.name) / "centre.sqlite3"), "test-token", "centre-agent"
+        )
+
+    def tearDown(self) -> None:
+        self.app.store.close()
+        self.temp.cleanup()
+
+    def test_unconfigured_runtime_is_reported_as_misconfigured(self) -> None:
+        self.app.mark_runtime_misconfigured("api_key_missing")
+
+        health = self.app.health()
+
+        self.assertEqual(health["components"]["worker_runtime"], "misconfigured")
+        self.assertIsNone(self.app.runtime)
+        self.assertFalse(self.app.test_runtime_enabled)
+
+    def test_dashboard_component_matches_health(self) -> None:
+        self.app.mark_runtime_misconfigured("worker_settings_invalid: connection scope")
+
+        services = {item["id"]: item["status"] for item in self.app.dashboard_sources()["services"]}
+
+        self.assertEqual(services["worker_runtime"], "misconfigured")
+
+    def test_a_configured_runtime_reports_ready(self) -> None:
+        self.app.enable_test_runtime()
+
+        self.assertEqual(self.app.health()["components"]["worker_runtime"], "ready")
+
+class PendingDispositionTests(unittest.TestCase):
+    """ai4-k6m2: list_pending is the reviewer queue, not the whole history."""
+
+    def setUp(self) -> None:
+        self.temp = tempfile.TemporaryDirectory()
+        self.app = create_app(
+            str(Path(self.temp.name) / "centre.sqlite3"), "test-token", "centre-agent"
+        )
+
+    def tearDown(self) -> None:
+        self.app.store.close()
+        self.temp.cleanup()
+
+    def _insert(self, execution_id: str, status: str) -> None:
+        with self.app.store.transaction() as connection:
+            connection.execute(
+                """INSERT INTO execution_records
+                   (execution_id, task_node_id, session_id, status, created_at, updated_at)
+                   VALUES (?, 'node-1', 'session-1', ?, '2026-10-27T00:00:00', '2026-10-27T00:00:00')""",
+                (execution_id, status),
+            )
+
+    def test_terminal_executions_are_not_pending(self) -> None:
+        for index, status in enumerate(
+            ["queued", "running", "waiting", "needs_revision", "human_takeover", "completed", "failed", "cancelled"]
+        ):
+            self._insert(f"exec-{index}", status)
+
+        pending = {item["execution_status"] for item in self.app.list_pending()}
+
+        self.assertEqual(
+            pending, {"queued", "running", "waiting", "needs_revision", "human_takeover"}
+        )
+
+    def test_task_node_filter_still_applies(self) -> None:
+        self._insert("exec-1", "queued")
+
+        self.assertEqual(self.app.list_pending("node-1")[0]["execution_id"], "exec-1")
+        self.assertEqual(self.app.list_pending("node-2"), [])
