@@ -15,7 +15,7 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-EXPECTED_SHA256 = "daaeb5e3e889d07fbdd44544f5a39fe2372a07172e25899d577be0ad74df9e65"
+EXPECTED_SHA256 = "ea110d42c2240c77fd292751dfdc4db00c699fee569528ed33ca270838b6f9f4"
 EXPECTED_ROWS = 150
 EXPECTED_FEATURE_COLUMNS = ("sepal length", "sepal width", "petal length", "petal width")
 EXPECTED_CLASS_COLUMN = "class"
@@ -26,25 +26,35 @@ LICENSE = "CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/legalcode)"
 
 
 def sha256_of(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1 << 20), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
+    """Hash the snapshot content, not the working copy's line endings.
+
+    The official CSV ships with CRLF, while this repository stores it with LF.
+    A checkout therefore differs byte-wise from the published file even though
+    nothing changed. Normalising before hashing keeps the provenance check
+    meaningful across Git's line-ending policy (``ai4-483l``).
+    """
+    return hashlib.sha256(path.read_bytes().replace(b"\r\n", b"\n")).hexdigest()
 
 
 def check(path: Path) -> dict[str, object]:
-    observed_sha256 = sha256_of(path)
-    if observed_sha256 != EXPECTED_SHA256:
-        return _failed("source_hash_mismatch",
-                       {"observed_sha256": observed_sha256, "expected_sha256": EXPECTED_SHA256})
+    """Structural checks first, provenance last.
 
-    with path.open("r", encoding="utf-8", newline="") as handle:
-        reader = csv.DictReader(handle)
-        columns = reader.fieldnames or []
-        if set(EXPECTED_FEATURE_COLUMNS) - set(columns) or EXPECTED_CLASS_COLUMN not in columns:
-            return _failed("missing_columns", {"columns": columns})
-        rows = list(reader)
+    Every reason code stays reachable: any file that passes the hash *is* the
+    pinned snapshot, so a hash check placed earlier would silently swallow the
+    row-count, missing-value and class-count failures. Provenance still gates
+    success — it just speaks last, after the more specific diagnosis.
+    """
+    try:
+        with path.open("r", encoding="utf-8", newline="") as handle:
+            reader = csv.DictReader(handle)
+            columns = reader.fieldnames or []
+            if set(EXPECTED_FEATURE_COLUMNS) - set(columns) or EXPECTED_CLASS_COLUMN not in columns:
+                return _failed("missing_columns", {"columns": columns})
+            rows = list(reader)
+    except UnicodeDecodeError:
+        return _failed("unreadable_input", {"reason": "not valid UTF-8"})
+    except OSError as error:
+        return _failed("unreadable_input", {"reason": str(error)})
 
     if len(rows) != EXPECTED_ROWS:
         return _failed("row_count_mismatch", {"observed": len(rows), "expected": EXPECTED_ROWS})
@@ -71,6 +81,11 @@ def check(path: Path) -> dict[str, object]:
         return _failed("missing_values", {"missing_rows": missing, "sample_line_numbers": malformed})
     if class_counts != EXPECTED_CLASS_COUNTS:
         return _failed("class_count_mismatch", {"observed": class_counts, "expected": EXPECTED_CLASS_COUNTS})
+
+    observed_sha256 = sha256_of(path)
+    if observed_sha256 != EXPECTED_SHA256:
+        return _failed("source_hash_mismatch",
+                       {"observed_sha256": observed_sha256, "expected_sha256": EXPECTED_SHA256})
 
     return {
         "status": "ok",

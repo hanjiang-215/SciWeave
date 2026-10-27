@@ -19,7 +19,7 @@ SciencePal 沙箱需要同时满足三项，才能承接 T1 数据检查 / T2 �
 ### 第 0 步：准备本地证据（无需 SciencePal，已完成）
 
 - 固定脚本：`humans/competition/demo-evidence/check_iris_input.py`、`run_iris_baseline.py`（仅标准库，参数固定 K=3 / 种子 20261023 / 70/30）。
-- 固定输入：`demo-evidence/iris_data.csv`（SHA-256 `daaeb5e3...df9e65`）；失败注入副本 `iris_data_failure_inject.csv`。
+- 固定输入：`demo-evidence/iris_data.csv`（SHA-256 `ea110d42...b6f9f4`，行尾归一化）；失败注入副本 `iris_data_failure_inject.csv`。
 - 本机对照结果：`iris_input_check.json`、`iris_baseline_result.json`（Sandbox 结果不一致时以沙箱实际输出为准并回填）。
 
 ### 第 1 步：最小测试 skill
@@ -27,7 +27,7 @@ SciencePal 沙箱需要同时满足三项，才能承接 T1 数据检查 / T2 �
 在 SciencePal 项目中加载本目录 `skills/minimal-probe/SKILL.md`（或按平台格式复制其内容）。该 skill 做三件小事：
 
 1. 打印 `Hello from SciWeave probe`；
-2. 运行 `python checks/check_iris_input.py checks/iris_data.csv`（脚本与数据一并上传到沙箱）；
+2. 运行 `python check_iris_input.py iris_data.csv`（脚本与数据一并上传到沙箱的同一目录，来源见第 0 步）；
 3. 对中央端点发一次 HTTP GET（出站探测，见第 2 步）。
 
 > 如果平台不支持 skill 目录格式，直接把 SKILL.md 正文拷进 agent 系统提示词。
@@ -81,5 +81,6 @@ curl -sS -m 10 -X POST https://<central-host>/mcp \
 | `skills/minimal-probe/SKILL.md` | 最小测试 skill：打印 + T1 检查 + 出站探测 |
 | `skills/mcp-bridge/SKILL.md` | 路径 B 的 MCP JSON-RPC 桥 skill 模板 |
 | `agent/t2-baseline-agent.md` | T2 执行 agent 的任务指令模板（与中央开放面对齐） |
-| `checks/` | 由 demo-evidence 锁定的 T1/T2 脚本副本（上传沙箱用） |
 | `docs/deploy-central-mcp.md` | 中央管理 MCP 公网可达性检查与启停说明 |
+
+T1/T2 脚本与 Iris 数据不在本目录，统一从 `humans/competition/demo-evidence/` 取用（`check_iris_input.py`、`run_iris_baseline.py`、`iris_data.csv`、`iris_data_failure_inject.csv`）。上传沙箱时把这几个文件放在同一目录，命令即 `python check_iris_input.py iris_data.csv`。此前本目录下的 `checks/` 是逐字节副本，两份曾因改动不同步而产生「本机通过、沙箱失败」的风险，已移除（`ai4-3vkc`）。

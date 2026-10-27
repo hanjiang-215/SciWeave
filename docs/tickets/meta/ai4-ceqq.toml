@@ -1,0 +1,3 @@
+# ai4-ceqq 的索引归属与简介（人工维护）
+module = "agent"
+summary = "接入真实 SMTP 发送端口，通道配置与内容分离"

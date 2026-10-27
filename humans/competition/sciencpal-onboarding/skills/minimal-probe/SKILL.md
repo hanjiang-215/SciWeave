@@ -19,13 +19,23 @@ python --version
 
 ### 2. 运行 T1 数据检查（脚本执行探测）
 
-在沙箱内对 `checks/iris_data.csv` 运行：
+先把 `humans/competition/demo-evidence/` 下的 `check_iris_input.py` 与 `iris_data.csv` 上传到沙箱的同一目录。仓库里不再维护 `checks/` 副本，`demo-evidence/` 是唯一来源。
 
-```bash
-python checks/check_iris_input.py checks/iris_data.csv
+上传后的目标结构（扁平，脚本与数据同级）：
+
+```text
+<沙箱工作目录>/
+├── check_iris_input.py
+└── iris_data.csv
 ```
 
-记录输出。预期 `status: ok`。若文件缺失，先检查上传；仍失败则如实记录错误文本。
+在沙箱内于该目录运行：
+
+```bash
+python check_iris_input.py iris_data.csv
+```
+
+记录输出。预期 `status: ok`。若文件缺失，先检查上传；仍失败则如实记录错误文本。脚本对漏传文件也会给出结构化失败（`reason_code: unreadable_input`），看到 traceback 说明上传结构不对。
 
 ### 3. 沙箱出站探测（中央端点）
 
