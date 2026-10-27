@@ -1,6 +1,6 @@
 # 中央服务器
 
-`centre-control` 只表示这些内容部署在中央服务器。下面每个目录都是独立项目，不共用锁文件，也不作为一个部署单元一起启动。
+`centre-control` 只表示这些内容部署在中央服务器。下面每个目录都是独立项目：代码上不共用锁文件，也不互相依赖（`shared/` 除外）。**部署形态**：2026-10-27 起，这些服务整体作为一个部署单元，由 `sci-weave/centre-stack/` 打成单镜像、单容器、supervisord 多进程运行（决策见 `docs/adr/0006-centre-single-container.md`）；端侧套件与 SciencePal 科研核心部署在 DSH / WorkBuddy / SciencePal 上，经该容器暴露的 MCP 端口访问。
 
 | 目录 | 是什么 |
 | --- | --- |

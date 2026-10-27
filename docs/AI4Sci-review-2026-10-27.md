@@ -289,3 +289,56 @@ python .cursor/skills/engineering/ticket-index/scripts/ticket_index.py check
 另外补了一处审查时没写进清单、但同属「假绿」的问题：**`compileall` 阶段依赖上一次留下的 `__pycache__`**。清掉缓存后该阶段在受限环境下车库级失败，说明它的绿是缓存给的。已改为 `PYTHONPYCACHEPREFIX=var/pycache-ci`（每次先清空），修复后在零缓存工作区首跑即通过，`src/` 里也不再落生成物。
 
 **仍未修、且不建议在本轮修的**：`ai4-grlc` 的跨平台路径缺陷（需在 Linux 实跑验证）、CI 在 Gitee 上仍不执行（Gitee Go 未接，属外部配置）、SciencePal 承载 Iris T1/T2（`ai4-aaff`，赛事硬门槛，优先级高于以上任何一条）。
+
+---
+
+## 十一、晚间第二轮：中央服务完成度与单容器部署（22:20 起）
+
+用户要求审查中央服务的进度与完成度，并落地「把所有中央服务放进一个 docker」的部署形态。
+
+### 11.1 实测
+
+- 受限沙箱下跑矩阵会产生大面积假红：pytest 的 `tmp_path` 删除被拒（`PermissionError [WinError 5]`），与 10-22、10-27 早间记载的现象一致；放开文件权限后 `scripts/ci.ps1 -Filter 'centre-control'` 得 **16/17 阶段通过、700 项用例通过、22 项跳过**，web-ui 的 vitest 与 build 各通过。
+- 唯一失败是 research-map 的 `test_unauthenticated_and_unknown_token_are_rejected`（`ConnectionAbortedError [WinError 10053]`）。单独重跑 research-map 得 **133 passed / 5 skipped**，判定为传输层偶发而非产品缺陷，登记为测试稳定性项。
+- 修复下条死变量后，research-map 由 129 项增至 133 项（新增 4 项回归）。
+
+### 11.2 本轮新发现
+
+| # | 问题 | 影响 | 处置 |
+| --- | --- | --- | --- |
+| 1 | `SCIWEAVE_MAPPING_KAFKA_BOOTSTRAP` 只被读进局部变量、从未传给 `MappingConfig`，`create_governance_publisher` 恒拿 `None` | 真实部署里 `candidate_created` / `formal_revision_published` 永远不发布，coordinator 与 Centre Agent 收不到任何领域事件；此前 handoff e2e 通过是因为测试直接向 Redpanda 发事件，绕过了发布端 | 已修 + 4 项回归（`research-map/tests/test_config.py`），`ai4-e1jk` |
+| 2 | research-wiki 的 `WikiManagementService` 没有治理事件端口，`main.py` 也未接线 | wiki 候选的正式化不产生事件，wiki 侧治理闭环只能靠快照扫描 | 未修，登记为已知缺口 |
+| 3 | `centre` 能力只解锁 4 个读工具，但 `research-map/README.md:69-70` 与 `TOOL_DEFINITIONS` 文案仍写 "or centre" | 照文档配置会把写工具配成 `forbidden`，且在 JSON-RPC 层表现为 HTTP 200 + `isError=true`，容易被误判成服务故障 | 未改文档，先在本轮报告标注 |
+| 4 | 部署单元的 `Dockerfile.dockerignore` 曾用 `**/data` 排除运行期数据 | 把 `web-ui/src/data` 源码目录一并排除，镜像内前端构建报 `Cannot find module '@/data/...'` | 已修（构建实测发现） |
+
+### 11.3 部署形态
+
+- 裁决：`centre-control` 全部服务打成**单镜像 + 单容器 + supervisord 12 进程**，部署单元为 `sci-weave/centre-stack/`；端侧套件与 SciencePal 科研核心留在 DSH / WorkBuddy / SciencePal，经容器暴露的 MCP 端口访问。
+- 决策记录：`docs/adr/0006-centre-single-container.md`；与 `centre-control/README.md` 原「不作为一个部署单元一起启动」的冲突已在 README 与 `docs/TECH_STACK.md` 同步说明。
+
+### 11.4 构建与验证边界
+
+- 本机 Docker 可用，但直连 `auth.docker.io` 超时，构建须经镜像代理（`PYTHON_IMAGE` / `NODE_IMAGE` 指向内网可达的镜像源）；ghcr 的 `astral-sh/uv` 镜像不可达，已改为 PyPI 安装 uv，减少一类必须可达的镜像源。
+- `supervisord` 在 Windows 上无法本地解析配置（依赖 `pwd` 模块），改为在容器内 `supervisord -c /etc/supervisord.conf -t` 与 `supervisorctl status` 校验。
+
+### 11.5 容器实跑结果
+
+`docker compose build` → `sciweave/centre:local` 构建成功；容器启动 20 秒内 `healthy`；`compose run --rm bootstrap` 建成三个领域库。
+
+```text
+supervisorctl status：11 RUNNING / 1 FATAL
+  FATAL = centre-gateway-subscriber（DEEPSEEK_API_KEY 未配且未开 passthrough，按设计拒绝启动）
+GET :8080/health 200   :8702/health 200   :8710/:8720/:8730/:8740/:8760/:8762/health 200
+GET :8750/health 503   （SMTP 未配置；email-service 仍提供状态查询，属预期）
+GET :8702/api/dashboard/snapshot → mode=live；gateway=fresh；
+  mapping/wiki=unavailable（新库尚无正式版本，是正确语义而非接线错误）；queue=unavailable（subscriber 未运行）
+```
+
+实跑修掉四个只在容器里暴露的问题：
+
+1. `Dockerfile.dockerignore` 的 `**/data` 把 `web-ui/src/data` 源码排除，前端构建报 `Cannot find module '@/data/...'`。
+2. supervisord 程序段缺 `stdout_logfile` / `stderr_logfile`，12 个角色的输出全落进容器内 `/tmp`，`docker logs` 看不到任何业务日志。
+3. 用 PowerShell 重写 `supervisord.conf` / `compose.yaml` 时写进了 BOM，supervisord 报 `File contains no section headers` 并进入重启循环。
+4. 三个领域库在全新环境不存在：草稿箱初始化 schema 拿到 404 直接退出（`schema_initialization_failed`），看板 mapping/wiki 恒 `unavailable`。已补幂等引导脚本 `centre-stack/scripts/bootstrap_terminusdb.py` 与 `compose run --rm bootstrap`。
+
+另外两点属于**环境事实**而非代码缺陷，已写进 README：仓库自带 Redpanda 把 external 监听 advertise 成 `localhost:19092`，容器内连不上（用附带的 `compose.local-redpanda.yaml` 接入其 docker 网络走 `redpanda:9092`）；coordinator 在 broker 短暂不可达时会被异常打断并由 supervisord 重启。

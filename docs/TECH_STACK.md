@@ -68,6 +68,12 @@ sci-weave/<项目组>/
 
 ## 未确定项
 
-- 生产部署、容器编排、密钥管理和 CI。
+- 生产级密钥管理：令牌与密码仍走部署方 `.env` + 环境变量注入，磁盘加密 / KMS / 密钥轮换未定。
+- CI：`.github/workflows/ci.yml` 在 Gitee 上不触发，Gitee Go 未接（属外部配置）。
 - Redpanda 的生产形态：副本数、保留期、跨机器访问的暴露方式。
-- `centre-control` 内各服务是否打成一个镜像、在单容器内多进程运行，与现行“不作为同一个部署单元”规则冲突，待裁决。
+- 公网暴露形态：中央 MCP 端点的反代与 TLS 未定（端点已有 Bearer 鉴权）。
+
+## 部署形态（2026-10-27 裁决）
+
+- `centre-control` 下各服务**打成一个镜像、单容器内多进程运行**，由 `sci-weave/centre-stack/`（Dockerfile + compose + supervisord）承载，部署在中央服务器；端侧套件与 SciencePal 科研核心部署在 DSH / WorkBuddy / SciencePal 宿主上，经容器暴露的 MCP 端口访问中央能力。
+- 该裁决取代 `centre-control/README.md` 中「不作为同一个部署单元一起启动」的说法，决策记录见 [`docs/adr/0006-centre-single-container.md`](adr/0006-centre-single-container.md)。
