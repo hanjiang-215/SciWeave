@@ -3,11 +3,13 @@ and offset commit, without a broker (FakeQueue) and without a real draft box.
 """
 
 import importlib.util
+import os
 import sys
 import unittest
 from pathlib import Path
+from unittest import mock
 
-from work_agent_runtime import FakeQueue, QueueMessage, WorkAgentRuntime
+from work_agent_runtime import FakeDraftBox, FakeQueue, QueueMessage, WorkAgentRuntime
 
 _SUBSCRIBER_MAIN = Path(__file__).resolve().parents[2] / "service-template" / "gateway" / "subscriber" / "src" / "main.py"
 
@@ -72,6 +74,33 @@ class SubscriberRunLoopTests(unittest.TestCase):
         processed = self.main.run_loop(runtime, queue, ["sciweave.task-handoff.researcher-1"], max_messages=1, agent_id="researcher-1")
         self.assertEqual(processed, 1)
         self.assertTrue(queue.committed)
+
+
+class SubscriberDraftBoundaryTests(unittest.TestCase):
+    """The subscriber never holds draft-box credentials (ai4-z3z4, ai4-4zjz).
+
+    Drafts are written by the agent inside the worker through a draft-box MCP
+    server. If the subscriber also assembled a writer, one execution would write
+    two drafts, and the credential would sit in the wrong process.
+    """
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.main = _load_main()
+
+    def test_a_configured_draft_box_is_not_wired_into_the_subscriber(self) -> None:
+        with mock.patch.dict(
+            os.environ,
+            {"DRAFT_BUFFER_MCP_URL": "https://buffer.invalid/mcp", "DRAFT_BUFFER_MCP_TOKEN": "t"},
+            clear=False,
+        ):
+            runtime = self.main.build_runtime()
+        self.assertIsInstance(runtime.drafts, FakeDraftBox, "the subscriber must fall back to the fake draft box")
+
+    def test_the_subscriber_module_does_not_import_the_draft_writer(self) -> None:
+        source = _SUBSCRIBER_MAIN.read_text(encoding="utf-8")
+        self.assertNotIn("BufferMCPDraftWriter", source)
+        self.assertNotIn("DRAFT_BUFFER_MCP_TOKEN", source)
 
 
 if __name__ == "__main__":

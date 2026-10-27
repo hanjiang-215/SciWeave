@@ -108,9 +108,13 @@ _Avoid_: 用 Work Agent 替代 Task Agent 或 Centre Agent 这两个实例名。
 
 **Task Agent（任务 Agent）**：研究员在自己的电脑上编写和运行的 Work Agent 实例，用于执行边界明确、重复、耗时或结构化的科研任务；它不是平台自研的通用 harness，也不由平台部署或托管。它主动连接中央消息队列接收上游交接，按中央服务对端侧开放的能力面调用服务，执行结果作为草稿写入中央草稿箱。
 
-**Agent Definition（Agent 定义）**：一份 Work Agent 在一轮 loop 里要做什么的说明，包括任务指令、允许的模型和允许调用的领域能力。Centre Agent 的定义是固定的预审说明。Task Agent 的定义由研究员在平台给出的样例上修改。它不是 Gateway，也不是 Personal Agent 用来安装套件的 skill。
+**Agent Definition（Agent 定义）**：一份 Work Agent 在一轮 loop 里要做什么的说明，包括任务指令、允许的模型和允许调用的领域能力。Centre Agent 的定义是固定的预审说明。Task Agent 的定义由研究员在平台提供的**可直接运行的默认配置**上修改；平台不做「先给一个跑不起来的样例、再由研究员补全」这种预设，套件出厂即带一份能加载、能跑通 passthrough 路径的默认 Agent 与工作流。它不是 Gateway，也不是 Personal Agent 用来安装套件的 skill。
 
 _Avoid_: 把 Agent 定义叫成服务模板或运行时。服务模板只负责把进程拉起来，运行时是状态机、租约和拉起子进程的实现。
+
+**Workflow（工作流）**：一份 YAML 声明，由多个 Agent 定义与它们之间的编排关系组成，由 fast-agent-mcp 构建并执行。工作流是**声明**，不是运行中的线程池，也不是一段提示词：`type` 决定编排方式（`Router`、`Orchestrator`、`Parallel`、`Agents as Tools`），`entry_agent` / `sub_agents` / `summarizer` / `final_writer` 决定谁在什么时候被调用。`final_writer` 由 runtime 在编排结束后确定性调用一次，用于署名写入草稿，不由编排计划决定。Work Agent 的一轮 loop **可以**执行一个 Workflow，也可以只执行单 agent；Workflow 是 `Task Agent` 与 `Agent Definition` 两条定义的上位补充，不是替代。
+
+_Avoid_: 把 Workflow 叫成「流程」「pipeline」「编排器」。`Orchestrator` 只是四种 `type` 之一的名字，不是 Workflow 的同义词。
 
 **Centre Agent（中央 Agent）**：部署在中央控制面上的 Work Agent 实例，对 Research Mapping 与 LLM-Wiki 的候选分支做候选预审并生成必要的混合候选。它与 Task Agent 共用架构，但订阅候选事件与正式版本发布事件，处置面当前不提供功能。它不参与草稿的一审、不代替研究负责人进行科研内容判断和最终批准、不写正式版本、不发起执行、不部署或托管 Task Agent。任何正式 Mapping 或正式科研结果发布都必须由 Project Owner 明确批准。
 

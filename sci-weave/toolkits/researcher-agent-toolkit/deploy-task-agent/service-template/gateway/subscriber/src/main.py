@@ -9,9 +9,12 @@ without a broker.
 When ``DATABASE_PATH`` is set, inbound messages are durably recorded in the
 inbox before any execution, a missing workflow binding keeps the message
 ``awaiting_workflow_binding``, and ``queued`` rows left by a previous run are
-re-driven at startup.  When ``DRAFT_BUFFER_MCP_URL``/``DRAFT_BUFFER_MCP_TOKEN``
-are set, execution results are written to the real central draft box instead
-of the fake one.
+re-driven at startup.
+
+The subscriber deliberately holds **no draft-box credentials** and never writes
+drafts itself (ai4-z3z4, ai4-4zjz). Drafts are written by the agent inside the
+worker through the draft-box MCP server injected into its fast-agent config, so
+this process only drives the state machine.
 """
 
 from __future__ import annotations
@@ -19,7 +22,7 @@ from __future__ import annotations
 import os
 import sys
 
-from work_agent_runtime import BufferMCPDraftWriter, InboxStore, KafkaQueueClient, WorkAgentRuntime
+from work_agent_runtime import InboxStore, KafkaQueueClient, WorkAgentRuntime
 
 
 def required(name: str) -> str:
@@ -29,20 +32,12 @@ def required(name: str) -> str:
     return value.strip()
 
 
-def build_runtime(agent_id: str, namespace: str) -> WorkAgentRuntime:
+def build_runtime() -> WorkAgentRuntime:
+    """Assemble the subscriber-side runtime: inbox only, never a draft writer."""
     runtime = WorkAgentRuntime()
     db_path = os.environ.get("DATABASE_PATH", "").strip()
     if db_path:
         runtime.inbox = InboxStore(db_path)
-    draft_url = os.environ.get("DRAFT_BUFFER_MCP_URL", "").strip()
-    draft_token = os.environ.get("DRAFT_BUFFER_MCP_TOKEN", "").strip()
-    if draft_url and draft_token:
-        runtime.drafts = BufferMCPDraftWriter(
-            endpoint=draft_url,
-            token=draft_token,
-            namespace=namespace,
-            submitter_id=agent_id,
-        )
     return runtime
 
 
@@ -98,11 +93,10 @@ def run_loop(runtime: WorkAgentRuntime, queue, topics: list[str], *, poll_timeou
 
 def main() -> None:
     agent_id = required("SCIWEAVE_AGENT_ID")
-    namespace = os.environ.get("SCIWEAVE_DRAFT_NAMESPACE", "mapping").strip() or "mapping"
     topics = [topic.strip() for topic in required("SCIWEAVE_SUBSCRIBER_TOPICS").split(",") if topic.strip()]
     if not topics:
         raise SystemExit("SCIWEAVE_SUBSCRIBER_TOPICS must list at least one topic")
-    runtime = build_runtime(agent_id, namespace)
+    runtime = build_runtime()
     # Restart recovery: re-drive any queued inbox rows left by a previous run.
     recovered = runtime.drain_queued()
     if recovered:

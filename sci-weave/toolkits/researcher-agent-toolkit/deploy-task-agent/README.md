@@ -46,10 +46,9 @@ Agent、MCP、Workflow libs 是纯配置资源，不单独执行 `uv sync`；由
 
 ### 草稿写入
 
-配置 `DRAFT_BUFFER_MCP_URL` 与 `DRAFT_BUFFER_MCP_TOKEN` 后，执行结果写入真实中央草稿箱
-（Streamable HTTP `create_draft`）；任一为空时使用假草稿箱（本地演示/测试）。
-领域命名空间由 `SCIWEAVE_DRAFT_NAMESPACE` 指定（默认 `mapping`）。端点、令牌与命名空间
-全部来自环境变量，仓库不持有真实凭据。
+草稿由 **Worker 里的 agent** 通过草稿箱 MCP 服务器写，不由订阅端写。订阅端（`gateway/subscriber`）不持有草稿箱凭据、也不读 `DRAFT_BUFFER_MCP_URL` / `DRAFT_BUFFER_MCP_TOKEN`：它只驱动状态机，两处都写会让同一轮执行产出两份草稿。
+
+`worker/src/main.py` 装配 `BufferMCPDraftWriter`，读 `DRAFT_BUFFER_MCP_URL` 与 `DRAFT_BUFFER_MCP_TOKEN`（Streamable HTTP `create_draft`）；任一为空时使用假草稿箱（本地演示/测试）。领域命名空间由 `SCIWEAVE_DRAFT_NAMESPACE` 指定（默认 `mapping`）。端点、令牌与命名空间全部来自环境变量，仓库不持有真实凭据。
 
 ## 启动边界
 

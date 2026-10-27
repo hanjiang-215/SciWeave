@@ -189,6 +189,21 @@ class BundledConfigTests(unittest.TestCase):
                 for name, body in agents.items():
                     self.assertIn("identity", body, f"{path.name}:{name} is missing identity")
 
+    def test_every_workflow_helper_points_at_a_workflow_that_exists(self) -> None:
+        """`workflow_helper.value.workflow` is not validated by the registry, so a
+        typo survives loading and sends the researcher looking for a missing
+        workflow (ai4-4zjz). Check the shipped ones here instead."""
+        config = load_workflow_libs(standard_path=WORKFLOW_LIBS, known_mcp_resources=bundled_mcp_names())
+        helpers = [
+            path for path in (KIT_ROOT / "libs" / "agent-libs").rglob("*.yaml")
+            if (yaml.safe_load(path.read_text(encoding="utf-8")) or {}).get("kind") == "workflow_helper"
+        ]
+        self.assertTrue(helpers, "expected at least one shipped workflow_helper")
+        for path in helpers:
+            target = yaml.safe_load(path.read_text(encoding="utf-8"))["value"]["workflow"]
+            with self.subTest(path=path.name):
+                self.assertIn(target, config.workflows, f"{path.name} references unknown workflow {target!r}")
+
 
 class EnvExampleTests(unittest.TestCase):
     """A variable the code requires must be discoverable in `.env.example`."""
