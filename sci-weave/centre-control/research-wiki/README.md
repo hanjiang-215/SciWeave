@@ -67,7 +67,7 @@ tests/                            标准库 unittest
 
 - `get_formal_wiki(wiki_domain_id)`：正式内容只读查询，要求 `read` 或 `centre` 能力；
 - `list_wiki_candidates(wiki_domain_id)`：读取领域内已持久化的候选提交（提交者、正式基准、Proposal 与状态），要求 `read` 或 `centre` 能力；
-- `submit_wiki_candidate(document_change, idempotency_key)`：完整文档与引用集合的候选提交，要求 `candidate_submit` 或 `centre` 能力。
+- `submit_wiki_candidate(document_change, idempotency_key)`：完整文档与引用集合的候选提交，要求 `candidate_submit` 能力（`centre` 不解锁写工具）。
 
 调用方身份从 `Authorization: Bearer <token>` 解析，按 `SCIWEAVE_WIKI_MCP_TOKENS_JSON` 映射为 actor_id；服务端按 `SCIWEAVE_WIKI_CALLER_CAPABILITIES_JSON` 执行能力档位校验，未授权返回稳定 `forbidden` 错误。配置 `SCIWEAVE_WIKI_AUDIT_SQLITE_PATH` 后，读调用记录 `attempted`（fail-open）、写调用记录 `invoked`/`completed`（写前 fail-closed），审计位于接口层，领域服务不重复接入。测试覆盖权限分层、审计双阶段、传输层身份注入与越权拒绝，见 `tests/test_management.py`。
 
@@ -75,7 +75,7 @@ tests/                            标准库 unittest
 
 - **领域独立**：LLM-Wiki 使用自己的 MCP、SQLite 治理存储、TerminusDB 快照、校验器、候选/正式化流程、审计边界与调用方权限，不与 Research Mapping 共享实现。
 - **责任归属**：WikiDocument / WikiRevision / ResourceVersion 的正式版本、候选分支与责任属于 LLM-Wiki；TaskNode / DependencyEdge 属于 Research Mapping。跨域只保留显式稳定引用，不支持单次跨域 Proposal、跨域写入或跨域原子正式化。
-- **能力档位**：`read` / `candidate_submit` / `candidate_review` / `formalize` / `centre` 各自在服务端校验，未授权调用返回稳定 `forbidden`，不依赖隐藏工具或提示词约束。
+- **能力档位**：`read` / `candidate_submit` / `candidate_review` / `formalize` / `centre` 各自在服务端校验，未授权调用返回稳定 `forbidden`，不依赖隐藏工具或提示词约束。`centre` 只解锁 4 个读工具（`get_formal_*`、`list_*`、`list_reviewable_*`），写工具必须显式授予对应的写能力。
 - **鉴权来源**：鉴权只依据 `SCIWEAVE_WIKI_CALLER_CAPABILITIES_JSON`（服务端配置）；registry 的登记事实不参与本领域鉴权决定。
 
 ## 验证
