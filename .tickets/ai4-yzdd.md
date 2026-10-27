@@ -2,7 +2,7 @@
 id: ai4-yzdd
 status: closed
 deps: []
-links: []
+links: [ai4-bp6v]
 created: 2026-10-22T16:26:48Z
 type: feature
 priority: 1
