@@ -77,11 +77,18 @@ class FastAgentSettings:
 
 
 class FastAgentDeepSeekRuntime:
-    """One real DeepSeek-backed fast-agent loop per worker process."""
+    """One real DeepSeek-backed fast-agent loop per worker process.
 
-    def __init__(self, settings: FastAgentSettings) -> None:
+    ``config`` is optional so the runtime stays usable in a bare smoke test, but
+    a worker built through `build_agent_runtime` always passes one (ai4-z3yq):
+    without it the agent's instruction, name and allowed MCP resources come from
+    constants in this file, and every YAML the researcher edited is ignored.
+    """
+
+    def __init__(self, settings: FastAgentSettings, config: object | None = None) -> None:
         settings.validate_for_model_call()
         self.settings = settings
+        self.config = config
 
     def run(self, request: AgentRequest) -> AgentOutcome:
         return self._execute(request, resumed=False)
@@ -115,7 +122,7 @@ class FastAgentDeepSeekRuntime:
         os.environ["OPENAI__API_KEY"] = self.settings.api_key or ""
         os.environ["OPENAI__BASE_URL"] = self.settings.base_url
         try:
-            agent_name = f"worker-{request.task_node_id}"
+            agent_name = self._agent_name(request)
             fast = FastAgent(
                 "sciweave-researcher-task-agent",
                 config_path=config_path,
@@ -126,13 +133,8 @@ class FastAgentDeepSeekRuntime:
 
             @fast.agent(
                 name=agent_name,
-                instruction=(
-                    "You are a SciWeave researcher-side Task Agent. Complete the "
-                    "owner's command concisely and state what you did not verify. "
-                    f"Connection scope: {self.settings.connection_scope}. "
-                    f"Session: {request.session_id}."
-                ),
-                model=f"openai.{self.settings.model}",
+                instruction=self._instruction(request),
+                model=f"openai.{self._model()}",
                 use_history=True,
             )
             async def worker_loop() -> None:
@@ -183,6 +185,63 @@ class FastAgentDeepSeekRuntime:
                 else:
                     os.environ[name] = value
 
+    def _definition(self):
+        """The configured `AgentDefinition` for this worker, or ``None``.
+
+        ``None`` only happens for a runtime constructed without a config, which
+        is the bare-smoke-test path; the worker always has one.
+        """
+        agent = getattr(self.config, "agent", None)
+        return None if agent is None else agent
+
+    def _agent_name(self, request: AgentRequest) -> str:
+        """The configured agent name.
+
+        Not derived from the task node any more: the name is now a *configured*
+        identity, and `Assembly` selects it by ``SCIWEAVE_AGENT_ID``. Deriving it
+        from the node made every execution a differently named agent, so history
+        and `mcp.servers` could never be pinned to a definition (ai4-z3yq).
+        """
+        definition = self._definition()
+        return definition.name if definition is not None else "researcher-task-agent"
+
+    def _model(self) -> str:
+        """The model to call: the definition's, unless it is a placeholder.
+
+        The shipped definitions say ``configure-in-your-own-environment`` and the
+        workflow examples say ``configure-locally``; both mean "take it from the
+        environment". A real name in the YAML wins, so a researcher can pin one
+        agent to a different model without touching `.env`.
+        """
+        definition = self._definition()
+        configured = (definition.model if definition is not None else "").strip()
+        if configured and not configured.startswith("configure-"):
+            return configured
+        return self.settings.model
+
+    def _instruction(self, request: AgentRequest) -> str:
+        """The configured instruction, with run-scoped facts appended.
+
+        The old instruction was a hardcoded sentence, so editing
+        `agent-definitions/agents/*.yaml` changed nothing. Configured text comes
+        first and unmodified; the run-scoped lines are appended because the
+        model needs to know which session and connection scope it is in, and
+        those are not properties of the definition.
+        """
+        definition = self._definition()
+        if definition is None:
+            body = (
+                "You are a SciWeave researcher-side Task Agent. Complete the "
+                "owner's command concisely and state what you did not verify."
+            )
+        else:
+            body = definition.instruction
+        return (
+            f"{body.rstrip()}\n\n"
+            f"Connection scope: {self.settings.connection_scope}.\n"
+            f"Session: {request.session_id}."
+        )
+
     def _write_fast_agent_config(self) -> Path:
         config_path = self.settings.home / "fast-agent.yaml"
         config_path.write_text(
@@ -223,12 +282,19 @@ class PassthroughAgentRuntime:
         return AgentOutcome("cancelled", error_summary="cancelled")
 
 
-def build_agent_runtime(environ: dict[str, str] | None = None):
+def build_agent_runtime(environ: dict[str, str] | None = None, *, config: object | None = None):
     """Build the runtime the worker shell uses, or fail with what is missing.
 
+    Loads the researcher's agent definition, MCP cards, workflow libs and agent
+    resources before constructing the runtime (ai4-z3yq). Without that step the
+    YAML a researcher edits is never read, which is the whole reason this
+    factory exists rather than a bare constructor call.
+
     Returns either ``FastAgentDeepSeekRuntime`` or ``PassthroughAgentRuntime``.
-    Raises ``ValueError`` when the real runtime is expected but incomplete: a
-    shell that starts and does nothing is worse than one that refuses to start.
+    Raises ``ValueError`` when the real runtime is expected but incomplete, and
+    ``WorkerConfigError`` when the configuration cannot be loaded: a shell that
+    starts and silently ignores the configuration is worse than one that
+    refuses to start.
     """
     env = os.environ if environ is None else environ
     if env.get("SCIWEAVE_GATEWAY_PASSTHROUGH_RUNTIME", "").strip() == "1":
@@ -241,4 +307,14 @@ def build_agent_runtime(environ: dict[str, str] | None = None):
         session_dir=env.get("SCIWEAVE_FAST_AGENT_SESSION_DIR", "sessions"),
         connection_scope=env.get("SCIWEAVE_WORKER_CONNECTION_SCOPE", "local"),
     )
-    return FastAgentDeepSeekRuntime(settings)
+    # Validate the credentials *before* loading the configuration. Both failures
+    # are hard stops, but a researcher who has not filled in the key should be
+    # told that, not sent looking for a missing YAML directory.
+    settings.validate_for_model_call()
+    if config is None:
+        # Imported here so `assembly` can import this module's neighbours
+        # without a cycle at package import time.
+        from .assembly import load_worker_config
+
+        config = load_worker_config(env)
+    return FastAgentDeepSeekRuntime(settings, config)

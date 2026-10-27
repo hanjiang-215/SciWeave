@@ -91,6 +91,23 @@ class InstallScriptTests(unittest.TestCase):
                 self.assertIn(item, text)
         self.assertIn("chmod +x", text)
 
+    def test_install_copies_every_directory_the_configuration_loads(self) -> None:
+        """ai4-z3yq: `build_agent_runtime` reads four roots at startup.
+
+        One of them (`agent-definitions/`) was not in the copy list for a while,
+        so an installed kit would have failed to start with a missing directory
+        even though the source checkout worked.
+        """
+        from work_agent_runtime.assembly import SHIPPED
+
+        text = self.script.read_text(encoding="utf-8")
+        copy_line = next(line for line in text.splitlines() if line.startswith("for item in"))
+        for variable, directory in SHIPPED.items():
+            with self.subTest(variable=variable):
+                top_level = directory.split("/")[0]
+                self.assertIn(top_level, copy_line, f"{variable} points at {directory}, not copied")
+                self.assertTrue((KIT_ROOT / directory).is_dir(), f"{directory} is missing from the kit")
+
     def test_install_never_overwrites_an_existing_env(self) -> None:
         text = self.script.read_text(encoding="utf-8")
         self.assertIn('if [ ! -f "$TARGET/.env" ]', text, "an upgrade must not clobber credentials")

@@ -6,6 +6,11 @@ environment and drives the queued inbox rows through it, writing each answer to
 the draft box. A missing key fails at startup instead of producing a fake
 completion, and the passthrough runtime is only reachable through
 ``SCIWEAVE_GATEWAY_PASSTHROUGH_RUNTIME=1`` (ai4-g1km).
+
+Startup loads the researcher's configuration (ai4-z3yq). `build_agent_runtime`
+reads ``AGENT_DEFINITIONS_PATH`` / ``AGENT_LIBS_PATH`` / ``MCP_LIBS_PATH`` /
+``WORKFLOW_LIBS_PATH`` and refuses to start when one is missing or invalid, so
+a mistyped path is a startup error rather than a silently ignored edit.
 """
 
 from __future__ import annotations
@@ -17,6 +22,7 @@ import os
 from work_agent_runtime import (
     BufferMCPDraftWriter,
     InboxStore,
+    WorkerConfigError,
     WorkAgentRuntime,
     build_agent_runtime,
 )
@@ -52,6 +58,26 @@ def main() -> int:
         agent = build_agent_runtime()
     except ValueError as error:
         raise SystemExit(f"worker runtime is not configured: {error}") from error
+    except WorkerConfigError as error:
+        # Distinct exit path: a bad configuration is a deployment mistake the
+        # researcher has to fix, not a missing credential.
+        raise SystemExit(f"worker configuration is invalid: {error}") from error
+    config = getattr(agent, "config", None)
+    print(
+        json.dumps(
+            {
+                # The passthrough runtime has no config; say so rather than
+                # printing `null` and leaving the reader guessing.
+                "agent": getattr(config, "agent_name", None) or type(agent).__name__,
+                "instruction_source": (getattr(config, "sources", {}) or {}).get(
+                    "AGENT_DEFINITIONS_PATH"
+                ),
+                "workflows": sorted(getattr(getattr(config, "project", None), "workflows", {})),
+            },
+            ensure_ascii=False,
+        ),
+        flush=True,
+    )
     limit = int(os.environ.get("SCIWEAVE_WORKER_BATCH", "1"))
     results = run_queued_once(runtime, agent, limit=limit)
     print(json.dumps({"ran": len(results), "results": results}, ensure_ascii=False))

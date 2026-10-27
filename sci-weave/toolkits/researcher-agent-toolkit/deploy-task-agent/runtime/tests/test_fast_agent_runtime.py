@@ -7,13 +7,33 @@ error mapping) without a key or a network.
 
 from __future__ import annotations
 
-import sys
-import types
 import unittest
-from dataclasses import dataclass
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
+# `discover -s tests` puts this directory on sys.path; `-m unittest
+# tests.test_x` makes it a namespace package. Both spellings have to work.
+try:
+    from fast_agent_doubles import (
+        FakeAgent as _FakeAgent,
+        FakeSessionManager as _FakeSessionManager,
+        Request as _Request,
+        install as _install_fake,
+        make_unimportable,
+        pop,
+        remove as _remove_fake_fast_agent,
+    )
+except ImportError:  # pragma: no cover
+    from tests.fast_agent_doubles import (  # type: ignore[no-redef]
+        FakeAgent as _FakeAgent,
+        FakeSessionManager as _FakeSessionManager,
+        Request as _Request,
+        install as _install_fake,
+        make_unimportable,
+        remove as _remove_fake_fast_agent,
+    )
+
+from work_agent_runtime.assembly import WorkerConfigError
 from work_agent_runtime.fast_agent_runtime import (
     AgentOutcome,
     FastAgentDeepSeekRuntime,
@@ -21,91 +41,6 @@ from work_agent_runtime.fast_agent_runtime import (
     PassthroughAgentRuntime,
     build_agent_runtime,
 )
-
-
-@dataclass
-class _Request:
-    execution_id: str = "exec-1"
-    task_node_id: str = "node-1"
-    session_id: str = "session-1"
-    command_text: str = "summarise the dataset"
-
-
-class _FakeSessionManager:
-    def __init__(self) -> None:
-        self.created: list[tuple[str, dict]] = []
-        self.resumed: list[str] = []
-        self.restore_fails = False
-
-    def create_session_with_id(self, session_id, metadata, metadata_id_key=None):
-        self.created.append((session_id, metadata))
-
-    async def resume_session_agents_async(self, agents, session_id, fallback_agent_name=None):
-        self.resumed.append(session_id)
-        return None if self.restore_fails else agents
-
-
-class _FakeAgent:
-    def __init__(self, response: str = "done", error: Exception | None = None) -> None:
-        self.response = response
-        self.error = error
-        self.sent: list[str] = []
-
-    async def send(self, text: str) -> str:
-        self.sent.append(text)
-        if self.error is not None:
-            raise self.error
-        return self.response
-
-
-class _FakeContext:
-    def __init__(self, manager) -> None:
-        self.session_manager = manager
-
-
-def _install_fake_fast_agent(manager, agent, *, context=True):
-    """Put a stand-in ``fast_agent`` package into sys.modules."""
-
-    class _FastAgent:
-        def __init__(self, name, **kwargs):
-            self.name = name
-            self.kwargs = kwargs
-
-        def agent(self, **kwargs):
-            def decorator(function):
-                return function
-
-            return decorator
-
-        def run(self):
-            agent_instance = agent
-
-            class _App:
-                def __getattr__(self, item):
-                    return agent_instance
-
-            class _Runner:
-                async def __aenter__(self):
-                    return _App()
-
-                async def __aexit__(self, *exc):
-                    return False
-
-            return _Runner()
-
-    package = types.ModuleType("fast_agent")
-    package.FastAgent = _FastAgent
-    context_module = types.ModuleType("fast_agent.context")
-    context_module.get_initialized_context = (
-        (lambda: _FakeContext(manager)) if context else (lambda: None)
-    )
-    sys.modules["fast_agent"] = package
-    sys.modules["fast_agent.context"] = context_module
-
-
-def _remove_fake_fast_agent():
-    sys.modules.pop("fast_agent", None)
-    sys.modules.pop("fast_agent.context", None)
 
 
 class SettingsTests(unittest.TestCase):
@@ -167,7 +102,7 @@ class RuntimeTests(unittest.TestCase):
 
     def test_a_run_creates_a_session_and_returns_the_summary(self) -> None:
         agent = _FakeAgent("  the   dataset has 3 rows ")
-        _install_fake_fast_agent(self.manager, agent)
+        _install_fake(self.manager, agent)
 
         outcome = self._runtime().run(_Request())
 
@@ -179,7 +114,7 @@ class RuntimeTests(unittest.TestCase):
 
     def test_the_api_key_is_redacted_from_the_summary(self) -> None:
         agent = _FakeAgent("used sk-secret-key for the call")
-        _install_fake_fast_agent(self.manager, agent)
+        _install_fake(self.manager, agent)
 
         outcome = self._runtime(api_key="sk-secret-key").run(_Request())
 
@@ -188,7 +123,7 @@ class RuntimeTests(unittest.TestCase):
 
     def test_resume_restores_the_session(self) -> None:
         agent = _FakeAgent("resumed")
-        _install_fake_fast_agent(self.manager, agent)
+        _install_fake(self.manager, agent)
 
         outcome = self._runtime().resume(_Request())
 
@@ -199,14 +134,14 @@ class RuntimeTests(unittest.TestCase):
 
     def test_a_failed_restore_is_reported(self) -> None:
         self.manager.restore_fails = True
-        _install_fake_fast_agent(self.manager, _FakeAgent())
+        _install_fake(self.manager, _FakeAgent())
 
         outcome = self._runtime().resume(_Request())
 
         self.assertEqual((outcome.status, outcome.error_summary), ("failed", "session_restore_failed"))
 
     def test_a_missing_session_manager_is_reported(self) -> None:
-        _install_fake_fast_agent(self.manager, _FakeAgent(), context=False)
+        _install_fake(self.manager, _FakeAgent(), context=False)
 
         outcome = self._runtime().run(_Request())
 
@@ -215,7 +150,7 @@ class RuntimeTests(unittest.TestCase):
         )
 
     def test_a_provider_error_becomes_a_stable_failure(self) -> None:
-        _install_fake_fast_agent(self.manager, _FakeAgent(error=RuntimeError("429 rate limited")))
+        _install_fake(self.manager, _FakeAgent(error=RuntimeError("429 rate limited")))
 
         outcome = self._runtime().run(_Request())
 
@@ -226,16 +161,15 @@ class RuntimeTests(unittest.TestCase):
         # makes the import reload from disk. A None entry makes ``import
         # fast_agent`` raise ImportError, which is the state a deployment without
         # the extra would be in.
-        _remove_fake_fast_agent()
-        sys.modules["fast_agent"] = None
-        self.addCleanup(sys.modules.pop, "fast_agent", None)
+        make_unimportable()
+        self.addCleanup(pop, "fast_agent")
 
         outcome = self._runtime().run(_Request())
 
         self.assertEqual((outcome.status, outcome.error_summary), ("failed", "fast_agent_unavailable"))
 
     def test_an_empty_response_is_not_an_empty_summary(self) -> None:
-        _install_fake_fast_agent(self.manager, _FakeAgent("   "))
+        _install_fake(self.manager, _FakeAgent("   "))
 
         outcome = self._runtime().run(_Request())
 
@@ -245,7 +179,102 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(self._runtime().cancel("exec-1").status, "cancelled")
 
 
+class ConfiguredAgentTests(unittest.TestCase):
+    """ai4-z3yq, second acceptance criterion.
+
+    The point is not "the loader returns an object" — `test_agent_config.py`
+    already covers that. It is that the instruction the *framework* receives
+    comes from the YAML, so editing `agent-definitions/agents/*.yaml` changes
+    what the model is told. Before this, `@fast.agent(instruction=...)` was a
+    literal in `fast_agent_runtime.py` and no YAML was read on this path.
+    """
+
+    def setUp(self) -> None:
+        self._tmp = TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.manager = _FakeSessionManager()
+        self.recorded: list[dict] = []
+        self.addCleanup(_remove_fake_fast_agent)
+
+    def _runtime_with(self, instruction: str, *, agent_name: str = "researcher-task-agent"):
+        from work_agent_runtime.config import load_config
+        from work_agent_runtime.resources import ResourceRegistry
+
+        project = load_config(
+            {
+                "agents": {
+                    agent_name: {
+                        "identity": "test identity",
+                        "instruction": instruction,
+                        "model": "deepseek-chat",
+                        "allowed_mcp_resources": [],
+                        "resources": [],
+                    }
+                },
+                "workflows": {},
+            }
+        )
+        config = type(
+            "WorkerConfigStub",
+            (),
+            {
+                "agent": project.agents[agent_name],
+                "agent_name": agent_name,
+                "project": project,
+                "resources": ResourceRegistry(),
+                "mcp": None,
+                "sources": {},
+            },
+        )()
+        return FastAgentDeepSeekRuntime(
+            FastAgentSettings(
+                api_key="sk-test",
+                base_url="https://api.deepseek.com",
+                model="deepseek-chat",
+                home=Path(self._tmp.name) / "home",
+            ),
+            config,
+        )
+
+    def test_the_instruction_reaches_the_framework_from_the_configuration(self) -> None:
+        _install_fake(self.manager, _FakeAgent(), recorded=self.recorded)
+        runtime = self._runtime_with("Cite every claim or mark it unverified.")
+        outcome = runtime.run(_Request())
+        self.assertEqual(outcome.status, "completed")
+        self.assertEqual(len(self.recorded), 1)
+        self.assertIn("Cite every claim or mark it unverified.", self.recorded[0]["instruction"])
+
+    def test_editing_the_instruction_changes_what_the_framework_receives(self) -> None:
+        _install_fake(self.manager, _FakeAgent(), recorded=self.recorded)
+        self._runtime_with("first instruction").run(_Request())
+        self.recorded.clear()
+        self._runtime_with("second instruction").run(_Request())
+        self.assertIn("second instruction", self.recorded[0]["instruction"])
+        self.assertNotIn("first instruction", self.recorded[0]["instruction"])
+
+    def test_the_agent_name_comes_from_the_definition_not_the_task_node(self) -> None:
+        """The name used to be `worker-{task_node_id}`, so it changed per task.
+
+        That made the agent identity un-pinnable: session history and (later)
+        `mcp.servers` could never be attached to a definition.
+        """
+        _install_fake(self.manager, _FakeAgent(), recorded=self.recorded)
+        self._runtime_with("instruction", agent_name="researcher-task-agent").run(_Request())
+        self.assertEqual(self.recorded[0]["name"], "researcher-task-agent")
+        self.assertNotIn("node-1", self.recorded[0]["name"])
+
+
 class FactoryTests(unittest.TestCase):
+    def _env(self, **overrides) -> dict:
+        values = {
+            "DEEPSEEK_API_KEY": "sk-test",
+            "DEEPSEEK_BASE_URL": "https://api.deepseek.com",
+            "DEEPSEEK_MODEL": "deepseek-chat",
+            "SCIWEAVE_AGENT_ID": "researcher-task-agent",
+        }
+        values.update(overrides)
+        return values
+
     def test_passthrough_needs_an_explicit_switch(self) -> None:
         runtime = build_agent_runtime({"SCIWEAVE_GATEWAY_PASSTHROUGH_RUNTIME": "1"})
         self.assertIsInstance(runtime, PassthroughAgentRuntime)
@@ -254,16 +283,43 @@ class FactoryTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             build_agent_runtime({})
 
+    def test_a_missing_key_is_reported_before_a_missing_config(self) -> None:
+        """Both are hard stops; the key one is the one the researcher can act on."""
+        with self.assertRaises(ValueError) as caught:
+            build_agent_runtime({"SCIWEAVE_AGENT_ID": "researcher-task-agent"})
+        self.assertIn("DEEPSEEK_API_KEY", str(caught.exception))
+
     def test_a_configured_environment_builds_the_real_runtime(self) -> None:
-        runtime = build_agent_runtime(
-            {
-                "DEEPSEEK_API_KEY": "sk-test",
-                "DEEPSEEK_BASE_URL": "https://api.deepseek.com",
-                "DEEPSEEK_MODEL": "deepseek-chat",
-            }
-        )
+        runtime = build_agent_runtime(self._env())
         self.assertIsInstance(runtime, FastAgentDeepSeekRuntime)
         self.assertEqual(runtime.settings.model, "deepseek-chat")
+
+    def test_the_factory_loads_the_shipped_configuration(self) -> None:
+        """ai4-z3yq: before this, `build_agent_runtime` read six scalars.
+
+        The three libs directories and `agent-definitions/` were described in
+        the README and copied by `install.sh`, and no code path read them.
+        """
+        runtime = build_agent_runtime(self._env())
+        self.assertIsNotNone(runtime.config)
+        self.assertEqual(runtime.config.agent_name, "researcher-task-agent")
+        self.assertEqual(
+            sorted(runtime.config.project.workflows),
+            ["agents-as-tools-example", "orchestrator-example", "parallel-example", "router-example"],
+        )
+
+    def test_the_factory_refuses_an_agent_id_no_definition_declares(self) -> None:
+        with self.assertRaises(WorkerConfigError) as caught:
+            build_agent_runtime(self._env(SCIWEAVE_AGENT_ID="nobody-declares-this"))
+        self.assertEqual(caught.exception.variable, "SCIWEAVE_AGENT_ID")
+        self.assertIn("researcher-task-agent", str(caught.exception))
+
+    def test_the_factory_refuses_a_missing_shipped_directory(self) -> None:
+        with TemporaryDirectory() as empty:
+            with self.assertRaises(WorkerConfigError) as caught:
+                build_agent_runtime(self._env(MCP_LIBS_PATH=str(Path(empty) / "not-there")))
+        self.assertEqual(caught.exception.variable, "MCP_LIBS_PATH")
+        self.assertIn(str(Path(empty) / "not-there"), str(caught.exception))
 
 
 class PassthroughTests(unittest.TestCase):

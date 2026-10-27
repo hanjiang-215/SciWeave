@@ -4,8 +4,8 @@
 
 - `runtime/`：状态记录、Worker Lease、配置模型、资源注册表和单 Worker 多 Agent 工作流。
 - `service-template/`：`gateway/subscriber` 是已实现的常驻消费者；`gateway/mcp` 是研究员处置面，提供 `docs/data-flow/work-agent.md` 的六个工具（`health`/`query_execution`/`list_pending`/`cancel_execution`/`answer_question`/`review_execution`），读写与 subscriber 共用的 SQLite 执行库；`worker` 是一次性执行壳，用 `build_agent_runtime()` 装配真实 fast-agent 运行时，把队列里的一条执行跑完并写入草稿箱；缺 Key 启动即失败，passthrough 仅在 `SCIWEAVE_GATEWAY_PASSTHROUGH_RUNTIME=1` 时可用。
-- `agent-definitions/`：兼容入口的 Agent 定义、schema；可复用 Workflow 资源位于 `libs/workflow-libs/`。
-- `libs/agent-libs/`：纯 YAML/JSON/Markdown Agent 行为资源，由 runtime 加载。
+- `agent-definitions/`：**Agent 定义的出处**。`agents/*.yaml` 写 `identity` / `instruction` / `model` / `allowed_mcp_resources`，由 `build_agent_runtime()` 加载；`schema.yaml` 是结构约束。工作流声明不在这里，见 `libs/workflow-libs/`。
+- `libs/agent-libs/`：Agent **引用**的行为资源（`prompt` / `formatter` / `task_mode` / `validator` / `workflow_helper`），按 `名字@版本` 被定义的 `resources:` 列表引用。与 `agent-definitions/` 是两种东西：前者是 agent 本身，后者是 agent 引用的材料，因此两个目录都保留。
 - `libs/mcp-libs/`：纯 JSON/YAML MCP 工具描述资源，由 runtime 加载。
 - `libs/workflow-libs/`：纯 YAML Workflow 协议、schema 和四类工作流示例。
 - `libs/local-agent-libs/`、`libs/local-mcp-libs/`：研究员自定义资源配置。
@@ -13,6 +13,21 @@
 - `hooks/`、`systemd/`、`install.sh`：harness 检查、用户级常驻服务与安装脚本；`bin/` 是两个服务的入口。
 
 套件与 `sci-weave/centre-control/centre-agents` 独立，不使用 path 依赖。Personal Agent 只能修改 Agent 定义、工作流声明和资源配置，不能修改 runtime、Worker Lease、Gateway 或服务模板。
+
+## 配置是怎么进到运行时的
+
+四套目录全部在 worker 启动时加载，入口是 `work_agent_runtime.assembly.load_worker_config()`：
+
+| 目录 | 环境变量 | 加载成 | 失败时 |
+| --- | --- | --- | --- |
+| `agent-definitions/agents/` | `AGENT_DEFINITIONS_PATH` | `AgentDefinition`（instruction / model / 允许的 MCP） | 启动失败 |
+| `libs/agent-libs/` | `AGENT_LIBS_PATH` | `AgentResource` 注册表 | 启动失败 |
+| `libs/mcp-libs/` | `MCP_LIBS_PATH` | `MCPRegistry` | 启动失败 |
+| `libs/workflow-libs/` | `WORKFLOW_LIBS_PATH` | `WorkflowDefinition` | 启动失败 |
+
+四者都有出厂默认（相对套件根目录），所以不设变量也能跑。`SCIWEAVE_AGENT_ID` 决定**用哪一个 agent 定义**——它同时决定订阅的 topic，一个身份贯穿整套。变量留空时用套件自带目录；指错路径或定义不合法时 worker 拒绝启动，并指出是哪个变量、哪个目录。
+
+改完 YAML 后 `bin/start-subscriber` 不需要重启（worker 是一次性进程，每条交接重新装配），`systemctl --user restart sciweave-task-agent-subscriber.service` 只在改了 `.env` 时需要。
 
 ## 安装与启动边界
 
