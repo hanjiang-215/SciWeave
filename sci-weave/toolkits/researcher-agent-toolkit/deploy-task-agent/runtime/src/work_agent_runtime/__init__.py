@@ -19,7 +19,10 @@ from .fast_agent_runtime import (
 )
 from .inbox import InboxError, InboxStore
 from .lease import DEFAULT_LEASE_SECONDS, LeaseHeldError
+from .mcp_servers import MCPServerConfigError, ServerSpec, fast_agent_servers, render_fast_agent_config, server_spec
+from .notifications import NotificationIntent, build_intent, notification_problem
 from .worker_dispatch import WorkerDispatchError, WorkerRun, WorkerSubprocess
+from .workflow_agent import WorkflowAgent, WorkflowPlan, plan_for
 from .runtime import (
     Execution,
     ExecutionRecord,
@@ -53,9 +56,20 @@ __all__ = [
     "InboxStore",
     "LeaseHeldError",
     "DEFAULT_LEASE_SECONDS",
+    "MCPServerConfigError",
+    "ServerSpec",
+    "fast_agent_servers",
+    "render_fast_agent_config",
+    "server_spec",
+    "NotificationIntent",
+    "build_intent",
+    "notification_problem",
     "WorkerDispatchError",
     "WorkerRun",
     "WorkerSubprocess",
+    "WorkflowAgent",
+    "WorkflowPlan",
+    "plan_for",
     "SqliteExecutionStore",
     "FastAgentDeepSeekRuntime",
     "FastAgentSettings",
