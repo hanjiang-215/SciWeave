@@ -1,6 +1,6 @@
 ---
 id: ai4-bp6v
-status: open
+status: closed
 deps: []
 links: [ai4-re4t, ai4-yzdd, ai4-zk0g, ai4-gvan]
 created: 2026-10-27T03:46:41Z
@@ -57,3 +57,35 @@ PYTHONPATH=src .venv/bin/python -m pytest tests -q
 出处：转交中央控制面工单时，我提出「已关闭但验收未勾」这个不一致。用户裁决：交给 hanjiang 复核，套件相关内容全部归我。本票只装前者（三张调用账本票），套件部分不进本票。
 
 为什么把三张合成一张而不是各开一张：根因是同一个记录习惯，处置也可以是同一次复核；拆成三张会得到三份几乎相同的描述和三次相同的核对动作。
+
+**2026-10-27 复核完成（hanjiang）**
+
+身份核对：assignee `hanjiang`、分支 `feature/hanjiang`、`git config user.name=hanjiang`，三者一致。
+
+三张账本票全部逐条核对并勾选（复核结论已回写各自 Notes，见 `ai4-re4t` / `ai4-yzdd` / `ai4-zk0g`）：
+
+- `ai4-re4t`（5 条）全部满足：过滤、时间区间、同时刻稳定倒序、无条件倒序、无更新/删除接口。
+- `ai4-yzdd`（5 条）全部满足：路径建表幂等、attempted 可查回、写入失败 fail-open、打开失败抛不可用、列集合无正文列 + 内存库 WAL 降级。
+- `ai4-zk0g`（6 条）全部满足：begin/finish 配对、fail-closed、finish 写失败不抛留 invoked、三种非法收尾抛校验、业务事务保护、call_scope ok/error/耗时。
+
+约束型验收全部靠读代码确认（不止跑测试）：
+
+- 「公共接口里没有更新或删除」：`audit_trail.__all__` 无 update/delete（`test_no_update_or_delete_api_is_exposed` 断言）。
+- 「没有入参正文列」：schema 15 列逐列核对，无 body/args 正文列。
+- 「审计库不可用 fail-open（读）与 fail-closed（写）并存」：`record_attempted` 返回 None / `begin_call` 抛 `AuditUnavailableError`。
+
+复核中新发现并补齐的两个测试缺口（提交 `c215055`，只加测试不改实现）：
+
+1. `ai4-re4t` 的时间区间验收原测试只覆盖 `occurred_after`，补 `occurred_before` 与组合区间用例。
+2. `ai4-zk0g` 的「finish 写失败不抛」原测试未覆盖，补锁定库实测用例（finish 不抛、invoked 保留）。
+
+验证（复核时实跑）：
+
+```text
+cd sci-weave/centre-control/shared/audit-trail
+uv run --locked --with pytest python -m pytest tests -q → 16 passed（14 原有 + 2 复核补齐）
+python -m compileall -q src tests → 0
+git diff --check → 0
+```
+
+处置：三张票维持 `closed`（按 Not in Scope 不重开），验收项全部补齐勾选。无发现需要拆新票的缺口。
