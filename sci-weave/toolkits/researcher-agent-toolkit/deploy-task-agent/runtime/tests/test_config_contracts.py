@@ -234,6 +234,19 @@ class EnvExampleTests(unittest.TestCase):
         duplicates = sorted({name for name in declared if declared.count(name) > 1})
         self.assertEqual(duplicates, [], "duplicate entries in .env.example")
 
+    def test_the_example_file_alone_satisfies_the_subscriber_required_variables(self) -> None:
+        """`cp .env.example .env` must be enough to start gateway/subscriber."""
+        values = {}
+        for line in (KIT_ROOT / ".env.example").read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            values[key.strip()] = value.strip()
+        for name in ("SCIWEAVE_AGENT_ID", "SCIWEAVE_SUBSCRIBER_TOPICS"):
+            with self.subTest(name=name):
+                self.assertTrue(values.get(name), f"{name} is still an empty placeholder in .env.example")
+
 
 class VersionEnforcementTests(unittest.TestCase):
     def test_load_config_ignores_version_while_file_loading_enforces_it(self) -> None:
