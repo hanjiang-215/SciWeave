@@ -1,6 +1,6 @@
 ---
 id: ai4-e1jk
-status: open
+status: closed
 deps: []
 links: []
 created: 2026-10-27T15:18:54Z
