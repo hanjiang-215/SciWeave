@@ -101,6 +101,8 @@ services:
         {"wiki-agent":["read","candidate_submit"],
         "wiki-owner":["read","candidate_review","formalize"],
         "centre-agent":["centre","prereview_log","merged_candidate"]}
+      # 与 mapping 同一条 broker：wiki 的候选与正式发布也发治理事件（ai4-u5e6）。
+      SCIWEAVE_WIKI_KAFKA_BOOTSTRAP: ${SCIWEAVE_CENTRE_KAFKA_BOOTSTRAP:-host.docker.internal:19092}
 
       # ---------------------------------------------------------- 中央草稿箱
       SCIWEAVE_BUFFER_REQUEST_TIMEOUT_SECONDS: ${SCIWEAVE_BUFFER_REQUEST_TIMEOUT_SECONDS:-10}

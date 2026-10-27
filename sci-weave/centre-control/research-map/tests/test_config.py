@@ -61,6 +61,20 @@ class GovernanceBootstrapConfigTests(unittest.TestCase):
         publisher = create_governance_publisher(config.governance_kafka_bootstrap)
         self.assertIsInstance(publisher, NoopGovernanceEventPublisher)
 
+    def test_publisher_does_not_connect_until_the_first_publish(self) -> None:
+        """ai4-xncm：构造期不能等 broker。
+
+        kafka-python 的 KafkaProducer 构造时同步拉元数据（默认 60 秒），broker
+        不可达就抛错——放在进程启动路径上会把管理 MCP 一起拖死。
+        """
+        from research_mapping.governance_events import create_governance_publisher
+
+        created: list[dict] = []
+        create_governance_publisher(
+            "redpanda:19092", producer_factory=lambda **kwargs: created.append(kwargs)
+        )
+        self.assertEqual(created, [], "publisher must not connect at construction time")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -9,6 +9,7 @@ from llm_wiki.config import WikiConfig
 from llm_wiki.dashboard_source import build_wiki_fragment, project_candidate_references, run_wiki_dashboard_from_environment
 from llm_wiki.formal_query import WikiFormalQueryService
 from llm_wiki.formal_domain import WikiSnapshotRead
+from llm_wiki.governance_events import create_governance_publisher
 from llm_wiki.resource_review import ResourceReviewService, SqliteResourceVersionLocationSource
 from llm_wiki.sqlite_store import SqliteStore
 from llm_wiki.terminus_store import TerminusDBWikiCandidateStore
@@ -141,6 +142,9 @@ def main(argv: list[str] | None = None) -> int:
             candidate_reader=candidate_reader,
             prereview_log=prereview_log,
             merged_candidate_service=merged_candidate_service,
+            # ai4-u5e6: 与 research-map 对称。不接线时 wiki 的候选提交与正式发布
+            # 不产生任何事件，下游（Centre Agent、交接协调）只能靠快照扫描。
+            governance_events=create_governance_publisher(config.governance_kafka_bootstrap),
         )
         return run_wiki_management_server_from_config(config, management)
     if len(arguments) > 1:

@@ -19,7 +19,7 @@ import json
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Protocol
+from typing import Any, Callable, Protocol
 
 GOVERNANCE_TOPIC = "sciweave.governance-events"
 
@@ -113,15 +113,36 @@ class RecordingGovernanceEventPublisher:
 class KafkaGovernanceEventPublisher:
     """kafka-python producer for the central Redpanda governance topic."""
 
-    def __init__(self, bootstrap_servers: str, topic: str = GOVERNANCE_TOPIC, *, timeout_seconds: float = 5.0) -> None:
-        from kafka import KafkaProducer  # lazy import keeps domain tests broker-free
-
+    def __init__(
+        self,
+        bootstrap_servers: str,
+        topic: str = GOVERNANCE_TOPIC,
+        *,
+        timeout_seconds: float = 5.0,
+        producer_factory: Callable[..., Any] | None = None,
+    ) -> None:
+        # ai4-xncm: 连接惰性建立。kafka-python 的 KafkaProducer 构造期同步等
+        # broker 元数据（默认 60 秒），broker 不可达时抛 KafkaTimeoutError，于是
+        # 「配了队列但队列不通」会连带让 wiki 管理 MCP 起不来。第一次发布时才连，
+        # 领域写入路径的 _publish_safely 会兜住异常。
+        self._bootstrap_servers = bootstrap_servers
+        self._producer_factory = producer_factory
+        self._producer: Any | None = None
         self.topic = topic
-        self._producer = KafkaProducer(
-            bootstrap_servers=bootstrap_servers,
-            value_serializer=lambda value: json.dumps(value, ensure_ascii=False).encode("utf-8"),
-        )
         self._timeout = timeout_seconds
+
+    def _producer_instance(self) -> Any:
+        if self._producer is None:
+            producer_factory = self._producer_factory
+            if producer_factory is None:
+                from kafka import KafkaProducer  # lazy import keeps domain tests broker-free
+
+                producer_factory = KafkaProducer
+            self._producer = producer_factory(
+                bootstrap_servers=self._bootstrap_servers,
+                value_serializer=lambda value: json.dumps(value, ensure_ascii=False).encode("utf-8"),
+            )
+        return self._producer
 
     def publish(self, event: GovernanceEvent) -> None:
         envelope = {
@@ -134,10 +155,13 @@ class KafkaGovernanceEventPublisher:
             "target": event.target,
             "payload": event.payload,
         }
-        self._producer.send(self.topic, key=event.dedupe_key.encode("utf-8"), value=envelope).get(timeout=self._timeout)
+        self._producer_instance().send(
+            self.topic, key=event.dedupe_key.encode("utf-8"), value=envelope
+        ).get(timeout=self._timeout)
 
     def close(self) -> None:
-        self._producer.close()
+        if self._producer is not None:
+            self._producer.close()
 
 
 class NoopGovernanceEventPublisher:
@@ -148,3 +172,23 @@ class NoopGovernanceEventPublisher:
 
     def close(self) -> None:
         return
+
+
+def create_governance_publisher(
+    bootstrap_servers: str | None,
+    *,
+    topic: str = GOVERNANCE_TOPIC,
+    producer_factory: Callable[..., Any] | None = None,
+) -> GovernanceEventPublisher:
+    """Pick the publisher from configuration.
+
+    Unset broker means "this deployment has no queue": the domain keeps
+    working and Centre Agent falls back to snapshot scans. A configured broker
+    must not silently degrade to no-op, otherwise wiki candidates and formal
+    revisions never reach any consumer even though the operator configured one.
+    """
+    if not bootstrap_servers:
+        return NoopGovernanceEventPublisher()
+    return KafkaGovernanceEventPublisher(
+        bootstrap_servers, topic=topic, producer_factory=producer_factory
+    )
