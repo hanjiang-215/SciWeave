@@ -1,13 +1,17 @@
 # 3–5 分钟可复现演示脚本（草稿）
 
-> 状态：脚本草稿（2026-10-23），2026-10-24 补充平台治理链路实演。实际计时与录制需在 SciencePal 接入后复核；各段预计时长以 `[秒]` 标注，合计目标 3–5 分钟。输入快照、T1 检查、T2 基线与本机真实治理链路均已跑通（见 `demo-evidence/`），SciencePal 实演后回填真实执行记录。
+> 状态：脚本草稿（2026-10-23），2026-10-24 补充平台治理链路实演，2026-10-27 在合并 `develop` 后的 HEAD 上复跑并回填实测耗时。各段预计时长以 `[秒]` 标注，合计目标 3–5 分钟。输入快照、T1 检查、T2 基线、失败注入与真实治理链路均已在当前 HEAD 上跑通（见 `demo-evidence/`），仅 SciencePal 实演记录待回填。
 
 ## 前置（SciencePal 接入后）
 
 - SciencePal 项目/工作流链接：待回填
 - 固定 T1/T2 脚本与参数（`check_iris_input.py`、`run_iris_baseline.py`）
-- 真实平台治理链路已可独立实演（不依赖 SciencePal）：`run_iris_mapping_pipeline.py`
-- 准备好 3 个浏览器/窗口：Web 看板或任务面板、SciencePal、TerminusDB 或审计视图
+- 真实平台治理链路已可独立实演（不依赖 SciencePal）：`run_iris_mapping_pipeline.py`，前置为本机 TerminusDB 已启动、凭据经环境变量提供
+- 准备好 2 个窗口：SciencePal、终端（终端里同时展示治理链路输出与 TerminusDB 查询结果）
+
+**不使用 Web 看板**（自 `ai4-vyuw` 起）：看板在 `apiUrl` 为空时走 fixture 查询（`sci-weave/centre-control/web-ui/src/App.vue:15`），页面会显示「演示数据模式 / 不代表真实服务状态」的橙色横幅，且 `dashboard-api` 的队列数据来源尚无实现。段 6 的审计追溯改用 TerminusDB 界面或接口层审计账本，两者都是真实数据。这条路不花实现成本，只是不再依赖一个当天可能露馅的窗口。
+
+**不需要公网 MCP 端点**：SciencePal 段（第 2–4 段）只运行两个纯标准库脚本，不调用任何 MCP。`sciencpal-onboarding/docs/deploy-central-mcp.md` 的公网隧道方案仅在走路径 B（skill 内调 MCP）时才需要，本场演示可跳过。
 
 ## 脚本正文
 
@@ -52,7 +56,7 @@
 5. `formalize_candidate` 生成新的 Formal MappingRevision（`status: succeeded`）；
 6. `get_formal_mapping` 确认 T4 已进入正式图，`list_candidates` 读回候选治理记录。
 
-同时展示三条失败路径的稳定错误：无 `candidate_submit` 权限返回 `forbidden`、过期基准返回 `stale_base`、驳回后正式图不含被驳回节点。
+同时展示三条失败路径的稳定错误：无 `candidate_submit` 权限返回 `forbidden`、不存在的正式基准在提交时即被拒绝并返回 `base_revision_missing`、驳回后正式图不含被驳回节点。
 
 > 口播要点：候选不是直接改正式图。它先在隔离分支上产生不可变 Commit，经差异预览和两层审核（TaskNode Owner 接纳结果、Project Owner 批准路线）后才正式化；正式化只是一次原子 SQLite 激活，把指针切到已锁定的 Commit。每次 MCP 调用都写接口层审计账本，失败路径各自留下稳定错误码。
 
@@ -66,20 +70,37 @@
 
 ## 计时核对
 
-| 段 | 预计 | 实际（待 SciencePal 后填） |
+**本机实测的脚本执行时间**（2026-10-27，`feature/frank-qi`，三次取稳定值）：
+
+| 脚本 | 执行时间 |
+| --- | --- |
+| `check_iris_input.py iris_data.csv` | 0.02s |
+| `run_iris_baseline.py iris_data.csv` | 0.02s |
+| `run_iris_mapping_pipeline.py`（真实 TerminusDB） | 1.1s |
+
+三个脚本都在 1 秒量级，因此**各段时长几乎完全由讲解与操作决定，不由计算决定**。下表的「实际」列因此记录的是段内动作耗时而非总时长；口播节奏需在录制时掐表回填。
+
+| 段 | 预计 | 实际 |
 | --- | --- | --- |
-| 1 开场 | 40s | |
-| 2 T1 检查 | 40s | |
-| 3 T2 基线 | 60s | |
-| 4 失败+重试 | 50s | |
-| 5 平台治理链路 | 90s | |
-| 6 审计收尾 | 30s | |
-| 合计 | 310s（≈5:10，预留压缩空间） | |
+| 1 开场 | 40s | 待录制回填 |
+| 2 T1 检查 | 40s | 脚本 0.02s，余为讲解 |
+| 3 T2 基线 | 60s | 脚本 0.02s，余为讲解 |
+| 4 失败+重试 | 50s | 两次脚本合计 0.04s，余为讲解与切换 |
+| 5 平台治理链路 | 90s | 脚本 1.1s，余为逐步讲解 |
+| 6 审计收尾 | 30s | 待录制回填 |
+| 合计 | 310s（≈5:10，超出 5 分钟上限） | — |
 
-> 若超时，优先压缩段 3 的讲解；段 4 的失败注入与段 5 的平台链路保留，前者是"故障恢复 vs 路线变更"的关键区分，后者是平台本身的可演示核心。段 5 已有本机实测运行时间基线（真实 TerminusDB 内容约数十秒，见 `run_iris_mapping_pipeline.py` 输出）。
+> **合计已超上限**：310s 比 5 分钟多 10s。既然脚本执行耗时可以忽略，压缩只能从讲解量下手。建议按下面的优先级砍：
+>
+> 1. 段 3 只讲「K=3、种子固定、0.955556」三点，混淆矩阵不逐格念 —— 省约 20s；
+> 2. 段 1 开场压到 25s，只留「谁改了路线、为什么改」这一句钩子；
+> 3. 段 6 与段 5 合并收尾，用同一块屏（TerminusDB 审计视图）连讲 —— 省约 15s。
+>
+> 段 4 的失败注入与段 5 的平台链路不砍：前者是「故障恢复 vs 路线变更」的关键区分，后者是平台本身的可演示核心。
 
-## 本机实测记录（2026-10-24）
+## 本机实测记录（2026-10-24，2026-10-27 在合并后 HEAD 复跑）
 
 - 平台治理链路脚本在真实 TerminusDB（本机 `127.0.0.1:6363`，凭据经环境变量提供）上完整跑通，退出码 0；完整 MCP 请求/响应时间线见 `demo-evidence/iris_platform_pipeline.json`。
 - 该链路同时经真实 HTTP 管理 MCP 验证了 `tools/list` 暴露的工具面与套件标准卡片一致（`ai4-emfn`），并触发修复了共享留痕包的多线程访问缺陷（`ai4-fmco`）。
-- SciencePal 段（2、3）的实际计时与执行记录仍待回填；回填后本表的"实际"列更新并复核总时长。
+- **2026-10-27 复跑**：`develop` 合入 `feature/frank-qi`（合并提交 `e54aa92`）后重新执行，退出码 0、耗时 1.1s，六步时序完整，三条失败路径均返回预期错误码（`forbidden` / `base_revision_missing` / `rejected`），`formal_mapping_contains_t4: true`。证据文件已重新生成并转为 UTF-8。
+- SciencePal 段（2、3）的实际计时与执行记录仍待回填。
