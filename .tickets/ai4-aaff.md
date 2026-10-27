@@ -157,3 +157,7 @@ tags: [wayfinder:prototype, product, sciencepal, ai4science]
 **2026-10-27T04:03:15Z**
 
 2026-10-27 SciencePal 真实执行 smoke 已跑通：run 670a5341（15.8s，无产物）、run 2772f7b7（32.2s，产物 hello.txt/probe.txt，sha256 见证据）、CLI run d06aff3b（19.2s）。上传文件落 /workspace，产物在 /outputs 与 /workspace/outputs；401 与 token 缺失有稳定错误码。证据见 humans/competition/demo-evidence/sciencepal-smoke.md；跨 harness 套件见 ai4-jckq，报告回写见 ai4-roow。T1/T2 真实执行、失败注入与 3–5 分钟录制仍未完成，本票保持 in_progress。
+
+**2026-10-28T01:45:00Z**
+
+T1/T2 执行包已固化并本地验证：`humans/competition/demo-evidence/sciencepal-runs/run_t1_t2_on_sciencepal.py` 把 `check_iris_input.py` + `run_iris_baseline.py` + 锁定快照交给 SciencePal 沙箱执行，轮询终态、下载产物、核对后落盘 `sciencepal_t1_t2_evidence.json`。用假 SciencePal 服务完整验证（staging→run→collect→核对→证据，exit 0），期间修掉两处实现偏差（collect 返回无 content 字段需读落盘文件；T1 输出键为 `snapshot_sha256` 而非 `input_snapshot_sha256`）。当前 sciencepal.ai 网络不通（仅该域超时），平台恢复即实跑补齐「SciencePal 实际承载核心任务」硬门槛；证据卡与 project-summary 已同步标注执行入口。
