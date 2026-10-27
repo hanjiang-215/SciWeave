@@ -37,7 +37,7 @@ CHECK_SCRIPT = "check_iris_input.py"
 BASELINE_SCRIPT = "run_iris_baseline.py"
 
 # 产物核对：T1 应输出 status:ok + 快照哈希；T2 应输出准确率与混淆矩阵
-T1_EXPECTED_KEYS = {"status", "input_snapshot_sha256"}
+T1_EXPECTED_KEYS = {"status", "snapshot_sha256"}
 T2_EXPECTED_KEYS = {"status", "method", "accuracy"}
 
 
@@ -221,9 +221,17 @@ def main() -> int:
         if not matches:
             problems.append(f"{label}: 未找到产物 {filename}（清单：{[a.get('name') for a in artifacts]}）")
             continue
-        content = matches[0].get("content")
+        # collect() 的返回只有 name/path/sha256 元数据，产物内容落盘在
+        # manifest_path 所在目录（workspace/runs/<run_id>/<relative>）。
+        stated_path = matches[0].get("path")
+        content = None
+        manifest_path = outcome["collected"].get("manifest_path")
+        if manifest_path and stated_path:
+            artifact_file = Path(manifest_path).parent / Path(stated_path)
+            if artifact_file.is_file():
+                content = artifact_file.read_text(encoding="utf-8", errors="replace")
         if content is None:
-            problems.append(f"{label}: 产物 {filename} 无内容（可能未下载）")
+            problems.append(f"{label}: 产物 {filename} 无法从落盘位置读取（path={stated_path}）")
             continue
         parsed = parse_json_from_text(content)
         if parsed is None:
