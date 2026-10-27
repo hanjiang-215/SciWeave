@@ -1,0 +1,4 @@
+﻿# ai4-4r0h 的索引归属与简介（人工维护）
+module = "agent"
+summary = "套件出厂配置的一致性：agent 定义可加载、workflow 库路径生效、env 缺项补齐"
+
