@@ -249,5 +249,99 @@ class SubscriberDraftBoundaryTests(unittest.TestCase):
         self.assertNotIn("DRAFT_BUFFER_MCP_TOKEN", source)
 
 
+class SubscriberDispatchTests(unittest.TestCase):
+    """ai4-0fwc: the subscriber starts a worker process per handoff.
+
+    Before this, `gateway/subscriber` ran the model inline under `run_one()`,
+    which meant the resident process needed the model credentials and wrote a
+    draft payload of `f"{agent_definition}:{event_id}"`. `service-template/worker`
+    had the correct shape and no caller.
+    """
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.main = _load_main()
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.db = str(Path(self._tmp.name) / "kit.sqlite3")
+
+    def _runtime(self, env: dict | None = None):
+        with mock.patch.dict(
+            os.environ, {"DATABASE_PATH": self.db, **(env or {})}, clear=False
+        ):
+            runtime = self.main.build_runtime()
+        if runtime.inbox is not None:
+            self.addCleanup(runtime.inbox.close)
+        if getattr(runtime.lease, "durable", False):
+            self.addCleanup(runtime.lease.close)
+        return runtime
+
+    def test_a_configured_database_wires_the_lease_and_the_dispatcher(self) -> None:
+        runtime = self._runtime()
+        self.assertTrue(runtime.lease.durable, "the lease must survive the process")
+        self.assertIsNotNone(runtime.dispatcher)
+
+    def test_the_lease_and_the_inbox_share_one_database_file(self) -> None:
+        """Two files would let the lease and the inbox disagree about state."""
+        runtime = self._runtime()
+        self.assertEqual(runtime.lease.path, self.db)
+        self.assertEqual(runtime.inbox.path, self.db)
+
+    def test_without_a_database_the_subscriber_runs_inline_and_says_so(self) -> None:
+        with mock.patch.dict(os.environ, {"DATABASE_PATH": ""}, clear=False), mock.patch(
+            "builtins.print"
+        ) as printed:
+            runtime = self.main.build_runtime()
+        self.assertIsNone(runtime.dispatcher)
+        self.assertFalse(runtime.lease.durable)
+        self.assertTrue(any("DATABASE_PATH is unset" in str(call) for call in printed.call_args_list))
+
+    def test_dispatch_can_be_disabled_for_a_two_service_deployment(self) -> None:
+        runtime = self._runtime({"SCIWEAVE_WORKER_DISPATCH": "0"})
+        self.assertIsNotNone(runtime.inbox, "the inbox still records the handoff")
+        self.assertIsNone(runtime.dispatcher, "but no worker is started")
+
+    def test_a_real_handoff_through_the_subscriber_starts_the_worker(self) -> None:
+        """The end-to-end shape: message -> inbox -> subprocess -> processed row.
+
+        The worker runs with the passthrough runtime so no key or network is
+        needed; what is asserted is that a *separate process* did the work and
+        marked the row, not that a model answered.
+        """
+        env = {
+            "DATABASE_PATH": self.db,
+            "SCIWEAVE_AGENT_ID": "researcher-task-agent",
+            "SCIWEAVE_GATEWAY_PASSTHROUGH_RUNTIME": "1",
+            "SCIWEAVE_FAST_AGENT_HOME": str(Path(self._tmp.name) / "home"),
+        }
+        with mock.patch.dict(os.environ, env, clear=False):
+            runtime = self.main.build_runtime()
+            self.addCleanup(runtime.inbox.close)
+            self.addCleanup(runtime.lease.close)
+            queue = FakeQueue()
+            queue.messages = [
+                QueueMessage(
+                    topic="t",
+                    partition=0,
+                    offset=1,
+                    key="node-1:cv-1",
+                    payload={
+                        "message_type": "task_handoff_ready",
+                        "task_node_id": "node-1",
+                        "target_agent_id": "researcher-task-agent",
+                    },
+                )
+            ]
+            processed = self.main.run_loop(
+                runtime, queue, ["t"], max_messages=1, agent_id="researcher-task-agent"
+            )
+            row = runtime.inbox.get("node-1:node-1:cv-1")
+        self.assertEqual(processed, 1)
+        self.assertEqual(row["status"], "processed", "the subprocess marked the row")
+        self.assertIsNone(runtime.lease.holder("node-1"), "the lease was released")
+
+
 if __name__ == "__main__":
     unittest.main()

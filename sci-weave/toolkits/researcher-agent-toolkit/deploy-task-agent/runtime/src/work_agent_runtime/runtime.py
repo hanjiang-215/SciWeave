@@ -82,23 +82,9 @@ class ExecutionStore:
         self._by_target[updated.target_id] = updated
 
 
-class WorkerLease:
-    """Process-local lease that serializes work for one target."""
-
-    def __init__(self) -> None:
-        self._lock = threading.Lock()
-        self._targets: set[str] = set()
-
-    def acquire(self, target_id: str) -> bool:
-        with self._lock:
-            if target_id in self._targets:
-                return False
-            self._targets.add(target_id)
-            return True
-
-    def release(self, target_id: str) -> None:
-        with self._lock:
-            self._targets.discard(target_id)
+# `WorkerLease` moved to `lease.py` when it gained a SQLite backing store
+# (ai4-0fwc). Re-exported here so the many existing imports keep working.
+from .lease import LeaseHeldError, WorkerLease  # noqa: E402  (after the dataclasses)
 
 
 class DraftBox(Protocol):
@@ -132,12 +118,17 @@ class WorkAgentRuntime:
         drafts: DraftBox | None = None,
         inbox: object | None = None,
         binding_resolver: Callable[[str], bool] | None = None,
+        dispatcher: Callable[[str], object] | None = None,
     ) -> None:
         self.store = ExecutionStore()
         self.lease = WorkerLease()
         self.drafts: DraftBox = drafts or FakeDraftBox()
         self.inbox = inbox
         self.binding_resolver = binding_resolver
+        # A callable that runs the handoff *somewhere else* and returns an
+        # object with a ``status``. The subscriber passes one that spawns a
+        # worker subprocess (ai4-0fwc); without it the runtime runs inline.
+        self.dispatcher = dispatcher
 
     def handle_message(self, target_id: str, event_id: str, agent_definition: str = "") -> ExecutionRecord:
         return run_one(self.store, self.lease, self.drafts, target_id, event_id, agent_definition)
@@ -164,6 +155,8 @@ class WorkAgentRuntime:
         if status == "processed":
             # Duplicate delivery after a restart: never re-run a processed row.
             return ExecutionRecord(dedupe_key, target_id, "processed")
+        if self.dispatcher is not None:
+            return self._dispatch(dedupe_key, target_id, event_id)
         try:
             record = run_one(self.store, self.lease, self.drafts, target_id, event_id, agent_definition)
         except Exception:
@@ -173,6 +166,39 @@ class WorkAgentRuntime:
             raise
         self.inbox.mark_processed(dedupe_key)
         return record
+
+    def _dispatch(self, dedupe_key: str, target_id: str, event_id: str) -> ExecutionRecord:
+        """Hand the claimed row to a worker process and report what it did.
+
+        The lease is taken **here**, in the resident process, and held across
+        the subprocess' whole lifetime. That ordering is what makes the lease
+        meaningful: the worker cannot take it (a different owner would be
+        refused), and a second delivery for the same target is refused while
+        the first is still running.
+
+        The row is deliberately left for the worker to mark ``processed``. If
+        this process died right now, the row would still be ``queued`` and
+        `drain_queued()` would re-drive it — the same failure rule as the
+        inline path, only with a wider window.
+        """
+        execution = self.store.enqueue(target_id, event_id)
+        if not self.lease.acquire(target_id):
+            # Another live owner: leave the row queued for whoever holds it.
+            return execution
+        try:
+            if not self.store.start(execution):
+                return execution
+            outcome = self.dispatcher(dedupe_key)
+            status = str(getattr(outcome, "status", "failed"))
+            current = self.store.get(execution.execution_id) or execution
+            if status == "completed":
+                return self.store.complete(current, str(getattr(outcome, "draft_id", "") or ""))
+            return self.store.fail(
+                current,
+                str(getattr(outcome, "status", "worker_failed")),
+            )
+        finally:
+            self.lease.release(target_id)
 
     def bind(self, dedupe_key: str) -> ExecutionRecord | None:
         """Establish a workflow binding: ``awaiting_workflow_binding`` -> ``queued`` and run."""

@@ -18,6 +18,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import sys
 
 from work_agent_runtime import (
     BufferMCPDraftWriter,
@@ -26,7 +27,22 @@ from work_agent_runtime import (
     WorkAgentRuntime,
     build_agent_runtime,
 )
-from work_agent_runtime.worker_shell import run_queued_once
+from work_agent_runtime.worker_shell import run_one_queued, run_queued_once
+
+
+def argument(name: str) -> str:
+    """Read ``--name value`` or ``--name=value`` from argv, or "".
+
+    argparse would bring a `--help` that prints usage for a process whose real
+    interface is its exit code and its JSON stdout; two shapes is enough.
+    """
+    argv = sys.argv[1:]
+    for index, item in enumerate(argv):
+        if item == name and index + 1 < len(argv):
+            return argv[index + 1].strip()
+        if item.startswith(f"{name}="):
+            return item.split("=", 1)[1].strip()
+    return ""
 
 
 def required(name: str) -> str:
@@ -78,10 +94,20 @@ def main() -> int:
         ),
         flush=True,
     )
-    limit = int(os.environ.get("SCIWEAVE_WORKER_BATCH", "1"))
-    results = run_queued_once(runtime, agent, limit=limit)
+    # One handoff by key when the subscriber started us (ai4-0fwc); a batch scan
+    # only for the standalone bring-up run.
+    dedupe_key = argument("--dedupe-key")
+    if dedupe_key:
+        results = run_one_queued(runtime, agent, dedupe_key)
+    else:
+        results = run_queued_once(runtime, agent, limit=int(os.environ.get("SCIWEAVE_WORKER_BATCH", "1")))
     print(json.dumps({"ran": len(results), "results": results}, ensure_ascii=False))
-    return 0 if all(item["status"] == "completed" for item in results) else 1
+    # `not_found` and `already_processed` are not failures: the subscriber
+    # commits before it dispatches, so a replay that finds a finished row, or a
+    # row another worker took, is a normal race. Only a run that should have
+    # happened and did not is worth a non-zero exit.
+    benign = {"completed", "not_found", "already_processed"}
+    return 0 if all(item["status"] in benign for item in results) else 1
 
 
 if __name__ == "__main__":

@@ -32,7 +32,13 @@ import os
 import sys
 from typing import Any, Mapping
 
-from work_agent_runtime import InboxStore, KafkaQueueClient, WorkAgentRuntime
+from work_agent_runtime import (
+    InboxStore,
+    KafkaQueueClient,
+    WorkerLease,
+    WorkAgentRuntime,
+)
+from work_agent_runtime.worker_dispatch import WorkerSubprocess
 
 #: Envelope positions this consumer understands. ``payload``-nested first: that
 #: is the shape ``message-envelope`` defines, and the flat one is what the
@@ -103,12 +109,45 @@ def message_id(envelope: Mapping[str, Any], key: str | None, offset: int) -> str
 
 
 def build_runtime() -> WorkAgentRuntime:
-    """Assemble the subscriber-side runtime: inbox only, never a draft writer."""
+    """Assemble the subscriber-side runtime: inbox, lease and worker dispatch.
+
+    Never a draft writer: the draft box belongs to the worker (ai4-z3z4,
+    ai4-4zjz). The subscriber's job is to claim the handoff, keep the Worker
+    Lease, start one worker process and commit the offset (ai4-0fwc).
+
+    Dispatch is on only when ``DATABASE_PATH`` is configured. Without a durable
+    inbox there is no row for a worker subprocess to pick up, so the in-memory
+    demo path keeps running inline; that is a deliberate split rather than a
+    silent fallback, and `build_runtime` says which mode it chose.
+    """
     runtime = WorkAgentRuntime()
     db_path = os.environ.get("DATABASE_PATH", "").strip()
-    if db_path:
-        runtime.inbox = InboxStore(db_path)
+    if not db_path:
+        print(
+            "notice: DATABASE_PATH is unset; running inline with the in-memory "
+            "runtime and no worker subprocess",
+            flush=True,
+        )
+        return runtime
+    runtime.inbox = InboxStore(db_path)
+    # Same file as the inbox: the lease, the inbox and the execution store must
+    # not disagree about which database is current.
+    runtime.lease = WorkerLease(db_path)
+    runtime.dispatcher = build_dispatcher()
     return runtime
+
+
+def build_dispatcher():
+    """The callable that runs one handoff in a worker subprocess.
+
+    ``SCIWEAVE_WORKER_DISPATCH=0`` turns it off, which is how a deployment runs
+    the subscriber and the worker as two ordinary services instead of the
+    subscriber starting one per message.
+    """
+    if os.environ.get("SCIWEAVE_WORKER_DISPATCH", "1").strip() == "0":
+        print("notice: worker dispatch is disabled; handoffs stay queued", flush=True)
+        return None
+    return WorkerSubprocess()
 
 
 def build_queue(agent_id: str):

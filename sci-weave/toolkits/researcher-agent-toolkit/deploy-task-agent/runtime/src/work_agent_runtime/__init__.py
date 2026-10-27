@@ -18,6 +18,8 @@ from .fast_agent_runtime import (
     build_agent_runtime,
 )
 from .inbox import InboxError, InboxStore
+from .lease import DEFAULT_LEASE_SECONDS, LeaseHeldError
+from .worker_dispatch import WorkerDispatchError, WorkerRun, WorkerSubprocess
 from .runtime import (
     Execution,
     ExecutionRecord,
@@ -49,6 +51,11 @@ __all__ = [
     "DraftWriteError",
     "InboxError",
     "InboxStore",
+    "LeaseHeldError",
+    "DEFAULT_LEASE_SECONDS",
+    "WorkerDispatchError",
+    "WorkerRun",
+    "WorkerSubprocess",
     "SqliteExecutionStore",
     "FastAgentDeepSeekRuntime",
     "FastAgentSettings",

@@ -3,7 +3,7 @@
 研究员端 Task Agent 套件，按目标交付结构组织：
 
 - `runtime/`：状态记录、Worker Lease、配置模型、资源注册表和单 Worker 多 Agent 工作流。
-- `service-template/`：`gateway/subscriber` 是已实现的常驻消费者；`gateway/mcp` 是研究员处置面，提供 `docs/data-flow/work-agent.md` 的六个工具（`health`/`query_execution`/`list_pending`/`cancel_execution`/`answer_question`/`review_execution`），读写与 subscriber 共用的 SQLite 执行库；`worker` 是一次性执行壳，用 `build_agent_runtime()` 装配真实 fast-agent 运行时，把队列里的一条执行跑完并写入草稿箱；缺 Key 启动即失败，passthrough 仅在 `SCIWEAVE_GATEWAY_PASSTHROUGH_RUNTIME=1` 时可用。
+- `service-template/`：`gateway/subscriber` 是常驻消费者，持有 Worker Lease 并在拿到交接后拉起**一次性 worker 子进程**；`gateway/mcp` 是研究员处置面，提供 `docs/data-flow/work-agent.md` 的六个工具（`health`/`query_execution`/`list_pending`/`cancel_execution`/`answer_question`/`review_execution`），读写与 subscriber 共用的 SQLite 执行库；`worker` 是被拉起的那一端，用 `build_agent_runtime()` 装配真实 fast-agent 运行时、跑完一条交接并写入草稿箱（凭据只在这里），缺 Key 启动即失败，passthrough 仅在 `SCIWEAVE_GATEWAY_PASSTHROUGH_RUNTIME=1` 时可用。
 - `agent-definitions/`：**Agent 定义的出处**。`agents/*.yaml` 写 `identity` / `instruction` / `model` / `allowed_mcp_resources`，由 `build_agent_runtime()` 加载；`schema.yaml` 是结构约束。工作流声明不在这里，见 `libs/workflow-libs/`。
 - `libs/agent-libs/`：Agent **引用**的行为资源（`prompt` / `formatter` / `task_mode` / `validator` / `workflow_helper`），按 `名字@版本` 被定义的 `resources:` 列表引用。与 `agent-definitions/` 是两种东西：前者是 agent 本身，后者是 agent 引用的材料，因此两个目录都保留。
 - `libs/mcp-libs/`：纯 JSON/YAML MCP 工具描述资源，由 runtime 加载。
@@ -44,6 +44,27 @@ systemctl --user enable --now sciweave-task-agent-subscriber.service
 `sciweave-task-agent-mcp.service` 还需要 `DATABASE_PATH` 与 `DISPOSITION_MCP_TOKEN`，未配置时启动即失败。
 
 打开 harness 时执行 `hooks/check-services.sh` 检查并补启动；关闭 harness 不停止用户级常驻服务。未安装时该 hook 打印跳过原因并正常退出，不阻断 harness 启动。
+
+## 一次交接的完整路径
+
+```
+Redpanda topic
+  └─ subscriber  run_loop         读信封 -> target_id / event_id
+       ├─ inbox.enqueue           写 queued 行（dedupe_key 幂等）
+       ├─ WorkerLease.acquire     SQLite 持久锁，跨进程有效
+       ├─ 拉起 worker 子进程       service-template/worker/src/main.py --dedupe-key <key>
+       │    └─ build_agent_runtime -> 加载四套配置 -> fast-agent
+       │         └─ 调模型 -> 写草稿箱 -> inbox.mark_processed
+       └─ queue.commit            **不等 worker 跑完**
+```
+
+三点值得单独说明：
+
+- **offset 在 worker 开始跑之前就提交。** 模型调用可能比轮询长得多，把 offset 押到模型返回，重启后整批消息会重放而 inbox 去重又把它们全挡掉——那是比丢一条更糟的状态。现在崩溃只会留下一条 `queued` 行，下次启动 `drain_queued()` 重跑。
+- **Worker Lease 是 SQLite 里的一行，不是内存里的 `set`。** 内存在子进程模型下等于没有锁。租约在拉起子进程**之前**取得、跑完之后释放，期间同一 TaskNode 的第二次投递会被拒绝。租约带 TTL（默认 1800 秒），被 `kill -9` 的 subscriber 不会永久占住一个节点。
+- **subscriber 不持有草稿箱凭据。** 草稿由 worker 通过 `draft-buffer` MCP 写入（见 `ai4-z3z4`、`ai4-4zjz`）；subscriber 里出现 `DRAFT_BUFFER_MCP_TOKEN` 就说明边界被破坏了。
+
+`DATABASE_PATH` 未设置时没有持久 inbox，子进程也无行可跑，此时 subscriber 退回内联模式并打印一行提示——这是显式降级，不是静默回退。
 
 ## 本地验证
 

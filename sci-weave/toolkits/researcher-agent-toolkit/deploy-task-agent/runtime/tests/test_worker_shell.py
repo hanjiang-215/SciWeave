@@ -5,7 +5,7 @@ from __future__ import annotations
 import unittest
 
 from work_agent_runtime.fast_agent_runtime import AgentOutcome
-from work_agent_runtime.worker_shell import WorkerRequest, run_queued_once
+from work_agent_runtime.worker_shell import WorkerRequest, run_one_queued, run_queued_once
 
 
 class _Inbox:
@@ -15,10 +15,16 @@ class _Inbox:
 
     def list_status(self, status):
         assert status == "queued"
-        return list(self.rows)
+        return [row for row in self.rows if row["status"] == status]
+
+    def get(self, dedupe_key):
+        return next((row for row in self.rows if row["dedupe_key"] == dedupe_key), None)
 
     def mark_processed(self, dedupe_key):
         self.processed.append(dedupe_key)
+        for row in self.rows:
+            if row["dedupe_key"] == dedupe_key:
+                row["status"] = "processed"
 
 
 class _Drafts:
@@ -117,6 +123,33 @@ class RunQueuedOnceTests(unittest.TestCase):
             drafts = _Drafts()
 
         self.assertEqual(run_queued_once(_NoInbox(), _Agent(AgentOutcome("completed"))), [])
+
+    def test_a_processed_row_is_not_run_twice(self) -> None:
+        """The subscriber commits before the worker runs, so a replay is normal.
+
+        Re-running would write a second draft for one handoff.
+        """
+        runtime = _Runtime([_row()])
+        agent = _Agent(AgentOutcome("completed", result_summary="the answer"))
+        run_one_queued(runtime, agent, "node-1:event-1")
+        again = run_one_queued(runtime, agent, "node-1:event-1")
+        self.assertEqual(len(agent.requests), 1)
+        self.assertEqual(again[0]["status"], "already_processed")
+        self.assertEqual(len(runtime.drafts.written), 1)
+
+    def test_an_unknown_key_is_reported_not_silently_skipped(self) -> None:
+        runtime = _Runtime([_row()])
+        results = run_one_queued(runtime, _Agent(AgentOutcome("completed")), "nope")
+        self.assertEqual(results[0]["status"], "not_found")
+
+    def test_a_row_awaiting_a_binding_is_not_run(self) -> None:
+        row = _row()
+        row["status"] = "awaiting_workflow_binding"
+        runtime = _Runtime([row])
+        agent = _Agent(AgentOutcome("completed"))
+        results = run_one_queued(runtime, agent, "node-1:event-1")
+        self.assertEqual(agent.requests, [])
+        self.assertEqual(results[0]["status"], "awaiting_workflow_binding")
 
 
 if __name__ == "__main__":
