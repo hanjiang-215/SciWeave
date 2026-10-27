@@ -62,11 +62,15 @@ sciweave.governance-events
 
 首版没有 `sciweave.notification-intent`。`human_notification_intent` 与 `task_terminal_summary` 不经 Redpanda，由交接协调服务通过 email-service 的受鉴权 MCP `send_notification` 投递。
 
-业务上每个目标 TaskNode 仍拥有独立逻辑频道；物理 topic 不按 TaskNode 或每个 Workflow 动态创建。任务交接消息以 `target_node_id` 作为分区键。Centre Workflow 通过独立订阅声明和消费者组扩展；email-service 不消费任何 Redpanda topic。topic 订阅不构成授权来源，正式 `executor_refs` 仍是 TaskNode 执行关系权威。
+业务上每个目标 TaskNode 仍拥有独立逻辑频道；物理 topic 不按 TaskNode 或每个 Workflow 动态创建。任务交接消息以 `routing.partition_key = task_node_id` 作为分区键（同一节点的多个版本落在同一分区，才能保证版本间的先后顺序）。Centre Workflow 通过独立订阅声明和消费者组扩展；email-service 不消费任何 Redpanda topic。topic 订阅不构成授权来源，正式 `executor_refs` 仍是 TaskNode 执行关系权威。
 
 三处目标中前两类是 Redpanda 消费者，email-service 不是。它们可以共享统一消息信封，但不得把三者都伪装成 `task_handoff_ready`：`task-workflow` 才能创建 Task Agent 的 `ExecutionRecord`；`centre-workflow` 订阅治理事件触发预审或其他中央 Workflow；email-service 只接受 MCP 调用投递人工通知。
 
 ### 消息信封
+
+> **⚠️ 本节描述的是目标格式，尚未落地（2026-10-27）。**
+>
+> 线上三个生产者（交接协调服务、research-map、research-wiki）发的都是各自手写的扁平 dict，`shared/message-envelope/` 这个包**零调用方**。字段名、`schema_version` 的类型与有无、引用数组的形状，四方（本节 / 信封包 / 协调器 / 领域发布者）目前互不一致；细节与迁移顺序见 [信封格式三分叉](../../.tickets/ai4-derq.md)。在迁移完成前，**不要按本节写新的消费者**——请按本节下方「兼容策略采用容忍式读取」那一段读真实消息。
 
 所有 Redpanda 业务消息使用统一信封，业务字段放在 `payload`：
 
@@ -307,11 +311,8 @@ task_handoff_ready
   "payload": {
     "mapping_domain_id": "mapping:project-1",
     "target_agent_id": "agent:data-analysis-workflow",
-    "target_node_id": "task:data-analysis",
-    "target_node_version_ref": {
-      "logical_id": "task:data-analysis",
-      "version_id": "task-version:2"
-    },
+    "task_node_id": "task:data-analysis",
+    "target_node_version_ref": "task-version:2",
     "trigger_revision_id": "formal-revision:12",
     "pending_handoff_id": "pending:handoff-2",
     "dependency_edge_version_refs": [
@@ -346,7 +347,7 @@ sciweave.task-handoff.<agent_id>
     → Worker 执行一轮 Workflow
 ```
 
-首版不为每个 TaskNode 动态创建物理 Redpanda topic。任务交接使用按 `agent_id` 隔离的 topic 模板 `sciweave.task-handoff.<agent_id>`；一个 Agent 可负责多个 TaskNode，同一 Agent 的多个实例共享对应消费者组并竞争消费。业务上每个目标 TaskNode 仍拥有独立逻辑频道，消息以 `target_node_id` 作为分区键。
+首版不为每个 TaskNode 动态创建物理 Redpanda topic。任务交接使用按 `agent_id` 隔离的 topic 模板 `sciweave.task-handoff.<agent_id>`；一个 Agent 可负责多个 TaskNode，同一 Agent 的多个实例共享对应消费者组并竞争消费。业务上每个目标 TaskNode 仍拥有独立逻辑频道，消息以 `routing.partition_key = task_node_id` 作为分区键。
 
 ## 没有可用 Workflow Agent
 
