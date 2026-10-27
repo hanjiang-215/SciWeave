@@ -84,10 +84,12 @@ sci-weave/toolkits/researcher-agent-toolkit/deploy-task-agent/
 │   └── sciencepal-bridge/                # 独立 uv 子项目
 │       ├── pyproject.toml
 │       ├── src/sciencepal_bridge/
-│       │   ├── main.py                   # stdio MCP server
+│       │   ├── cli.py                    # CLI：agents/start/status/collect/cancel
 │       │   ├── client.py                 # SDK 封装
 │       │   ├── store.py                  # run ledger + 幂等
 │       │   └── config.py
+│       ├── harness/                      # 跨 harness 安装矩阵与 MCP 配置
+│       ├── examples/                     # task-packet / execution-report 形状
 │       └── tests/
 ├── libs/mcp-libs/sciencepal/mcp.json     # runtime 工具卡
 ├── agent-definitions/agents/
