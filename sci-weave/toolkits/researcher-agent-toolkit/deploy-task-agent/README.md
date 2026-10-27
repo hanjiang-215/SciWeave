@@ -10,9 +10,25 @@
 - `libs/workflow-libs/`：纯 YAML Workflow 协议、schema 和四类工作流示例。
 - `libs/local-agent-libs/`、`libs/local-mcp-libs/`：研究员自定义资源配置。
 - `custom-mcp/`：需要 Python 实现的自定义 MCP 服务，每个服务是独立 uv 子项目。
-- `hooks/`、`systemd/`：harness 检查和用户级常驻服务。
+- `hooks/`、`systemd/`、`install.sh`：harness 检查、用户级常驻服务与安装脚本；`bin/` 是两个服务的入口。
 
 套件与 `sci-weave/centre-control/centre-agents` 独立，不使用 path 依赖。Personal Agent 只能修改 Agent 定义、工作流声明和资源配置，不能修改 runtime、Worker Lease、Gateway 或服务模板。
+
+## 安装与启动边界
+
+```bash
+./install.sh            # 装到 ~/.sciweave/task-agent 并注册两个用户服务
+vi ~/.sciweave/task-agent/.env
+systemctl --user enable --now sciweave-task-agent-subscriber.service
+```
+
+`install.sh` 幂等：重复执行只更新代码，保留已有的 `.env`、`WORKER_HOME` 与 SQLite 文件。装到别处用 `SCIWEAVE_TASK_AGENT_HOME=/path ./install.sh`，单元文件里的路径会同步替换。
+
+两个服务的入口是 `bin/start-subscriber` 与 `bin/start-mcp`，都从套件根目录解析路径并跑在 `runtime/` 的 uv 环境里——`work_agent_runtime` 只装在 runtime 项目里，`service-template/` 下没有第二份。缺 `.env` 时立即退出并说明原因。
+
+`sciweave-task-agent-mcp.service` 还需要 `DATABASE_PATH` 与 `DISPOSITION_MCP_TOKEN`，未配置时启动即失败。
+
+打开 harness 时执行 `hooks/check-services.sh` 检查并补启动；关闭 harness 不停止用户级常驻服务。未安装时该 hook 打印跳过原因并正常退出，不阻断 harness 启动。
 
 ## 本地验证
 
@@ -49,7 +65,3 @@ Agent、MCP、Workflow libs 是纯配置资源，不单独执行 `uv sync`；由
 草稿由 **Worker 里的 agent** 通过草稿箱 MCP 服务器写，不由订阅端写。订阅端（`gateway/subscriber`）不持有草稿箱凭据、也不读 `DRAFT_BUFFER_MCP_URL` / `DRAFT_BUFFER_MCP_TOKEN`：它只驱动状态机，两处都写会让同一轮执行产出两份草稿。
 
 `worker/src/main.py` 装配 `BufferMCPDraftWriter`，读 `DRAFT_BUFFER_MCP_URL` 与 `DRAFT_BUFFER_MCP_TOKEN`（Streamable HTTP `create_draft`）；任一为空时使用假草稿箱（本地演示/测试）。领域命名空间由 `SCIWEAVE_DRAFT_NAMESPACE` 指定（默认 `mapping`）。端点、令牌与命名空间全部来自环境变量，仓库不持有真实凭据。
-
-## 启动边界
-
-安装 systemd 用户服务后执行 `systemctl --user enable --now sciweave-task-agent-subscriber.service`。`sciweave-task-agent-mcp.service` 需要 `DATABASE_PATH` 与 `DISPOSITION_MCP_TOKEN`，未配置时启动即失败。打开 harness 时只执行 `hooks/check-services.sh` 检查并补启动；关闭 harness 不停止用户级常驻服务。
