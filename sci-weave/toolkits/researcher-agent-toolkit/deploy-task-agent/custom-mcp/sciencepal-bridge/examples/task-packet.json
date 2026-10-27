@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "map": {
+    "mapping_domain_id": "iris-demo",
+    "formal_revision_id": "rev-7",
+    "task_node": {
+      "logical_id": "task:t1",
+      "version_id": "t1-v1"
+    },
+    "acceptance_criteria": [
+      "150 行、4 特征列、3 类各 50",
+      "无缺失值",
+      "快照 sha256 与证据卡一致"
+    ],
+    "owner": "person:alice"
+  },
+  "upstream": [],
+  "inputs": [
+    {
+      "name": "iris_data.csv",
+      "path": "inputs/iris_data.csv",
+      "sha256": "<fill-after-hashing>"
+    },
+    {
+      "name": "check_iris_input.py",
+      "path": "inputs/check_iris_input.py",
+      "sha256": "<fill-after-hashing>"
+    }
+  ],
+  "constraints": {
+    "deterministic": true,
+    "params": {
+      "command": "python check_iris_input.py iris_data.csv"
+    },
+    "network": false,
+    "language": "zh-CN"
+  },
+  "expected_outputs": [
+    {
+      "name": "report.md",
+      "kind": "report"
+    },
+    {
+      "name": "result.json",
+      "kind": "data"
+    }
+  ],
+  "provenance": {
+    "execution_id": "exec-example",
+    "collaborator_id": "agent:data-collaborator",
+    "requested_by": "person:alice"
+  }
+}

@@ -89,3 +89,5 @@ HTTP 模式没有远程鉴权，只绑回环地址；需要跨机访问时前面
 4. **回写**：若 harness 支持 `draft-buffer` MCP，直接 `create_draft`；否则把 `execution-report.json` 交给 SciWeave 侧导入（见 `ai4-` 的“执行报告回写地图”票）。
 
 协作者不要直接改正式图；报告只是草稿，候选与正式化仍由人完成。
+
+形状参考：`examples/task-packet.json`、`examples/execution-report.json`。

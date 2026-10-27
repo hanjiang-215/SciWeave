@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "task_node_id": "task:t1",
+  "execution_id": "exec-example",
+  "status": "completed",
+  "summary": "输入检查通过：150 行、4 特征、3 类各 50，无缺失值。",
+  "sciencepal": {
+    "run_id": "<run-id>",
+    "thread_id": "<thread-id>",
+    "agent_id": null,
+    "model": null,
+    "duration_s": 32.2
+  },
+  "inputs": [
+    {
+      "name": "iris_data.csv",
+      "sha256": "<sha256>"
+    }
+  ],
+  "artifacts": [
+    {
+      "name": "result.json",
+      "path": "runs/<run-id>/result.json",
+      "kind": "data",
+      "sha256": "<sha256>"
+    },
+    {
+      "name": "report.md",
+      "path": "runs/<run-id>/report.md",
+      "kind": "report",
+      "sha256": "<sha256>"
+    }
+  ],
+  "acceptance": [
+    {
+      "criterion": "150 行、4 特征列、3 类各 50",
+      "met": true,
+      "evidence": "result.json.row_count"
+    },
+    {
+      "criterion": "无缺失值",
+      "met": true,
+      "evidence": "result.json.missing_values"
+    }
+  ],
+  "findings": [
+    "输入快照与证据卡一致。"
+  ],
+  "limitations": [
+    "只验证输入，不包含分析结果。"
+  ],
+  "route_change": {
+    "needed": false,
+    "proposal": {
+      "nodes": [],
+      "edges": [],
+      "rationale": ""
+    }
+  }
+}
