@@ -89,3 +89,11 @@ git diff --check → 0
 ```
 
 处置：三张票维持 `closed`（按 Not in Scope 不重开），验收项全部补齐勾选。无发现需要拆新票的缺口。
+
+**2026-10-27 补记：复核结论走评论流程（hanjiang）**
+
+三张票的 `assignee` 是 Frank Qi，按属人修改权规则，勾选与 Notes 回写虽有本票 AC1 与立项 Notes 的书面授权，仍应让 assignee 在公开渠道有机会确认或否决。已把复核记录（身份与依据、逐条结论、补齐的两个测试缺口、验证命令、处置）作为评论发布在 PR #53：
+
+<https://gitee.com/qi-yueran/ai4science/pulls/53#note_51852158>
+
+若 Frank Qi 认为某条勾选不妥，按其意见回退并在对应票 Notes 追加带日期的修订，不覆盖已有记录。
