@@ -12,8 +12,8 @@
 | 官方 URL | `https://archive.ics.uci.edu/static/public/53/data.csv` |
 | DOI | `10.24432/C56C76` |
 | 许可证 | CC BY 4.0（演示须署名并链接许可证） |
-| 快照文件 | `demo-evidence/iris_data.csv`（4,615 字节） |
-| 快照 SHA-256 | `daaeb5e3e889d07fbdd44544f5a39fe2372a07172e25899d577be0ad74df9e65` |
+| 快照文件 | `demo-evidence/iris_data.csv`（仓库内 LF，4,464 字节；官方下载为 CRLF，4,615 字节） |
+| 快照 SHA-256 | `ea110d42c2240c77fd292751dfdc4db00c699fee569528ed33ca270838b6f9f4`（行尾归一化后计算，LF 与 CRLF 两种检出结果一致） |
 
 ## T1 数据检查（已运行，2026-10-23）
 
@@ -25,7 +25,9 @@ python humans/competition/demo-evidence/check_iris_input.py humans/competition/d
 
 结果：`status: ok`，150 行、4 个特征列齐全、3 类各 50 条、无缺失值、快照哈希匹配官方文件。完整 JSON 见 `demo-evidence/iris_input_check.json`。
 
-**失败注入样本**：`demo-evidence/iris_data_failure_inject.csv` 是移除目标列的临时副本，用于演示 T1 拦截。运行同一检查脚本得到 `status: failed`、`reason_code: source_hash_mismatch`，退出码 1，不产出后续分析结果；恢复官方输入后重试成功。失败记录见 `demo-evidence/iris_input_failure.json`。这对应演示脚本第 4 段「失败注入 + 普通重试」。
+**失败注入样本**：`demo-evidence/iris_data_failure_inject.csv` 是移除目标列的临时副本，用于演示 T1 拦截。运行同一检查脚本得到 `status: failed`、`reason_code: missing_columns`，退出码 1，不产出后续分析结果；恢复官方输入后重试成功。失败记录见 `demo-evidence/iris_input_failure.json`。这对应演示脚本第 4 段「失败注入 + 普通重试」。
+
+T1 的判定顺序（自 `ai4-483l` 起）是**先结构后溯源**：列缺失是结构性失败，先于哈希比对报告，因此失败注入拿到的是可解释的 `missing_columns`；列齐全但数值被改动的文件仍由哈希拦下，报 `source_hash_mismatch`。两种失败各有自己的 `reason_code`，不共用同一个理由。
 
 ## 最小数字证据卡（首版字段）
 
@@ -36,7 +38,7 @@ python humans/competition/demo-evidence/check_iris_input.py humans/competition/d
 | license | CC BY 4.0，须署名并链接许可证 |
 | source_url | 见上表官方 URL |
 | acquired_at | 2026-10-23 |
-| input_snapshot_sha256 | `daaeb5e3...df9e65` |
+| input_snapshot_sha256 | `ea110d42...b6f9f4` |
 | row_count / features / classes | 150 / 4 / 3 类各 50 |
 | task_node_id | 由演示初始 Research Mapping 生成（T1/T2/T3...） |
 | execution_record_id | 由执行侧回填 |
@@ -53,7 +55,7 @@ T2 采用固定参数的确定性 KNN 基线，本机已用纯标准库运行并
 | 随机种子 | 20261023 |
 | 数据划分 | 分层划分，测试占比 0.3（训练 105 / 测试 45） |
 | 指标 | 准确率 0.955556（43/45）、混淆矩阵（见 `iris_baseline_result.json`） |
-| 输入快照 | `daaeb5e3...df9e65`（与 T1 一致） |
+| 输入快照 | `ea110d42...b6f9f4`（与 T1 一致） |
 
 命令：
 
