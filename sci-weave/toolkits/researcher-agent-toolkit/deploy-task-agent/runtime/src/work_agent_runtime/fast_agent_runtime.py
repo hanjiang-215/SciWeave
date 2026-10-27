@@ -16,9 +16,29 @@ from __future__ import annotations
 
 import asyncio
 import os
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
+
+_DRIVE_PREFIX = re.compile(r"^[A-Za-z]:")
+
+
+def _relative_session_dir(value: str, message: str) -> None:
+    """Reject a session dir that could escape the agent home on either platform.
+
+    ``Path(...).is_absolute()`` is not enough here: on POSIX ``Path("C:/absolute")``
+    is relative and ``Path(r"..\\..\\outside")`` is a single path part, so both
+    would slip through and land under the working directory instead of being
+    refused (ai4-grlc). The checks are therefore textual as well as pathlib-based.
+    """
+    if not value or not value.strip():
+        raise ValueError(message)
+    if Path(value).is_absolute() or _DRIVE_PREFIX.match(value):
+        raise ValueError(message)
+    parts = [part for part in value.replace("\\", "/").split("/") if part]
+    if any(part in {".", ".."} for part in parts):
+        raise ValueError(message)
 
 
 class AgentRequest(Protocol):
@@ -53,9 +73,7 @@ class FastAgentSettings:
             raise ValueError("DEEPSEEK_BASE_URL must be an https endpoint")
         if not self.model.strip():
             raise ValueError("DEEPSEEK_MODEL must be configured")
-        session_path = Path(self.session_dir)
-        if session_path.is_absolute() or any(part in {".", ".."} for part in session_path.parts):
-            raise ValueError("session_dir must stay within the agent home")
+        _relative_session_dir(self.session_dir, "session_dir must stay within the agent home")
 
 
 class FastAgentDeepSeekRuntime:

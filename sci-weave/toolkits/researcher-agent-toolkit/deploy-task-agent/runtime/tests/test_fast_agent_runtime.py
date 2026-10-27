@@ -134,10 +134,17 @@ class SettingsTests(unittest.TestCase):
             self._settings(model="  ").validate_for_model_call()
 
     def test_a_session_dir_cannot_escape_the_home(self) -> None:
-        with self.assertRaises(ValueError):
-            self._settings(session_dir="../outside").validate_for_model_call()
-        with self.assertRaises(ValueError):
-            self._settings(session_dir="C:/absolute").validate_for_model_call()
+        # Each of these is only rejected by a textual check: on POSIX `Path` treats
+        # "C:/absolute" as relative and "..\..\outside" as a single part (ai4-grlc).
+        for escaping in ("../outside", r"..\..\outside", "C:/absolute", r"C:\absolute", "", "  "):
+            with self.subTest(session_dir=escaping):
+                with self.assertRaises(ValueError):
+                    self._settings(session_dir=escaping).validate_for_model_call()
+
+    def test_a_relative_session_subdirectory_is_accepted(self) -> None:
+        for allowed in ("sessions", "sessions/worker", "run-1/sessions"):
+            with self.subTest(session_dir=allowed):
+                self._settings(session_dir=allowed).validate_for_model_call()
 
 
 class RuntimeTests(unittest.TestCase):

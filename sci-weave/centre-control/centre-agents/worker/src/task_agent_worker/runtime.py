@@ -12,7 +12,7 @@ from typing import Protocol
 from fast_agent import FastAgent
 from fast_agent.context import get_initialized_context
 
-from .config import WorkerSettings
+from .config import WorkerSettings, ensure_relative_session_dir
 
 
 class RuntimeRequest(Protocol):
@@ -33,9 +33,7 @@ class FastAgentPassthroughRuntime:
     """Credential-free runtime used only by automated integration checks."""
 
     def __init__(self, home: str | Path, connection_scope: str, session_dir: str) -> None:
-        session_path = Path(session_dir)
-        if session_path.is_absolute() or any(part in {".", ".."} for part in session_path.parts):
-            raise ValueError("session_dir must stay within Worker home")
+        ensure_relative_session_dir(session_dir, "session_dir must stay within Worker home")
         self.home = Path(home)
         self.connection_scope = connection_scope
         self.session_dir = session_dir
