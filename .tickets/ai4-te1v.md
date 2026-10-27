@@ -2,7 +2,7 @@
 id: ai4-te1v
 status: closed
 deps: []
-links: []
+links: [ai4-4bxp, ai4-8pvm]
 created: 2026-10-18T15:18:52Z
 type: epic
 priority: 1
