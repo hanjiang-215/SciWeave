@@ -19,7 +19,7 @@ SciencePal 沙箱需要同时满足三项，才能承接 T1 数据检查 / T2 �
 ### 第 0 步：准备本地证据（无需 SciencePal，已完成）
 
 - 固定脚本：`humans/competition/demo-evidence/check_iris_input.py`、`run_iris_baseline.py`（仅标准库，参数固定 K=3 / 种子 20261023 / 70/30）。
-- 固定输入：`demo-evidence/iris_data.csv`（SHA-256 `daaeb5e3...df9e65`）；失败注入副本 `iris_data_failure_inject.csv`。
+- 固定输入：`demo-evidence/iris_data.csv`（SHA-256 `ea110d42...b6f9f4`，行尾归一化）；失败注入副本 `iris_data_failure_inject.csv`。
 - 本机对照结果：`iris_input_check.json`、`iris_baseline_result.json`（Sandbox 结果不一致时以沙箱实际输出为准并回填）。
 
 ### 第 1 步：最小测试 skill

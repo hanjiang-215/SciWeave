@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import json
 import math
 import sys
@@ -24,12 +25,25 @@ K = 3
 TEST_RATIO = 0.3
 FEATURE_COLUMNS = ("sepal length", "sepal width", "petal length", "petal width")
 CLASS_COLUMN = "class"
-SNAPSHOT_SHA256 = "daaeb5e3e889d07fbdd44544f5a39fe2372a07172e25899d577be0ad74df9e65"
+SNAPSHOT_SHA256 = "ea110d42c2240c77fd292751dfdc4db00c699fee569528ed33ca270838b6f9f4"
+
+
+def sha256_of(path: Path) -> str:
+    """Hash the snapshot content, not the working copy's line endings.
+
+    Same normalisation as ``check_iris_input.py`` so the two scripts agree on
+    what the pinned snapshot is (``ai4-483l``, ``ai4-j7g2``).
+    """
+    return hashlib.sha256(path.read_bytes().replace(b"\r\n", b"\n")).hexdigest()
 
 
 def load(path: Path) -> tuple[list[tuple[float, ...]], list[str]]:
     with path.open("r", encoding="utf-8", newline="") as handle:
         reader = csv.DictReader(handle)
+        columns = reader.fieldnames or []
+        missing = [column for column in (*FEATURE_COLUMNS, CLASS_COLUMN) if column not in columns]
+        if missing:
+            raise MissingColumnsError(missing, columns)
         features: list[tuple[float, ...]] = []
         labels: list[str] = []
         for row in reader:
@@ -68,12 +82,39 @@ def _euclidean(left: tuple[float, ...], right: tuple[float, ...]) -> float:
     return math.sqrt(sum((a - b) ** 2 for a, b in zip(left, right)))
 
 
+class MissingColumnsError(ValueError):
+    """输入缺少必需列；属于结构错误，不进入分类计算。"""
+
+    def __init__(self, missing: list[str], columns: list[str]) -> None:
+        super().__init__(f"missing columns: {', '.join(missing)}")
+        self.missing = missing
+        self.columns = columns
+
+
 def main() -> int:
     if len(sys.argv) != 2:
         print("usage: run_iris_baseline.py <path-to-data.csv>", file=sys.stderr)
         return 2
     path = Path(sys.argv[1])
-    features, labels = load(path)
+    try:
+        features, labels = load(path)
+    except MissingColumnsError as error:
+        print(json.dumps({
+            "status": "failed",
+            "reason_code": "missing_columns",
+            "detail": {"missing": error.missing, "columns": error.columns},
+            "run_at": datetime.now(timezone.utc).isoformat(),
+        }, ensure_ascii=False, indent=2))
+        return 1
+    observed_sha256 = sha256_of(path)
+    if observed_sha256 != SNAPSHOT_SHA256:
+        print(json.dumps({
+            "status": "failed",
+            "reason_code": "source_hash_mismatch",
+            "detail": {"observed_sha256": observed_sha256, "expected_sha256": SNAPSHOT_SHA256},
+            "run_at": datetime.now(timezone.utc).isoformat(),
+        }, ensure_ascii=False, indent=2))
+        return 1
     rng = __import__("random").Random(SEED)
     xtrain, ytrain, xtest, ytest = stratified_split(features, labels, rng)
     trained = list(zip(xtrain, ytrain))
@@ -92,7 +133,7 @@ def main() -> int:
         "seed": SEED,
         "test_ratio": TEST_RATIO,
         "feature_columns": list(FEATURE_COLUMNS),
-        "input_snapshot_sha256": SNAPSHOT_SHA256,
+        "input_snapshot_sha256": observed_sha256,
         "train_size": len(ytrain),
         "test_size": len(ytest),
         "accuracy": round(correct / len(ytest), 6),

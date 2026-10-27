@@ -11,7 +11,7 @@
 ## 硬性约束
 
 1. **固定方法**：KNN，近邻数 `K=3`，随机种子 `20261023`，分层划分测试占比 `0.3`（训练 105 / 测试 45）。仅 Python 标准库（`csv`、`collections`、`statistics`、`random`、`math`）。
-2. **输入绑定**：只接受与 `evidence-card.md` 中 `input_snapshot_sha256`（`daaeb5e3...df9e65`）一致的快照文件；哈希不符时报告失败，不执行。
+2. **输入绑定**：只接受与 `evidence-card.md` 中 `input_snapshot_sha256`（`ea110d42...b6f9f4`，行尾归一化）一致的快照文件；哈希不符时报告失败，不执行。
 3. **输出**：准确率（验证集 45 条，本机 0.955556 为对照值，非强制一致）、完整混淆矩阵、命令与结果文件定位。
 4. **记录**：在结果 JSON 里记录执行者、Python/解释器版本、沙箱环境差异（如与 `iris_baseline_result.json` 不一致，以沙箱实际输出为准并注明原因）。
 5. **权限**：你只有 `read` + `candidate_submit`。涉及 `candidate_review` / `formalize` / `record_review` 一律报告「无权，需人工处理」，不要猜测执行。

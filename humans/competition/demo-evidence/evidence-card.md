@@ -65,6 +65,8 @@ python humans/competition/demo-evidence/run_iris_baseline.py humans/competition/
 
 结果文件：`demo-evidence/iris_baseline_result.json`。
 
+T2 在计算前先断言输入哈希（自 `ai4-j7g2` 起）：哈希与固定快照不符时返回 `status: failed` / `reason_code: source_hash_mismatch`、退出码 1，且**不产出准确率与混淆矩阵**；缺列时返回 `missing_columns`。输出里的 `input_snapshot_sha256` 是实测值，不是常量回显，因此分析结果与输入快照之间存在可核验的绑定。
+
 **SciencePal 硬门槛不变**：以上证明演示闭环在平台外可复现，但赛事要求 SciencePal 实际承接核心数据检查或分析执行。SciencePal 接入后应封装该脚本或同参数实现，并回填真实运行环境的解释器/库版本、输出定位与执行记录；不得以本机结果冒充 SciencePal 实演。
 
 ## 平台侧真实治理链路证据（2026-10-24 已运行）
