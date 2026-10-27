@@ -14,12 +14,17 @@
 research-map (真实 TerminusDB + SQLite)
    └─ GET /api/dashboard/source/mapping      ← 正式路线投影（项目、任务、依赖、事件）
         ↓ 由 dashboard-api 拉取
+gateway/subscriber （可选，见 ai4-nvuj）
+   └─ GET /api/dashboard/source/queue        ← 消息监听状态、消费组与最近队列事件
+        ↓ 由 dashboard-api 拉取
 dashboard-api
    └─ GET /api/dashboard/snapshot            ← 多来源聚合，单个来源失败降级为 unavailable
         ↓ 由前端拉取（跨域，需 CORS）
 web-ui (Vite dev server)
    └─ 页面渲染 mode: live
 ```
+
+`queue` 来源默认不启（需要先有一个 subscriber 存储），配了 `SCIWEAVE_DASHBOARD_SOURCE_QUEUE_URL` 才会接入；没配时看板的「消息监听」区显示不可用，属预期。
 
 ## 前置条件
 
@@ -63,7 +68,7 @@ mapping   : fresh
 看板地址  : http://127.0.0.1:5173
 ```
 
-浏览器打开看板地址即可。`部分来源: True` 是正常的——只有 mapping 来源被接上，wiki / gateway / queue 仍为空（见 `ai4-nvuj`）。
+浏览器打开看板地址即可。`部分来源: True` 是正常的——脚本只接上 mapping 来源，wiki / gateway / queue 仍为空。要补 queue，先起 subscriber 的看板端点（见下文配置表）再把 URL 传给 dashboard-api。
 
 ## 演示数据从哪来
 
@@ -91,6 +96,9 @@ mapping   : fresh
 | `SCIWEAVE_MAPPING_TERMINUSDB_USERNAME` / `_PASSWORD` | `admin` / `root` | 本机固定容器的默认凭据 |
 | `SCIWEAVE_MAPPING_DOMAIN_ID` | `iris-demo` | 看板展示的映射域 |
 | `SCIWEAVE_MAPPING_SQLITE_PATH` | `research-map/data/dashboard.sqlite` | 治理记录库 |
+| `SCIWEAVE_SUBSCRIBER_DASHBOARD_PORT` | 未设 | subscriber 看板端点监听端口；不设就不起 |
+| `SCIWEAVE_SUBSCRIBER_DASHBOARD_HOST` / `_TOKEN` | `127.0.0.1` / 空 | 监听地址与 Bearer 令牌（设了令牌则必须带 `Authorization`） |
+| `SCIWEAVE_DASHBOARD_SOURCE_QUEUE_URL` | 未设 | 指向 subscriber 的 `/sources`（或 `/api/dashboard/source/queue`），不设则 queue 槽为 unavailable |
 
 `SCIWEAVE_DASHBOARD_CORS_ORIGIN` 由脚本从前端端口推导，不需要手工配——手工配错会让浏览器拿不到数据。
 

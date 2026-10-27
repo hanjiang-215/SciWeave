@@ -13,11 +13,13 @@ from __future__ import annotations
 
 import os
 import sys
+import threading
 
 from task_agent_worker.config import WorkerSettings
 from task_agent_worker.runtime import FastAgentDeepSeekRuntime, FastAgentPassthroughRuntime
 from task_agent_worker.store import ExecutionStore
 
+from .dashboard_source import build_queue_fragment, create_queue_dashboard_server
 from .draft_writer import BufferMCPDraftWriter
 from .queue import FakeQueueClient, KafkaQueueClient, QueueClient
 from .service import SubscriberService
@@ -105,6 +107,36 @@ def build_draft_writer():
     )
 
 
+def start_dashboard_server(
+    store: ExecutionStore,
+    topics: list[str],
+    group_id: str | None,
+    queue_kind: str,
+):
+    """Serve the read-only queue dashboard source when a port is configured.
+
+    ai4-nvuj: ``dashboard-api`` has a ``queue`` source slot that nothing served,
+    so the Web dashboard's listener area was permanently unavailable. The
+    endpoint is opt-in (``SCIWEAVE_SUBSCRIBER_DASHBOARD_PORT``) to keep existing
+    subscriber deployments unchanged.
+    """
+    port_text = os.environ.get("SCIWEAVE_SUBSCRIBER_DASHBOARD_PORT", "").strip()
+    if not port_text:
+        return None
+    host = os.environ.get("SCIWEAVE_SUBSCRIBER_DASHBOARD_HOST", "127.0.0.1").strip() or "127.0.0.1"
+    token = os.environ.get("SCIWEAVE_SUBSCRIBER_DASHBOARD_TOKEN", "").strip() or None
+    server = create_queue_dashboard_server(
+        lambda: build_queue_fragment(
+            store=store, topics=topics, group_id=group_id, queue_kind=queue_kind
+        ),
+        host=host,
+        port=int(port_text),
+        token=token,
+    )
+    threading.Thread(target=server.serve_forever, name="queue-dashboard", daemon=True).start()
+    return server
+
+
 def main() -> None:
     agent_id = required_environment("SCIWEAVE_AGENT_ID")
     topics = [
@@ -120,12 +152,22 @@ def main() -> None:
     settings.validate_runtime(require_api_key=bool(settings.api_key))
 
     queue = build_queue(agent_id)
+    queue_kind = "kafka" if isinstance(queue, KafkaQueueClient) else "fake"
     queue.subscribe(topics)
     service = SubscriberService(store, agent_id)
     runner = SubscriberWorkerRunner(store, service, build_runtime(settings), build_draft_writer())
+    dashboard = start_dashboard_server(
+        store,
+        topics,
+        os.environ.get("SCIWEAVE_QUEUE_GROUP_ID", "").strip() or None,
+        queue_kind,
+    )
     try:
         run_loop(service, runner, queue)
     finally:
+        if dashboard is not None:
+            dashboard.shutdown()
+            dashboard.server_close()
         queue.close()
         store.close()
 
