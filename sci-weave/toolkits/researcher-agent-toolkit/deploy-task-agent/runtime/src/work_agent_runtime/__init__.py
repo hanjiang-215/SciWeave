@@ -1,6 +1,6 @@
 """Independent Work Agent runtime used by the service templates."""
 
-from .config import AgentDefinition, ConfigError, TaskAgentConfig, WorkflowDefinition, load_config, load_workflow_yaml, workflow_to_fast_agent_input
+from .config import AgentDefinition, ConfigError, TaskAgentConfig, WorkflowDefinition, load_config, load_workflow_libs, load_workflow_yaml, workflow_to_fast_agent_input
 from .resources import AgentResource, ResourceConflictError, ResourceError, ResourceKind, ResourceNotFoundError, ResourceRegistry, ResourceVersionError, load_agent_registry
 from .mcp_resources import MCPResource, MCPResourceError, MCPTool, MCPRegistry, load_mcp_registry
 
@@ -33,6 +33,7 @@ __all__ = [
     "TaskAgentConfig",
     "WorkflowDefinition",
     "load_config",
+    "load_workflow_libs",
     "load_workflow_yaml",
     "workflow_to_fast_agent_input",
     "AgentResource", "ResourceConflictError", "ResourceError", "ResourceKind", "ResourceNotFoundError", "ResourceRegistry", "ResourceVersionError", "load_agent_registry",

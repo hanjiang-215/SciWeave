@@ -1,13 +1,18 @@
 # Task Agent definition: copy and customize
+# A single-agent file still needs the `agents:` wrapper: the loader merges that
+# section across the whole directory, so a flat file parses to zero definitions.
 
-name: researcher-task-agent
-instruction: |
-  Complete the assigned research task and return a concise evidence-backed result.
-allowed_domain_mcps:
-  - research-mapping
-  - research-wiki
-  - draft-buffer
-model: configure-in-your-own-environment
+agents:
+  researcher-task-agent:
+    name: researcher-task-agent
+    identity: 通用科研任务 Agent
+    instruction: |
+      Complete the assigned research task and return a concise evidence-backed result.
+    allowed_domain_mcps:
+      - research-mapping
+      - research-wiki
+      - draft-buffer
+    model: configure-in-your-own-environment
 
 # Personal Agent may edit this definition only. Do not edit the runtime state machine,
 # Worker Lease, service templates, or Gateway process.
