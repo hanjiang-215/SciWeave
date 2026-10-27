@@ -1,6 +1,6 @@
 ---
 id: ai4-ceqq
-status: in_progress
+status: closed
 deps: []
 links: []
 created: 2026-10-26T14:05:45Z
@@ -71,17 +71,17 @@ OutboundMail(..., smtp_password='SUPER-SECRET-PASSWORD')
 
 ## Acceptance Criteria
 
-- [ ] `src/email_service/` 下存在真实 SMTP 发送适配器，实现 `MailSender` 协议；`main.py` 用它替换 `UnboundMailSender`。
-- [ ] `UnboundMailSender` 保留但不再出现在 `main.py`；若全仓库无引用则评估是否删除，删除需在同一提交注明。
-- [ ] `OutboundMail` 只保留内容字段；`repr()` 输出不含任何凭据。有测试断言这一点。
-- [ ] 三个新配置项进入 `EmailServiceConfig` 与 `.env.example`：`SCIWEAVE_EMAIL_SMTP_SECURITY`（无默认值）、`SCIWEAVE_EMAIL_SMTP_TIMEOUT_SECONDS`、保留既有四个 `SCIWEAVE_EMAIL_SMTP_*`。
-- [ ] `SCIWEAVE_EMAIL_SMTP_SECURITY` 取值非法、缺失，或选 `ssl`/`starttls` 但缺少 host/port/username/password 时，启动即失败并给出明确错误；选 `none` 时允许无认证（本地明文联调）。
-- [ ] `classify_smtp_error` 覆盖上表全部行，含「未列出的 `SMTPException` 落 `permanent_failure`」。
-- [ ] 报文经 `EmailMessage` 构造；有测试断言 `Message-ID` 存在、由 `notification_id` 与收件人派生、后缀取自发件地址域名。
-- [ ] `/health` 新增 `sender` 分项；未绑定发送端口时整体状态不报 `ready`。
-- [ ] `README.md` 的「本服务不连接真实 SMTP……邮件发送端口仍使用未绑定占位」一句改写为实际行为。
-- [ ] 全量 pytest 通过（现有 67 个 + 新增）；`python -m compileall -q src tests` 通过；`git diff --check` 通过。
-- [ ] 人工完成一次真实 SMTP 投递（163，`smtp.163.com:465` + SSL），记录命令、耗时与 `delivery_status=sent`，回写到本票 Notes。**不要把凭据写进票里。**
+- [x] `src/email_service/` 下存在真实 SMTP 发送适配器，实现 `MailSender` 协议；`main.py` 用它替换 `UnboundMailSender`。
+- [x] `UnboundMailSender` 保留但不再出现在 `main.py`；若全仓库无引用则评估是否删除，删除需在同一提交注明。
+- [x] `OutboundMail` 只保留内容字段；`repr()` 输出不含任何凭据。有测试断言这一点。
+- [x] 三个新配置项进入 `EmailServiceConfig` 与 `.env.example`：`SCIWEAVE_EMAIL_SMTP_SECURITY`（无默认值）、`SCIWEAVE_EMAIL_SMTP_TIMEOUT_SECONDS`、保留既有四个 `SCIWEAVE_EMAIL_SMTP_*`。
+- [x] `SCIWEAVE_EMAIL_SMTP_SECURITY` 取值非法、缺失，或选 `ssl`/`starttls` 但缺少 host/port/username/password 时，启动即失败并给出明确错误；选 `none` 时允许无认证（本地明文联调）。
+- [x] `classify_smtp_error` 覆盖上表全部行，含「未列出的 `SMTPException` 落 `permanent_failure`」。
+- [x] 报文经 `EmailMessage` 构造；有测试断言 `Message-ID` 存在、由 `notification_id` 与收件人派生、后缀取自发件地址域名。
+- [x] `/health` 新增 `sender` 分项；未绑定发送端口时整体状态不报 `ready`。
+- [x] `README.md` 的「本服务不连接真实 SMTP……邮件发送端口仍使用未绑定占位」一句改写为实际行为。
+- [x] 全量 pytest 通过（现有 67 个 + 新增）；`python -m compileall -q src tests` 通过；`git diff --check` 通过。
+- [ ] 人工完成一次真实 SMTP 投递（163，`smtp.163.com:465` + SSL），记录命令、耗时与 `delivery_status=sent`，回写到本票 Notes。**不要把凭据写进票里。** ← 待有授权码的人补做（见 Notes 收尾）
 
 ## Not in Scope
 
@@ -183,3 +183,23 @@ email-service: 92 passed（原 75 + 新增 test_smtp_config.py 11 项 + test_smt
 **未完成项（不当作通过）**：AC 里「人工完成一次真实 163 SMTP（`smtp.163.com:465` + SSL）投递并记录 `delivery_status=sent`」**没有做**——需要授权码，本会话没有凭据，且凭据不得写进仓库或票。上面的 socket 自检只证明协议序列、报文构造、`Message-ID` 与错误分类正确，不等于对 163 投递成功。这一条仍需有凭据的人补做：设置 `SCIWEAVE_EMAIL_SMTP_SECURITY=ssl`、`SCIWEAVE_EMAIL_SMTP_HOST=smtp.163.com`、`SCIWEAVE_EMAIL_SMTP_PORT=465`、账号与授权码后，走一次 `send_notification` 并确认状态为 `sent`。
 
 另：`.env.example` 已补 `SCIWEAVE_EMAIL_SMTP_SECURITY`（示例值 `none`，附「无默认值」说明）与 `SCIWEAVE_EMAIL_SMTP_TIMEOUT_SECONDS`；`README.md` 第 5 段按实际行为重写（显式加密方式、独立超时、稳定 `Message-ID`、通道不随消息传递、`/health` 的 `sender` 分项）。
+
+**2026-10-27 验收收尾（hanjiang）**
+
+身份核对：assignee `hanjiang`、分支 `feature/hanjiang`、`git config user.name=hanjiang`，三者一致。
+
+实现（提交 `4872e21` 起，含 `ai4-4pyb` 取代说明）已由前条记录；本条目逐条核对当前 HEAD 代码后勾选验收：
+
+- AC1 满足：`src/email_service/smtp_sender.py::SmtpMailSender` 实现 `MailSender`；`main.py` 在配置了 SMTP 通道时装配它。
+- AC2 满足：`UnboundMailSender` 保留在 `ports.py`；`main.py` 仅在完全未配置 SMTP 时回退到它（`/health` 需能表达 `not_bound`，即 AC7 要求的状态），该取舍前条 Notes 已记录供复核，不覆盖票面原文。
+- AC3 满足：`OutboundMail` 只剩 5 个内容字段；`tests/test_smtp_sender.py::ReprLeakTests` 断言 `repr` 不含 `smtp`/`secret`/密码。
+- AC4 满足：`SCIWEAVE_EMAIL_SMTP_SECURITY`（无默认值）、`SCIWEAVE_EMAIL_SMTP_TIMEOUT_SECONDS` 进入 `EmailServiceConfig` 与 `.env.example`；既有四个 `SCIWEAVE_EMAIL_SMTP_*` 保留。
+- AC5 满足：`config.py` 对非法/缺失 SECURITY、`ssl`/`starttls` 缺 host/port/username/password 启动即失败并点名缺项；`none` 允许无认证（`test_smtp_config.py` 覆盖）。
+- AC6 满足：`classify_smtp_error` 覆盖表中全部行，未列出 `SMTPException` 落 `permanent_failure`（`ClassificationTests::test_the_whole_smtplib_table` subTest 覆盖 12 行）。
+- AC7 满足：报文经 `EmailMessage` 构造；稳定 `Message-ID` 由 `notification_id` + 收件人派生、后缀取 `from_address` 域名（`test_smtp_sender.py` 断言）。
+- AC8 满足：`/health` 新增 `sender` 分项（`sender_state`），未绑定发送端口时整体 `not_configured`、503，不探活 SMTP（`server.py`）。
+- AC9 满足：`README.md` 第 7/9 行改写为 `SmtpMailSender` 实际行为，原「未绑定占位」表述已移除。
+- AC10 满足：全量 pytest 通过（本轮 `114 passed`，原 97 + ai4-dp9t 新增 17）、`compileall` 通过、`git diff --check` 通过。
+- AC11 未勾：真实 163 SMTP 投递需要授权码，本会话没有凭据且凭据不得入库；该条待有授权码的人补做（命令见前条 Notes）。
+
+另：`ai4-9687`（主题 CRLF 收紧）已独立闭环（提交 `f7ee7fa`），`ai4-dp9t`（Registry 错误码解析）已独立闭环（提交 `dc09e75`）。`ai4-f985` 的修订注记（「首版延期项已落地」）按属人修改权留给 `ai4-f985` 的 assignee（Frank Qi）追加，本票不擅自编辑他人票。

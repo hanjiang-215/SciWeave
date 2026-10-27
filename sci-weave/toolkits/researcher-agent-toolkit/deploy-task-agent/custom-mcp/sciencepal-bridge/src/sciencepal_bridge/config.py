@@ -51,6 +51,10 @@ class BridgeConfig:
     max_artifacts: int
     request_timeout_s: float
     default_agent_id: str | None
+    # ai4-roow: write-back target and the identity the draft is submitted under.
+    draft_buffer_url: str = ""
+    draft_buffer_token: str = ""
+    submitted_by: str = "sciencepal-bridge"
 
     @classmethod
     def from_env(cls, env: dict[str, str] | None = None) -> "BridgeConfig":
@@ -88,6 +92,9 @@ class BridgeConfig:
             max_artifacts=max_artifacts,
             request_timeout_s=30.0,
             default_agent_id=(env.get("SCIENCEPAL_DEFAULT_AGENT_ID") or "").strip() or None,
+            draft_buffer_url=(env.get("SCIWEAVE_DRAFT_BUFFER_URL") or "").strip(),
+            draft_buffer_token=(env.get("SCIWEAVE_DRAFT_BUFFER_TOKEN") or "").strip(),
+            submitted_by=(env.get("SCIWEAVE_BRIDGE_SUBMITTED_BY") or "").strip() or "sciencepal-bridge",
         )
 
     def require_token(self) -> str:

@@ -289,6 +289,83 @@ def test_over_limit_body_is_queryable_invalid_and_not_sent(invalid_mcp):
     assert _status(invalid_mcp, notification_id)["delivery_status"] == "invalid"
 
 
+# ai4-9687: subject must not carry \r or \n (SMTP header injection).
+@pytest.mark.parametrize(
+    "subject",
+    [
+        "hi\r\nBcc: evil@x.test",
+        "line one\nline two",
+        "carriage\rreturn",
+    ],
+)
+def test_subject_with_line_break_is_invalid_and_not_sent(invalid_mcp, subject):
+    notification_id = "ntf-subject-crlf-" + subject.encode().hex()[:12]
+    result = call_tool(
+        invalid_mcp,
+        "gateway",
+        "send_notification",
+        _intent(notification_id=notification_id, subject=subject),
+    )
+    assert error_code(result) == "invalid"
+    assert "evil@x.test" not in result.content[0].text
+    assert invalid_mcp["sender"].sent == []
+    assert _status(invalid_mcp, notification_id)["delivery_status"] == "invalid"
+    assert _status(invalid_mcp, notification_id)["attempt_count"] == 0
+
+
+def test_subject_with_tab_is_still_accepted_and_sent(invalid_mcp):
+    notification_id = "ntf-subject-tab"
+    accepted = body(
+        call_tool(
+            invalid_mcp,
+            "gateway",
+            "send_notification",
+            _intent(notification_id=notification_id, subject="Draft\tready", dedupe_key="subject-tab"),
+        )
+    )
+    assert accepted == {
+        "notification_id": notification_id,
+        "acceptance": "accepted_for_delivery",
+    }
+    deadline = time.time() + 5
+    status = None
+    while time.time() < deadline:
+        status = _status(invalid_mcp, notification_id)
+        if status.get("delivery_status") == "sent":
+            break
+        time.sleep(0.05)
+    assert status["delivery_status"] == "sent"
+    assert len(invalid_mcp["sender"].sent) == 1
+    assert invalid_mcp["sender"].sent[0].subject == "Draft\tready"
+
+
+def test_body_with_line_breaks_is_still_accepted_and_sent(invalid_mcp):
+    notification_id = "ntf-body-multiline"
+    multi_body = "line one\nline two\r\nline three\tend"
+    accepted = body(
+        call_tool(
+            invalid_mcp,
+            "gateway",
+            "send_notification",
+            _intent(notification_id=notification_id, body=multi_body, dedupe_key="body-multiline"),
+        )
+    )
+    assert accepted == {
+        "notification_id": notification_id,
+        "acceptance": "accepted_for_delivery",
+    }
+    deadline = time.time() + 5
+    status = None
+    while time.time() < deadline:
+        status = _status(invalid_mcp, notification_id)
+        if status.get("delivery_status") == "sent":
+            break
+        time.sleep(0.05)
+    assert status["delivery_status"] == "sent"
+    assert len(invalid_mcp["sender"].sent) == 1
+    assert invalid_mcp["sender"].sent[0].body == multi_body
+
+
 @pytest.mark.parametrize(
     ("failure", "code"),
     [

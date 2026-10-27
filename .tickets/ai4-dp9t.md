@@ -1,6 +1,6 @@
 ---
 id: ai4-dp9t
-status: open
+status: closed
 deps: []
 links: []
 created: 2026-10-26T14:05:42Z
@@ -64,13 +64,13 @@ p:missing    -> EmailServiceError code=registry_unavailable    (Registry 实际�
 
 ## Acceptance Criteria
 
-- [ ] `_error_code` 能从 `Error executing tool get_principal_contact: <code>` 形式的文本尾部取出码，并映射为 `principal_not_found`、`contact_missing`、`contact_disabled` 三者之一。
-- [ ] `denied` 与 `forbidden` 经文本路径映射为 `registry_denied`，不再落成 `registry_unavailable`。
-- [ ] 未知后缀、多行 pydantic 校验文本、`text` 不是字符串、`content` 为空，四种情况都返回 `registry_unavailable` 且不抛异常。
-- [ ] 现有 `{"error": {"code": ...}}` JSON 负载路径保持不变，既有测试不改。
-- [ ] 新增测试直接喂真实 Registry 的文本形状（不是 JSON），覆盖上面四类错误码。
-- [ ] 新增一个使用真实 Registry 服务的集成测试：登记 `active` 有邮箱、`active` 无邮箱、`disabled` 三种 principal，断言 resolver 分别返回地址、`contact_missing`、`contact_disabled`。
-- [ ] `uv run --locked --env-file .env.example pytest -q` 全绿；`python -m compileall -q src tests` 通过；`git diff --check` 通过。
+- [x] `_error_code` 能从 `Error executing tool get_principal_contact: <code>` 形式的文本尾部取出码，并映射为 `principal_not_found`、`contact_missing`、`contact_disabled` 三者之一。
+- [x] `denied` 与 `forbidden` 经文本路径映射为 `registry_denied`，不再落成 `registry_unavailable`。
+- [x] 未知后缀、多行 pydantic 校验文本、`text` 不是字符串、`content` 为空，四种情况都返回 `registry_unavailable` 且不抛异常。
+- [x] 现有 `{"error": {"code": ...}}` JSON 负载路径保持不变，既有测试不改。
+- [x] 新增测试直接喂真实 Registry 的文本形状（不是 JSON），覆盖上面四类错误码。
+- [x] 新增一个使用真实 Registry 服务的集成测试：登记 `active` 有邮箱、`active` 无邮箱、`disabled` 三种 principal，断言 resolver 分别返回地址、`contact_missing`、`contact_disabled`。
+- [x] `uv run --locked --env-file .env.example pytest -q` 全绿；`python -m compileall -q src tests` 通过；`git diff --check` 通过。
 
 ## Not in Scope
 
@@ -108,3 +108,22 @@ registry_client._error_code(None)     # -> 'registry_unavailable'  仍是要修�
 与 `ai4-4pyb`（hanjiang，提交 `e0c1013`）不重复：那张修的是发送端口，`_result_payload` 与 `_error_code` 一行未动。
 
 正文、验收标准与 Not in Scope 保持原样。
+
+**2026-10-27 实现（hanjiang）**
+
+身份核对：assignee `hanjiang`、分支 `feature/hanjiang`、`git config user.name=hanjiang`，三者一致。
+
+提交 `dc09e75`（`fix(email-service): parse Registry error codes from plain-text tail`）：
+
+- `registry_client.py` 新增 `_error_code_from_text(text)`：从 `Error executing tool get_principal_contact: <code>` 形状的文本尾部（最后一个 `": "` 之后）取码，仅当后缀命中已知码集合时采用（`principal_not_found`/`contact_missing`/`contact_disabled`/`address_mismatch` 原样返回，`unauthorized`/`denied`/`forbidden`/`permission_denied` 映射为 `registry_denied`），其余一律 `registry_unavailable` 且不抛异常。
+- `resolve` 的 `isError` 分支：payload 为 dict 时走原 JSON 路径（`_error_code`），否则从 `content[0].text` 走文本路径（新增 `_first_text` 辅助）。JSON 路径逻辑未动，既有测试零改动。
+- 测试（`tests/test_registry_client.py` 新增 17 项）：文本尾部取码 6 例（含 denied/forbidden/unauthorized → `registry_denied`）、未知/多行/无分隔符/空串/None/空白 6 例回落 `registry_unavailable`、真实文本形状经 resolver 的 `contact_missing`/`denied`/多行回落 3 例、无 content 回落 1 例、真实 Streamable HTTP 集成测试 1 例（active 有邮箱 → 地址，disabled → `contact_disabled`，missing → `principal_not_found`）。
+
+验证：
+
+```text
+uv run --env-file .env.example pytest -q tests/test_registry_client.py → 25 passed
+uv run --env-file .env.example pytest -q（email-service 全量）→ 114 passed（原 97 + 新增 17）
+python -m compileall -q src tests → 0
+git diff --check → 0
+```

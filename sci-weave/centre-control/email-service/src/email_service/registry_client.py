@@ -39,7 +39,7 @@ class RegistryRecipientResolver:
 
         payload = _result_payload(result)
         if getattr(result, "isError", False):
-            raise EmailServiceError(_error_code(payload))
+            raise EmailServiceError(_error_code(payload) if isinstance(payload, dict) else _error_code_from_text(_first_text(result)))
         if not isinstance(payload, dict):
             raise EmailServiceError("registry_unavailable")
         error = payload.get("error")
@@ -69,6 +69,14 @@ def _result_payload(result: Any) -> Any:
     return None
 
 
+def _first_text(result: Any) -> str | None:
+    for item in getattr(result, "content", ()):
+        text = getattr(item, "text", None)
+        if isinstance(text, str):
+            return text
+    return None
+
+
 def _error_code(payload: Any) -> str:
     if isinstance(payload, dict):
         error = payload.get("error")
@@ -77,6 +85,19 @@ def _error_code(payload: Any) -> str:
         if isinstance(payload.get("code"), str):
             return _stable_error(payload["code"])
     return "registry_unavailable"
+
+
+def _error_code_from_text(text: str | None) -> str:
+    # ai4-dp9t: the real Registry returns a plain-text error, e.g.
+    # "Error executing tool get_principal_contact: contact_missing", not a JSON
+    # payload. Take the suffix after the last ": " and adopt it only when it is
+    # a known code; anything else (unknown suffix, multi-line pydantic
+    # validation text, missing/empty content) falls back to registry_unavailable
+    # without raising.
+    if not isinstance(text, str) or ": " not in text:
+        return "registry_unavailable"
+    suffix = text.rsplit(": ", 1)[-1].strip()
+    return _stable_error(suffix)
 
 
 def _stable_error(code: str) -> str:
