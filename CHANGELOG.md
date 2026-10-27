@@ -91,6 +91,7 @@
 - *(demo-stack)* Compose the dashboard chain with one command
 - *(sciencepal)* Make bridge harness-agnostic with CLI and HTTP MCP
 - *(sciencepal-bridge)* Write execution reports into the draft buffer
+- *(centre-stack)* Run every central service in one container
 
 ### 🐛 Bug Fixes
 
@@ -138,6 +139,9 @@
 - *(ci)* Count failing stages correctly and stop cache-dependent compileall
 - *(buffer)* Stop the demo switch from reporting readiness
 - *(scripts)* Print a stop hint that works without pwsh
+- *(mapping)* Publish governance events when a kafka bootstrap is configured
+- *(events)* Publish wiki governance events without blocking on the broker
+- *(coordinator)* Keep polling when the broker is briefly unreachable
 
 ### 📚 Documentation
 
@@ -473,6 +477,10 @@
 - *(toolkit)* Document the service-template role launch commands
 - *(message-envelope)* Record that no production code calls the package yet
 - *(review)* Record the evening remediation of the 11 findings
+- *(changelog)* Regenerate for the 2026-10-27 branch state
+- *(deploy)* Record the single-container decision for the central services
+- *(mcp)* Stop claiming the centre capability unlocks write tools
+- *(deploy)* Record the follow-up fixes for wiki events and broker outages
 
 ### 🚜 Refactor
 
@@ -547,6 +555,8 @@
 - *(sciencepal)* Mark shell wrapper executable
 - *(ignore)* Exclude DSH skill copies under .dsh/
 - *(tickets)* File and close the four 2026-10-27 review fixes
+- *(tickets)* Close ai4-e1jk after the container run verification
+- *(tickets)* Link the deployment PR into the four tickets
 
 ### 💼 Other
 
