@@ -2,7 +2,7 @@
 id: ai4-g1km
 status: closed
 deps: []
-links: [ai4-58d0]
+links: [ai4-58d0, ai4-grlc]
 created: 2026-10-26T19:18:05Z
 type: feature
 priority: 2
