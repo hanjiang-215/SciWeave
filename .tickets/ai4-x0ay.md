@@ -138,6 +138,8 @@ _ALLOWED_KINDS = {"mapping": {"mapping_change"}, "wiki": {"wiki_document"}}
 
 **已知风险：** `ai4-dp9t`（open，hanjiang）正在修「Registry 的三个永久错误码全被压成 `registry_unavailable`」。在它修好之前，通知失败看不出真实原因，本票侧只能如实记 `notification_failed`，**不做重试风暴**。
 
+> 修订（2026-10-27）：`ai4-dp9t` 已关闭，提交 `dc09e75 fix(email-service): parse Registry error codes from plain-text tail`。上面这条风险随之解除：`contact_missing` / `contact_disabled` / `principal_not_found` / `denied` 现在能如实透出，通知失败可以按真实错误码分类，不需要再退化成「一律记 `notification_failed`」。原文保留作历史记录。
+
 ## 六、`allowed_mcp_resources` 要能真的变成 fast-agent 的 MCP 配置
 
 `config.py` 的 `workflow_to_fast_agent_input()` 已经能把 agent 的 `allowed_mcp_resources` 转成 `{"servers": [...]}`，但 `fast_agent_runtime.py:168` 生成的 `fast-agent.yaml` 只有两行：
