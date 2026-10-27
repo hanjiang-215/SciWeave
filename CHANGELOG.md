@@ -488,6 +488,9 @@
 - *(tickets)* Record the verified fix approach for the cross-platform escape
 - *(tickets)* Check the first three acceptance items on ai4-0vnn
 - *(demo)* Point the evidence card at the ready-to-run SciencePal package
+- *(changelog)* Regenerate for the 2026-10-28 review round
+- *(tickets)* Record the ready-to-run SciencePal package on ai4-aaff
+- *(demo)* Note the ready-to-run SciencePal package in the demo prerequisites
 
 ### 🚜 Refactor
 
@@ -565,6 +568,7 @@
 - *(tickets)* Close ai4-e1jk after the container run verification
 - *(tickets)* Link the deployment PR into the four tickets
 - *(tickets)* File the Linux cross-platform verification evidence linked to ai4-grlc
+- *(tickets)* Adopt the develop version of ai4-grlc after its scope narrowing
 
 ### 💼 Other
 
