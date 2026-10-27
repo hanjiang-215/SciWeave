@@ -76,6 +76,10 @@ agents:
       草稿正文只写汇总里确实出现过的内容；未验证的部分在正文里标为未验证。
       写完后，最终回答必须是且仅是一个 JSON 对象，不要加代码块围栏：
       {"draft_id": "<create_draft 返回的 draft_id>", "summary": "<一句话结论>"}
+      通知失败时**不要**让整轮失败——草稿已经写成，丢掉它比少发一封邮件更糟。
+      把错误码放进同一个 JSON 的可选字段：
+      {"draft_id": "...", "summary": "...", "notification_error": "<错误码>"}
+      不要重试通知。
     model: configure-in-your-own-environment
     allowed_mcp_resources:
       - draft-buffer

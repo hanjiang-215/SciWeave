@@ -66,7 +66,7 @@ def task_instruction(row: dict) -> str:
 WorkflowCallable = Callable[..., Any]
 
 
-def _workflow_outcome(row: dict, prompt: str, workflow: WorkflowCallable) -> tuple[str, str, str | None]:
+def _workflow_outcome(row: dict, prompt: str, workflow: WorkflowCallable) -> tuple[str, str, str | None, str | None]:
     """Run one row through a workflow; returns ``(status, draft_id, error_code)``.
 
     The workflow writes its own draft — `WorkflowExecutor` calls `final_writer`
@@ -77,8 +77,13 @@ def _workflow_outcome(row: dict, prompt: str, workflow: WorkflowCallable) -> tup
     result = workflow(prompt, row["target_id"], row["dedupe_key"])
     status = str(getattr(result, "status", "failed"))
     if status != "completed":
-        return status, "", getattr(result, "error_code", None)
-    return "completed", getattr(result, "draft_id", None), None
+        return status, "", getattr(result, "error_code", None), None
+    return (
+        "completed",
+        getattr(result, "draft_id", None),
+        None,
+        getattr(result, "notification_error", None),
+    )
 
 
 def run_one_queued(
@@ -118,13 +123,14 @@ def run_one_queued(
         command_text=task_instruction(row),
     )
     if workflow is not None:
-        status, draft_id, error_code = _workflow_outcome(
+        status, draft_id, error_code, notification_error = _workflow_outcome(
             row, request.command_text, workflow
         )
         if status != "completed":
             return [_result(row, status, error_code=error_code)]
         runtime.inbox.mark_processed(row["dedupe_key"])
-        return [_result(row, "completed", draft_id=draft_id)]
+        extra = {"notification_error": notification_error} if notification_error else {}
+        return [_result(row, "completed", draft_id=draft_id, **extra)]
 
     outcome = agent.run(request)
     status = getattr(outcome, "status", "failed")

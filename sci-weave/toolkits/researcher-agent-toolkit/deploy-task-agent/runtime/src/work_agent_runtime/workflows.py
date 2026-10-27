@@ -33,6 +33,10 @@ class WorkflowRunResult:
     error_code: str | None = None
     failed_agent: str | None = None
     draft_id_source: str | None = None
+    #: The notification error the agent reported, if it reported one. The
+    #: runtime cannot see the agent's MCP call, so this is a relayed claim — the
+    #: same standing as `agent_reported` for `draft_id`.
+    notification_error: str | None = None
     execution_record_count: int = 1
     worker_lease_count: int = 1
 
@@ -94,7 +98,11 @@ class WorkflowExecutor:
                 if reported is None:
                     return WorkflowRunResult.failed("draft_id_missing", workflow.final_writer)
                 return WorkflowRunResult(
-                    "completed", final, reported, draft_id_source=DRAFT_ID_AGENT
+                    "completed",
+                    final,
+                    reported,
+                    draft_id_source=DRAFT_ID_AGENT,
+                    notification_error=reported_notification_error(final),
                 )
             draft_id = self.drafts.write(target_id=target_id, payload=final)
         except Exception:
@@ -203,15 +211,8 @@ def reported_draft_id(output: str) -> str | None:
     else means the model made something up, and storing an invented id would
     make the execution look finished while pointing at no draft.
     """
-    text = output.strip()
-    if text.startswith("```"):
-        text = text.split("\n", 1)[-1] if "\n" in text else text
-        text = text.rsplit("```", 1)[0].strip()
-    try:
-        document = json.loads(text)
-    except (json.JSONDecodeError, TypeError):
-        return None
-    if not isinstance(document, dict):
+    document = _contract_object(output)
+    if document is None:
         return None
     value = document.get("draft_id")
     if not isinstance(value, str) or not value.strip():
@@ -221,6 +222,36 @@ def reported_draft_id(output: str) -> str | None:
     except ValueError:
         return None
     return str(parsed)
+
+
+def reported_notification_error(output: str) -> str | None:
+    """The `notification_error` an agent reported, or ``None``.
+
+    A notification failure must not fail the run: the draft exists, and losing
+    it because a mailbox was unreachable would be worse than a missing email.
+    But it must not disappear either, so the writer's JSON contract carries an
+    optional field and this reads it back.
+    """
+    document = _contract_object(output)
+    if document is None:
+        return None
+    value = document.get("notification_error")
+    if not isinstance(value, str) or not value.strip():
+        return None
+    return value.strip()[:200]
+
+
+def _contract_object(output: str) -> dict | None:
+    """The JSON object an agent's final answer is supposed to be, if it is one."""
+    text = output.strip()
+    if text.startswith("```"):
+        text = text.split("\n", 1)[-1] if "\n" in text else text
+        text = text.rsplit("```", 1)[0].strip()
+    try:
+        document = json.loads(text)
+    except (json.JSONDecodeError, TypeError):
+        return None
+    return document if isinstance(document, dict) else None
 
 
 class _ChildFailure(Exception):

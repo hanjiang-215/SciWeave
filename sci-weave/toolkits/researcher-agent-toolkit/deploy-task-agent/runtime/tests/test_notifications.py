@@ -146,6 +146,12 @@ class BriefTests(unittest.TestCase):
         """A retry storm against a broken Registry is worse than one failure."""
         self.assertIn("不要重试", notification_brief(execution_id="e", task_node_id="n"))
 
+    def test_the_brief_keeps_the_draft_when_the_mail_fails(self) -> None:
+        """Losing a finished draft over an unreachable mailbox would be worse."""
+        brief = notification_brief(execution_id="e", task_node_id="n")
+        self.assertIn("notification_error", brief)
+        self.assertIn("也不要让整轮执行失败", brief)
+
 
 class WriterPromptTests(unittest.TestCase):
     """The brief is appended only for a writer that actually holds the card."""

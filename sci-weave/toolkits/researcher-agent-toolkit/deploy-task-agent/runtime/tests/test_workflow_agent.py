@@ -257,6 +257,81 @@ class DraftWriterOwnershipTests(unittest.TestCase):
         self.assertEqual(result.draft_id, identifier)
 
 
+class NotificationErrorRelayTests(unittest.TestCase):
+    """A failed notification must be visible without failing the run."""
+
+    def _run(self, answer: str):
+        from work_agent_runtime.workflows import WorkflowExecutor
+
+        config = load_config(
+            {
+                "agents": {
+                    "entry": {
+                        "identity": "e",
+                        "instruction": "e",
+                        "model": "fake",
+                        "allowed_mcp_resources": [],
+                        "resources": [],
+                    },
+                    "writer": {
+                        "identity": "w",
+                        "instruction": "w",
+                        "model": "fake",
+                        "allowed_mcp_resources": ["draft-buffer"],
+                        "resources": [],
+                    },
+                },
+                "workflows": {
+                    "main": {
+                        "type": "Orchestrator",
+                        "entry_agent": "entry",
+                        "sub_agents": ["entry"],
+                        "summarizer": "entry",
+                        "final_writer": "writer",
+                    }
+                },
+            },
+            known_mcp_resources={"draft-buffer"},
+        )
+
+        class _Drafts:
+            def write(self, *, target_id, payload):  # pragma: no cover - must not run
+                raise AssertionError("the writer owns the draft box")
+
+        def agent(name, prompt, tools=None):
+            return answer if name == "writer" else "intermediate"
+
+        return WorkflowExecutor(config, agent, _Drafts()).run("main", "go", target_id="node-1")
+
+    def _answer(self, **extra) -> str:
+        import json
+
+        return json.dumps(
+            {"draft_id": "3f12df3e-1111-4222-8333-444455556666", "summary": "ok", **extra}
+        )
+
+    def test_a_reported_notification_error_is_relayed(self) -> None:
+        result = self._run(self._answer(notification_error="contact_missing"))
+        self.assertEqual(result.status, "completed")
+        self.assertEqual(result.notification_error, "contact_missing")
+
+    def test_a_successful_notification_reports_nothing(self) -> None:
+        self.assertIsNone(self._run(self._answer()).notification_error)
+
+    def test_a_missing_notification_does_not_fail_the_run(self) -> None:
+        """The draft exists; losing it because a mailbox was unreachable is worse."""
+        result = self._run(self._answer(notification_error="recipient_resolver_unavailable"))
+        self.assertEqual(result.status, "completed")
+        self.assertIsNotNone(result.draft_id)
+
+    def test_a_non_string_error_is_ignored_rather_than_stringified(self) -> None:
+        self.assertIsNone(self._run(self._answer(notification_error={"code": "x"})).notification_error)
+
+    def test_a_long_error_is_truncated(self) -> None:
+        result = self._run(self._answer(notification_error="e" * 500))
+        self.assertEqual(len(result.notification_error), 200)
+
+
 class DraftIdParsingTests(unittest.TestCase):
     def test_a_canonical_uuid_is_returned(self) -> None:
         from work_agent_runtime.workflows import reported_draft_id

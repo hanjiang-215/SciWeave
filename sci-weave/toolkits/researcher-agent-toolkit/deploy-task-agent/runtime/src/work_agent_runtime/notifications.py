@@ -158,7 +158,8 @@ def notification_brief(*, execution_id: str, task_node_id: str) -> str:
         f"{json.dumps(example, ensure_ascii=False, indent=2)}\n"
         "recipients 里的 principal_id 用映射读取结果中该节点的 task_owner_id。\n"
         "subject / body 用纯文本，不要写 HTML 标签或控制字符。\n"
-        "通知失败时如实报告错误码，不要重试。"
+        "通知失败时把错误码放进回答的 notification_error 字段，不要重试，\n"
+        "也不要让整轮执行失败——草稿已经写成，丢掉它比少发一封邮件更糟。"
     )
 
 __all__ = [
