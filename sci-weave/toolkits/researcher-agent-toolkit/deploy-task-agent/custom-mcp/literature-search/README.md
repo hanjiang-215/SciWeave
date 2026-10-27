@@ -31,6 +31,22 @@ cp .env.example .env    # 全空也能跑；两项端点留空即用公开地址
 | `LITERATURE_CONTACT_EMAIL` | 空 | 写进 `User-Agent` 的 `mailto:`；Crossref 建议填写 |
 | `LITERATURE_TIMEOUT_SECONDS` | `10` | 单次请求超时，取值 1–30 |
 
+## 依赖
+
+| 包 | 约束 | 锁定版本 | 许可证 | 用途 |
+| --- | --- | --- | --- | --- |
+| `mcp` | `>=2.3,<3` | 2.3.0 | MIT | stdio MCP server（与 `custom-mcp/sciencepal-bridge` 同约束） |
+| `httpx` | `>=0.28,<1` | 0.28.1 | BSD-3-Clause | 访问 arXiv / Crossref |
+
+`docs/DEPENDENCIES.md` 第 14 行明确写了「Python 服务、MCP、Vue 前端及其业务依赖不在本文定义」，所以版本、许可证与验证命令记在这里，并由 `pyproject.toml` + `uv.lock` 声明。
+
+安装验证：
+
+```bash
+uv sync --frozen        # 按 uv.lock 装齐
+uv run python -c "import mcp, httpx; print(mcp.__name__, httpx.__version__)"
+```
+
 ## 最小验证
 
 ```bash
