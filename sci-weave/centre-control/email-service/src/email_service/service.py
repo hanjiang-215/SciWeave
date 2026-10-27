@@ -376,10 +376,6 @@ class EmailDeliveryService:
                         subject=subject,
                         body=body,
                         notification_id=notification_id,
-                        smtp_host=self.mailbox.smtp_host,
-                        smtp_port=self.mailbox.smtp_port,
-                        smtp_username=self.mailbox.smtp_username,
-                        smtp_password=self.mailbox.smtp_password,
                     )
                 )
             except TransientSenderFailure:

@@ -125,6 +125,7 @@ def _configure(monkeypatch: pytest.MonkeyPatch, delivery_path: Path, audit_path:
         "SCIWEAVE_EMAIL_SMTP_PORT": str(SMTP_PORT),
         "SCIWEAVE_EMAIL_SMTP_USERNAME": SMTP_USERNAME,
         "SCIWEAVE_EMAIL_SMTP_PASSWORD": SMTP_PASSWORD,
+        "SCIWEAVE_EMAIL_SMTP_SECURITY": "starttls",
         "SCIWEAVE_EMAIL_TOKENS_JSON": json.dumps(
             {"gateway": {"caller_id": "service:task-gateway", "caller_type": "service"}}
         ),
