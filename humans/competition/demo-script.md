@@ -6,6 +6,7 @@
 
 - SciencePal 项目/工作流链接：待回填
 - 固定 T1/T2 脚本与参数（`check_iris_input.py`、`run_iris_baseline.py`）
+- **一键执行入口已就绪**：`demo-evidence/sciencepal-runs/run_t1_t2_on_sciencepal.py`（含 README）把两个脚本 + 锁定数据快照交给 SciencePal 沙箱执行、下载产物、核对后落盘 `sciencepal_t1_t2_evidence.json`；已用假 SciencePal 服务本地验证全流程，平台网络恢复即可实跑
 - 真实平台治理链路已可独立实演（不依赖 SciencePal）：`run_iris_mapping_pipeline.py`，前置为本机 TerminusDB 已启动、凭据经环境变量提供
 - 准备好 2 个窗口：SciencePal、终端（终端里同时展示治理链路输出与 TerminusDB 查询结果）
 
