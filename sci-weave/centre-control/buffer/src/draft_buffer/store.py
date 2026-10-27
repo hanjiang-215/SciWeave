@@ -52,9 +52,30 @@ class TerminusDBDraftStore:
             {"@type":"Class","@id":"NamespaceConfig","@key":{"@type":"Random"},"namespace":"xsd:string","reviewer_ids":{"@type":"Set","@class":"xsd:string"},"allowed_kinds":{"@type":"Set","@class":"xsd:string"},"promotion_target":dict(optional_string)},
             {"@type":"Class","@id":"Operation","@key":{"@type":"Random"},"operation_id":"xsd:string","idempotency_key":"xsd:string","operation":"xsd:string","request_digest":"xsd:string","result_json":"xsd:string"},
         ]
-        status, _, _ = self.request("POST", f"/api/document/{quote('admin', safe='')}/{quote(self.database, safe='')}?graph_type=schema&author=sciweave&message=initialize-buffer-schema", payload)
-        if status not in (200, 201, 409):
-            raise BufferError("schema_initialization_failed", f"TerminusDB schema initialization returned HTTP {status}")
+        status, _, body = self.request("POST", f"/api/document/{quote('admin', safe='')}/{quote(self.database, safe='')}?graph_type=schema&author=sciweave&message=initialize-buffer-schema", payload)
+        if status in (200, 201, 409):
+            return
+        # TerminusDB answers 400 (api:DocumentIdAlreadyExists) rather than 409 when
+        # the classes are already in the schema, so a restart against an existing
+        # database used to look like a fatal schema error. Only accept that answer
+        # once the schema really holds every class we need.
+        if status == 400 and self._schema_is_initialized(payload):
+            return
+        raise BufferError("schema_initialization_failed", f"TerminusDB schema initialization returned HTTP {status}")
+
+    def _schema_is_initialized(self, payload: list[dict[str, Any]]) -> bool:
+        status, _, body = self.request("GET", f"/api/document/{quote('admin', safe='')}/{quote(self.database, safe='')}?graph_type=schema&as_list=true")
+        if not 200 <= status < 300:
+            return False
+        try:
+            present = {
+                item.get("@id")
+                for item in json.loads(body.decode("utf-8"))
+                if isinstance(item, dict)
+            }
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            return False
+        return {item["@id"] for item in payload} <= present
 
     def read_all(self) -> list[dict[str, Any]]:
         status, headers, body = self.request("GET", f"/api/document/admin/{quote(self.database, safe='')}/local/branch/main?as_list=true&graph_type=instance")
