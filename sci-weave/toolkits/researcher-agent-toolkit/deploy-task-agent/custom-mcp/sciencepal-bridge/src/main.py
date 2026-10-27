@@ -1,7 +1,7 @@
 """stdio MCP surface for the SciencePal bridge.
 
 Tools are intentionally small and JSON-string based so any MCP client can call
-them without generated schemas: start, status, collect, cancel, agents.
+them without generated schemas: start, status, collect, cancel, agents, report.
 """
 
 from __future__ import annotations
@@ -126,6 +126,61 @@ def sciencepal_cancel(run_id: str) -> str:
 @server.tool(description="List SciencePal agents visible to the configured access token.")
 def sciencepal_agents() -> str:
     return _guard(lambda: _get_service().list_agents())
+
+
+@server.tool(
+    description=(
+        "Build the ExecutionReport for one run from the local ledger and collected "
+        "artifacts. With write_draft=true it also opens a mapping_change draft in the "
+        "central draft buffer and returns draft_id plus audit correlation ids. It never "
+        "writes the formal Research Mapping, never submits a candidate and never formalizes."
+    )
+)
+def sciencepal_report(
+    run_id: str,
+    task_node_id: str,
+    execution_id: str = "",
+    summary: str = "",
+    acceptance_json: str = "",
+    findings_json: str = "",
+    limitations_json: str = "",
+    route_change_json: str = "",
+    write_draft: bool = False,
+    idempotency_key: str = "",
+) -> str:
+    def action() -> dict[str, Any]:
+        def _list(raw: str, label: str) -> list[Any]:
+            if not raw.strip():
+                return []
+            try:
+                value = json.loads(raw)
+            except json.JSONDecodeError:
+                raise SciencePalError("invalid_arguments", f"{label} must be a JSON array") from None
+            if not isinstance(value, list):
+                raise SciencePalError("invalid_arguments", f"{label} must be a JSON array")
+            return value
+
+        try:
+            route_change = json.loads(route_change_json) if route_change_json.strip() else None
+        except json.JSONDecodeError:
+            raise SciencePalError("invalid_arguments", "route_change_json must be a JSON object") from None
+        if route_change is not None and not isinstance(route_change, dict):
+            raise SciencePalError("invalid_arguments", "route_change_json must be a JSON object")
+
+        return _get_service().report(
+            run_id,
+            task_node_id=task_node_id,
+            execution_id=execution_id,
+            summary=summary,
+            acceptance=_list(acceptance_json, "acceptance_json"),
+            findings=_list(findings_json, "findings_json"),
+            limitations=_list(limitations_json, "limitations_json"),
+            route_change=route_change,
+            write_draft=write_draft,
+            idempotency_key=idempotency_key,
+        )
+
+    return _guard(action)
 
 
 def main() -> None:

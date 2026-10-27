@@ -18,7 +18,9 @@ from typing import Any
 
 from .client import HttpSciencePalClient, SciencePalError
 from .config import BridgeConfig, ConfigError
+from .report import report_from_run_store
 from .store import RunStore
+from .writeback import DraftBufferWriteBack
 
 TERMINAL_STATUSES = {"completed", "failed", "stopped"}
 
@@ -327,6 +329,65 @@ class SciencePalService:
             "manifest_path": str(manifest_path),
             "reused": False,
         }
+
+    def report(
+        self,
+        run_id: str,
+        *,
+        task_node_id: str,
+        execution_id: str | None = None,
+        summary: str = "",
+        acceptance: list[dict[str, Any]] | None = None,
+        findings: list[str] | None = None,
+        limitations: list[str] | None = None,
+        route_change: dict[str, Any] | None = None,
+        write_draft: bool = False,
+        idempotency_key: str | None = None,
+    ) -> dict[str, Any]:
+        """Assemble an ExecutionReport, optionally writing it to the draft buffer (ai4-roow).
+
+        The report is built from the local run ledger and collected artifacts, so
+        a completed report never lacks a run id or artifact hashes.  With
+        ``write_draft`` the report becomes a ``mapping_change`` draft in the
+        central buffer; the formal map is only ever changed by a human-submitted
+        candidate that the Project Owner formalizes.
+        """
+        record = self._require_run(run_id)
+        report = report_from_run_store(
+            self.store,
+            run_id,
+            task_node_id=task_node_id,
+            execution_id=(execution_id or "").strip() or record.get("execution_id") or "",
+            summary=summary,
+            acceptance=acceptance or [],
+            findings=findings,
+            limitations=limitations,
+            route_change=route_change,
+        )
+        result: dict[str, Any] = {"report": report}
+        if not write_draft:
+            return result
+
+        key = (idempotency_key or "").strip() or f"{report['execution_id']}:{run_id}"
+        write_back = DraftBufferWriteBack(
+            self.config.draft_buffer_url,
+            self.config.draft_buffer_token,
+            self.config.request_timeout_s,
+        )
+        draft = write_back.create_draft(
+            report=report,
+            submitted_by=self.config.submitted_by,
+            idempotency_key=key,
+        )
+        result["draft"] = draft
+        result["audit"] = {
+            "execution_id": report["execution_id"],
+            "run_id": report["sciencepal"]["run_id"],
+            "draft_id": draft.get("draft_id"),
+            "candidate_id": None,
+            "formal_revision_id": None,
+        }
+        return result
 
     def cancel(self, run_id: str) -> dict[str, Any]:
         self._require_token()

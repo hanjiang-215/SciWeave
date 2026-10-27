@@ -160,6 +160,59 @@ class ServiceTests(unittest.TestCase):
         result = self.service.list_agents()
         self.assertEqual(result["agents"][0]["id"], "agent-general")
 
+    def test_report_without_write_draft_returns_validated_report(self) -> None:
+        # ai4-roow: report is assembled from the ledger + collected artifact hashes.
+        started = self.service.start(instruction="run", idempotency_key="exec-report")
+        self.store.update_status(started["run_id"], "completed")
+        self.service.collect(started["run_id"])
+
+        result = self.service.report(
+            started["run_id"],
+            task_node_id="task:t1",
+            execution_id="exec-1",
+            summary="T1 输入检查通过",
+            acceptance=[{"criterion": "150 行", "met": True, "evidence": None}],
+        )
+
+        report = result["report"]
+        self.assertEqual(report["status"], "completed")
+        self.assertEqual(report["task_node_id"], "task:t1")
+        self.assertEqual(report["execution_id"], "exec-1")
+        self.assertEqual(report["sciencepal"]["run_id"], started["run_id"])
+        self.assertEqual(len(report["artifacts"]), 2)
+        self.assertTrue(all(item["sha256"] for item in report["artifacts"]))
+        self.assertNotIn("draft", result)
+
+    def test_report_on_a_run_without_artifacts_cannot_be_completed(self) -> None:
+        # ai4-roow: no artifact hash means the report may not claim completed.
+        started = self.service.start(instruction="run", idempotency_key="exec-no-artifacts")
+        self.store.update_status(started["run_id"], "completed")
+
+        with self.assertRaisesRegex(ValueError, "artifact sha256"):
+            self.service.report(started["run_id"], task_node_id="task:t1", execution_id="exec-1")
+
+    def test_failed_run_report_keeps_run_id_without_artifacts(self) -> None:
+        started = self.service.start(instruction="run", idempotency_key="exec-failed")
+        self.store.update_status(started["run_id"], "failed", error="sciencepal_api_error")
+
+        report = self.service.report(started["run_id"], task_node_id="task:t1", execution_id="exec-1")["report"]
+        self.assertEqual(report["status"], "failed")
+        self.assertEqual(report["sciencepal"]["run_id"], started["run_id"])
+        self.assertEqual(report["artifacts"], [])
+
+    def test_write_draft_without_buffer_configuration_is_reported(self) -> None:
+        started = self.service.start(instruction="run", idempotency_key="exec-write-missing")
+        self.store.update_status(started["run_id"], "completed")
+        self.service.collect(started["run_id"])
+
+        with self.assertRaisesRegex(Exception, "draft buffer"):
+            self.service.report(
+                started["run_id"],
+                task_node_id="task:t1",
+                execution_id="exec-1",
+                write_draft=True,
+            )
+
 
 class ConfigTests(unittest.TestCase):
     def test_requires_token_on_use(self) -> None:

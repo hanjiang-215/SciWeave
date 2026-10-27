@@ -72,6 +72,19 @@ def build_parser() -> argparse.ArgumentParser:
     cancel.add_argument("run_id")
     cancel.set_defaults(handler=_cancel)
 
+    report = sub.add_parser("report", help="build an ExecutionReport, optionally writing a mapping draft")
+    report.add_argument("run_id")
+    report.add_argument("--task-node-id", required=True)
+    report.add_argument("--execution-id", default="")
+    report.add_argument("--summary", default="")
+    report.add_argument("--acceptance", action="append", default=[], metavar="CRITERION=MET")
+    report.add_argument("--finding", action="append", default=[])
+    report.add_argument("--limitation", action="append", default=[])
+    report.add_argument("--route-change-file", default="")
+    report.add_argument("--write-draft", action="store_true")
+    report.add_argument("--idempotency-key", default="")
+    report.set_defaults(handler=_report)
+
     return parser
 
 
@@ -110,6 +123,48 @@ def _collect(args: argparse.Namespace) -> int:
 
 def _cancel(args: argparse.Namespace) -> int:
     return _run(lambda service: service.cancel(args.run_id))
+
+
+def _acceptance(items: list[str]) -> list[dict[str, Any]]:
+    parsed: list[dict[str, Any]] = []
+    for item in items:
+        criterion, _, met = item.partition("=")
+        if not criterion.strip():
+            raise ConfigError("invalid_config", "--acceptance needs CRITERION=MET")
+        parsed.append(
+            {
+                "criterion": criterion.strip(),
+                "met": met.strip().lower() not in {"false", "no", "0", ""},
+                "evidence": None,
+            }
+        )
+    return parsed
+
+
+def _route_change(path: str) -> dict[str, Any] | None:
+    if not path:
+        return None
+    payload = json.loads(Path(path).read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ConfigError("invalid_config", "--route-change-file must contain a JSON object")
+    return payload
+
+
+def _report(args: argparse.Namespace) -> int:
+    return _run(
+        lambda service: service.report(
+            args.run_id,
+            task_node_id=args.task_node_id,
+            execution_id=args.execution_id,
+            summary=args.summary,
+            acceptance=_acceptance(args.acceptance),
+            findings=args.finding,
+            limitations=args.limitation,
+            route_change=_route_change(args.route_change_file),
+            write_draft=args.write_draft,
+            idempotency_key=args.idempotency_key,
+        )
+    )
 
 
 def _run(action) -> int:
