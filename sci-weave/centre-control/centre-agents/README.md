@@ -103,12 +103,25 @@ Centre Agent 不自行定义第二套审计事件，也不直接写领域治理�
 
 ## 当前项目结构
 
-本目录包含四个独立 Python 子项目：
+本目录包含四个独立 Python 子项目，以及三份**不属于任何子项目**的能力描述：
 
 - `gateway/mcp`：常驻 MCP 接入与处置面；
 - `gateway/subscriber`：队列订阅器,出站连接消息队列并驱动 Worker；
 - `gateway/ingest`：后续迁移为候选事件订阅角色的骨架；
-- `worker`：短生命周期 Worker。
+- `worker`：短生命周期 Worker；
+- `definitions/`：Agent 定义层。`centre-prereview.yaml` 声明一个 `Chain` 工作流与五个
+  步骤（intake → audit → conflict → verdict → writer），每一步的指令、模型、可连资源
+  与工具白名单都在这里；`schema.yaml` 记录 v1 词汇与 `Chain` 扩展。改指令不用改代码。
+- `libs/mcp-libs/`：五个 MCP 的卡片，每张声明传输方式、地址变量和工具清单。加载时翻译
+  成 fast-agent 的 `mcp.servers`。
+- `rules/`：预审判据集（一件一版本，`<version>.json`）。报告里记版本号，领域侧据同一份
+  文件解析 `checks`，所以两侧必须指向同一目录。
+
+这三份由 `worker` 读取（`task_agent_worker.assembly.load_centre_config`），但**不是**第五个
+workspace 成员：它们没有自己的 `pyproject.toml`，也不需要进入任何一个角色的打包产物。
+
+`toolkits/centre-agent-toolkit/` 不再持有 MCP 卡片。中央 Agent 是中央服务器上的一个服务，
+能力描述与被描述的服务同源；套件那边只剩「怎么把它装起来、怎么定期体检」。
 
 中央 Agent 的能力规格见工单「中央 Agent 能力接口收口」和「中央 Agent 候选预审职能地图」。本 README 先定义能力范围,不实现新的 MCP、注册表、通知服务或邮件投递。
 
@@ -121,11 +134,19 @@ cd sci-weave/centre-control/centre-agents
 uv sync
 ```
 
-现有 Gateway MVP 回归测试：
+各角色的回归测试：
 
 ```bash
+# Worker：定义加载、卡片翻译、配置渲染、fast-agent 接线
+uv run --package sciweave-task-agent-worker python -m unittest discover -s worker/tests -q
+
+# Gateway MCP 接入与处置面
 uv run --package sciweave-task-agent-gateway-mcp \
   python -m unittest discover -s gateway/mcp/tests -v
 ```
+
+`worker/tests/test_assembly.py` 里有一组 `ShippedTreeTests`，直接读仓库里真实的
+`definitions/`、`libs/mcp-libs/`、`rules/`，并用领域侧自己的 `resolve_rule_set` 校验判据
+文件。它守的是「文件在仓库里、部署里没有」这类失败。
 
 各角色只从其本地 `.env` 读取配置；仓库只提交 `.env.example`。
