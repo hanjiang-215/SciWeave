@@ -50,13 +50,27 @@ class KafkaHandoffPublisher(HandoffPublisherPort):
                 return  # no per-agent topic to publish to; caller decides retry
             raise RuntimeError(f"no task-handoff topic for agent {message.target_agent_id!r}")
         envelope: dict[str, Any] = {
+            # NOTE: the per-agent subscriber expects the shared governance-event
+            # envelope shape ({event_id, target:{kind,id}, payload:{...}}), the
+            # same one research-map/wiki/gateway-ingest emit. A previous flat
+            # envelope (message_type/task_node_id/...) made the subscriber crash
+            # with "id is required" because it reads envelope["target"]["id"].
+            "event_id": f"task-handoff:{message.pending_handoff_id}:{message.target_node_version_ref}",
+            "event_type": "task_handoff_ready",
             "message_type": "task_handoff_ready",
             "mapping_domain_id": message.mapping_domain_id,
+            "target": {"kind": "task_node", "id": message.task_node_id},
             "task_node_id": message.task_node_id,
             "target_node_version_ref": message.target_node_version_ref,
             "target_agent_id": message.target_agent_id,
             "pending_handoff_id": message.pending_handoff_id,
             "trigger_revision_id": message.trigger_revision_id,
+            "payload": {
+                "formal_revision_id": message.trigger_revision_id,
+                "target_node_version_ref": message.target_node_version_ref,
+                "task_node_id": message.task_node_id,
+                "pending_handoff_id": message.pending_handoff_id,
+            },
         }
         key = f"{message.task_node_id}:{message.target_node_version_ref}".encode("utf-8")
         self._lazy_producer().send(topic, key=key, value=envelope).get(timeout=self.timeout_seconds)
