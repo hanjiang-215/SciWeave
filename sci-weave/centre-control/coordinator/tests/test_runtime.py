@@ -191,3 +191,21 @@ def test_a_broker_outage_does_not_kill_the_loop():
     assert events.polls >= 4, "the loop gave up after the first poll failure"
     assert service.scanned == 1
     assert events.closed is True
+
+
+def test_governance_group_defaults_to_plain_coordinator(monkeypatch):
+    monkeypatch.delenv("SCIWEAVE_COORDINATOR_KAFKA_GROUP_ID", raising=False)
+    monkeypatch.delenv("SCIWEAVE_DEPLOYMENT_ENV", raising=False)
+    assert _main._resolve_governance_group() == "coordinator"
+
+
+def test_governance_group_uses_deployment_env_prefix(monkeypatch):
+    monkeypatch.delenv("SCIWEAVE_COORDINATOR_KAFKA_GROUP_ID", raising=False)
+    monkeypatch.setenv("SCIWEAVE_DEPLOYMENT_ENV", "native")
+    assert _main._resolve_governance_group() == "coordinator-native"
+
+
+def test_explicit_group_id_wins_over_deployment_env(monkeypatch):
+    monkeypatch.setenv("SCIWEAVE_COORDINATOR_KAFKA_GROUP_ID", "  custom-group ")
+    monkeypatch.setenv("SCIWEAVE_DEPLOYMENT_ENV", "native")
+    assert _main._resolve_governance_group() == "custom-group"

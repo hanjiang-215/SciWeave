@@ -29,6 +29,28 @@ _EMAIL_MCP_ENDPOINT = "SCIWEAVE_EMAIL_MCP_ENDPOINT"
 _EMAIL_MCP_TOKEN = "SCIWEAVE_EMAIL_MCP_TOKEN"
 
 
+def _resolve_governance_group() -> str:
+    """Return the Kafka consumer group for governance events (B9).
+
+    Multiple deployments (native dev-stack + the docker ``sciweave-centre``
+    container) that share a group id and a single-partition topic get their
+    events load-balanced, so a coordinator silently misses events the other one
+    consumed. Precedence:
+
+    1. ``SCIWEAVE_COORDINATOR_KAFKA_GROUP_ID`` when set explicitly wins;
+    2. otherwise ``coordinator-<env>`` where ``<env>`` comes from
+       ``SCIWEAVE_DEPLOYMENT_ENV``, so two deployments never collide;
+    3. otherwise the historical ``coordinator`` default.
+    """
+    explicit = (os.environ.get("SCIWEAVE_COORDINATOR_KAFKA_GROUP_ID") or "").strip()
+    if explicit:
+        return explicit
+    deploy_env = (os.environ.get("SCIWEAVE_DEPLOYMENT_ENV") or "").strip()
+    if deploy_env:
+        return f"coordinator-{deploy_env}"
+    return "coordinator"
+
+
 def build(config: CoordinatorConfig) -> "CoordinatorRuntime":
     """Assemble the coordinator with real central adapters.
 
@@ -77,7 +99,13 @@ def build(config: CoordinatorConfig) -> "CoordinatorRuntime":
     # every access through an internal lock (see _LockedConnection).
     connection = sqlite3.connect(config.sqlite_path, check_same_thread=False)
     store = CoordinatorStore(connection)
-    governance_group = os.environ.get("SCIWEAVE_COORDINATOR_KAFKA_GROUP_ID", "coordinator").strip()
+    governance_group = _resolve_governance_group()
+    # Log the effective consumer group so an operator can see which deployment a
+    # governance event will land on. Two stacks sharing one group on a
+    # single-partition topic get their events load-balanced (B9), so deployments
+    # must use distinct groups (see SCIWEAVE_COORDINATOR_KAFKA_GROUP_ID /
+    # SCIWEAVE_DEPLOYMENT_ENV).
+    logger.info("coordinator governance consumer group=%s", governance_group)
     events = KafkaGovernanceEventConsumer(
         kafka_bootstrap,
         governance_group,
