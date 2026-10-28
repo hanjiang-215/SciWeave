@@ -1,0 +1,3 @@
+id = "ai4-7ja8"
+module = ["agent", "infra"]
+summary = "占位符 API key 让 gateway/mcp 启动即崩，而不是降级为 misconfigured"
