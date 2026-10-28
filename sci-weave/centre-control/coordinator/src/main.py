@@ -115,6 +115,7 @@ class CoordinatorRuntime:
         poll_seconds: float,
         events: KafkaGovernanceEventConsumer,
         event_router: GovernanceEventConsumer,
+        max_poll_backoff_seconds: float = 30.0,
     ) -> None:
         self.service = service
         self.publisher = publisher
@@ -122,6 +123,8 @@ class CoordinatorRuntime:
         self.poll_seconds = poll_seconds
         self.events = events
         self.event_router = event_router
+        # ai4-xncm: 一次 broker 抖动不该让协调流程整体停摆，退避重试还有上限。
+        self.max_poll_backoff_seconds = max_poll_backoff_seconds
         self.mcp_server: CoordinatorMcpServer | None = None
         self._running = False
 
@@ -178,14 +181,37 @@ class CoordinatorRuntime:
 
     def serve_forever(self) -> None:
         """Blocking loop: startup scan, then consume governance events and
-        retry non-terminal dispatches on an interval."""
+        retry non-terminal dispatches on an interval.
+
+        ai4-xncm: a poll cycle that raises (broker unreachable, adapter
+        timeout, a transient SQLite lock) must not terminate the process.
+        Before this, one broker blip escaped ``poll_once`` and killed the
+        coordinator, so supervisord restarted it into the same failure and the
+        whole handoff chain stood still until the broker came back. The loop
+        now backs off exponentially up to ``max_poll_backoff_seconds`` and
+        returns to the normal interval once a cycle succeeds.
+        """
         self.start()
+        delay = self.poll_seconds
         try:
             while self._running:
-                self.poll_once()
+                try:
+                    self.poll_once()
+                except Exception:
+                    logger.warning(
+                        "poll cycle failed; retrying in %.1fs", delay, exc_info=True
+                    )
+                    time.sleep(delay)
+                    delay = min(delay * 2, self.max_poll_backoff_seconds) if delay > 0 else 0.1
+                    continue
+                delay = self.poll_seconds
                 time.sleep(self.poll_seconds)
         finally:
-            self.stop()
+            # 关闭阶段 broker 往往已经不在；异常不能掩盖退出原因。
+            try:
+                self.stop()
+            except Exception:
+                logger.exception("coordinator shutdown reported an error")
 
 
 class _NoopNotificationPublisher:

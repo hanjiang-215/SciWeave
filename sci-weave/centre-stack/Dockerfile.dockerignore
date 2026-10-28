@@ -1,0 +1,23 @@
+# 只作用于 `centre-stack/Dockerfile` 的构建上下文过滤（BuildKit 特性：
+# 名为 <Dockerfile>.dockerignore 的文件优先于上下文根的 .dockerignore）。
+#
+# 构建上下文是 `sci-weave/`，包含整个 centre-control 工作区，必须在这里排除
+# 本机产物：宿主机 `.venv` 里的绝对路径、pnpm 的符号链接式 node_modules、
+# 历史 SQLite 文件带进镜像都会让容器行为与本机不一致。
+
+**/.venv
+**/__pycache__
+**/*.pyc
+**/*.pyo
+**/.pytest_cache
+**/.mypy_cache
+**/.ruff_cache
+**/node_modules
+**/dist
+**/tests
+# 注意：不能写 `**/data`——web-ui 的源码目录就是 src/data/，会把前端源码一并排除。
+**/*.sqlite
+**/*.sqlite3
+**/var
+**/.env
+**/*.log

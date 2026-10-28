@@ -1,0 +1,50 @@
+{
+  "tool": "run_t1_t2_on_sciencepal.py",
+  "ran_at": "2026-10-28T03:51:50Z",
+  "input_snapshot_sha256": "ea110d42c2240c77fd292751dfdc4db00c699fee569528ed33ca270838b6f9f4",
+  "t1": {
+    "run_id": "dc72a8e8-b981-461a-b72f-2fd6afb1c23b",
+    "collected": {
+      "run_id": "dc72a8e8-b981-461a-b72f-2fd6afb1c23b",
+      "thread_id": "233fcb57-22d3-48e6-a94f-4ae8e7a3d09e",
+      "sandbox_id": "ddacdd98-0c7a-4bbd-9fea-442dab15429d",
+      "artifacts": [
+        {
+          "name": "t1_check_result.json",
+          "path": "t1_check_result.json",
+          "size": 657,
+          "sha256": "2ed7915f50bf2975e715d22677c96f69570345785cd3efbaa904210df1c8c049",
+          "kind": "data"
+        }
+      ],
+      "skipped": [],
+      "manifest_path": "runs/dc72a8e8-b981-461a-b72f-2fd6afb1c23b/manifest.json",
+      "reused": false
+    }
+  },
+  "t2": {
+    "run_id": "a666fe3d-b9e5-4027-8e8e-dbb677a97b97",
+    "collected": {
+      "run_id": "a666fe3d-b9e5-4027-8e8e-dbb677a97b97",
+      "thread_id": "c9800117-e4d6-47da-af54-d360e4b5a81b",
+      "sandbox_id": "d6bdcba2-fe04-456c-8415-4a5405a314b7",
+      "artifacts": [
+        {
+          "name": "t2_baseline_result.json",
+          "path": "t2_baseline_result.json",
+          "size": 868,
+          "sha256": "15596f264f4bc01b2af3ded9402708ed29f4ca221bd41cbf90143519f1300a1d",
+          "kind": "data"
+        }
+      ],
+      "skipped": [
+        {
+          "path": "/outputs/t2_baseline_result.json",
+          "reason": "duplicate"
+        }
+      ],
+      "manifest_path": "runs/a666fe3d-b9e5-4027-8e8e-dbb677a97b97/manifest.json",
+      "reused": false
+    }
+  }
+}

@@ -497,7 +497,7 @@ TOOL_DEFINITIONS = [
     },
     {
         "name": "submit_wiki_candidate",
-        "description": "Submit a Wiki document change with its full reference set against the exact formal base. Requires candidate_submit or centre capability.",
+        "description": "Submit a Wiki document change with its full reference set against the exact formal base. Requires the candidate_submit capability.",
         "inputSchema": {
             "type": "object",
             "required": ["document_change", "idempotency_key"],
@@ -510,7 +510,7 @@ TOOL_DEFINITIONS = [
     },
     {
         "name": "preview_wiki_review",
-        "description": "Build the review preview for a Wiki proposal. Requires candidate_review or centre capability.",
+        "description": "Build the review preview for a Wiki proposal. Requires the candidate_review capability.",
         "inputSchema": {
             "type": "object",
             "required": ["proposal_id"],
@@ -520,7 +520,7 @@ TOOL_DEFINITIONS = [
     },
     {
         "name": "create_wiki_merge_request",
-        "description": "Lock a ready Wiki preview into a merge-request buffer for owner review. Requires candidate_review or centre capability.",
+        "description": "Lock a ready Wiki preview into a merge-request buffer for owner review. Requires the candidate_review capability.",
         "inputSchema": {
             "type": "object",
             "required": ["proposal_id", "merge_request_id"],
@@ -533,7 +533,7 @@ TOOL_DEFINITIONS = [
     },
     {
         "name": "decide_wiki_review",
-        "description": "Record the Project Owner decision for a Wiki merge request. Requires formalize or centre capability.",
+        "description": "Record the Project Owner decision for a Wiki merge request. Requires the formalize capability.",
         "inputSchema": {
             "type": "object",
             "required": ["merge_request_id", "decision", "reason", "selected_solution_id"],
@@ -548,7 +548,7 @@ TOOL_DEFINITIONS = [
     },
     {
         "name": "formalize_wiki",
-        "description": "Promote an Owner-approved Wiki candidate through atomic SQLite activation. Requires formalize or centre capability.",
+        "description": "Promote an Owner-approved Wiki candidate through atomic SQLite activation. Requires the formalize capability.",
         "inputSchema": {
             "type": "object",
             "required": ["merge_request_id", "operation_id"],
@@ -561,7 +561,7 @@ TOOL_DEFINITIONS = [
     },
     {
         "name": "reconcile_wiki_formalization",
-        "description": "Resume the same Wiki formalization operation identity. Requires formalize or centre capability.",
+        "description": "Resume the same Wiki formalization operation identity. Requires the formalize capability.",
         "inputSchema": {
             "type": "object",
             "required": ["operation_id"],

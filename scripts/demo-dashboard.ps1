@@ -26,8 +26,8 @@
   Drop the TerminusDB seed database and rebuild the demo route.
 
 .EXAMPLE
-  pwsh scripts/demo-dashboard.ps1
-  pwsh scripts/demo-dashboard.ps1 -Stop
+  powershell -NoProfile -ExecutionPolicy Bypass -File scripts\demo-dashboard.ps1
+  powershell -NoProfile -ExecutionPolicy Bypass -File scripts\demo-dashboard.ps1 -Stop
 #>
 [CmdletBinding()]
 param(
@@ -212,7 +212,9 @@ try {
     Write-Host "看板地址  : $webOrigin"
     Write-Host "快照接口  : http://${dashboardHost}:${dashboardPort}/api/dashboard/snapshot"
     Write-Host ''
-    Write-Host '停止      : pwsh scripts/demo-dashboard.ps1 -Stop'
+    # 只装 Windows PowerShell 的机器上没有 pwsh，提示必须给出本机真能执行的命令。
+    $hostExe = if (Get-Command pwsh -ErrorAction SilentlyContinue) { 'pwsh' } else { 'powershell' }
+    Write-Host "停止      : $hostExe scripts/demo-dashboard.ps1 -Stop"
 } catch {
     Write-Warning "看板已启动但自检失败：$($_.Exception.Message)"
     Write-Host "看板地址  : $webOrigin"

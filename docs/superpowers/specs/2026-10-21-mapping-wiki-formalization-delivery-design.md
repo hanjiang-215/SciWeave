@@ -3,7 +3,7 @@
 - 日期：2026-10-21
 - 负责人：hanjiang
 - 范围：Research Mapping `ai4-6s53`、`ai4-z0lb`、`ai4-1qyc`；LLM-Wiki `ai4-91tk`、`ai4-txhf`、`ai4-jdjx`
-- 状态：待用户审阅
+- 状态：已实现并合并进 `develop`（2026-10-27 核对：`ai4-6s53`、`ai4-z0lb`、`ai4-1qyc`、`ai4-91tk`、`ai4-txhf`、`ai4-jdjx` 均已关闭；两个子项目在真实 TerminusDB 12.0.8 上的集成用例通过）
 - 依据：`2026-10-20-mapping-wiki-implementation-readiness-design.md`、Research Mapping 与 Wiki 各自跨存储正式化规格、`ai4-jnkn`
 
 ## 目标

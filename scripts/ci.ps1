@@ -38,6 +38,14 @@ $ErrorActionPreference = 'Continue'
 $repoRoot = Split-Path -Parent $PSScriptRoot
 Set-Location $repoRoot
 
+# 字节码统一写到 var/ 下，不落在 src/ 的 __pycache__：既不让工作区被生成物污染，
+# 也避免 compileall 因为「上一次留下的 pyc 还在」而空跑成假绿——干净机器上的首跑
+# 必须同样能通过（缓存目录已被 .gitignore 覆盖）。
+$pyCachePrefix = Join-Path $repoRoot 'var/pycache-ci'
+Remove-Item -LiteralPath $pyCachePrefix -Recurse -Force -ErrorAction SilentlyContinue
+New-Item -ItemType Directory -Force -Path $pyCachePrefix | Out-Null
+$env:PYTHONPYCACHEPREFIX = $pyCachePrefix
+
 $termVar = 'SCIWEAVE_RUN_TERMINUSDB_INTEGRATION'
 if ($Integration) {
     [Environment]::SetEnvironmentVariable($termVar, '1')
@@ -165,7 +173,9 @@ $results += $whitespace
 
 # --- summary --------------------------------------------------------------
 Stage '汇总'
-$failed = $results | Where-Object { $_.Exit -ne 0 }
+# 必须包成数组：Where-Object 只匹配到一个对象时返回的是标量，标量没有 Count，
+# $failed.Count 会求值为 $null，于是「恰好一个阶段失败」被算成「全部通过」。
+$failed = @($results | Where-Object { $_.Exit -ne 0 })
 $totalPassed = ($results | Measure-Object -Property Passed -Sum).Sum
 $totalSkipped = ($results | Measure-Object -Property Skipped -Sum).Sum
 Write-Host ("  通过 {0} / 共 {1} 个阶段，pytest 用例 {2} 项通过" -f ($results.Count - $failed.Count), $results.Count, $totalPassed)
