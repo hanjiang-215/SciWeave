@@ -37,6 +37,8 @@ VITE_DASHBOARD_API_URL=<只读快照 API 的基地址>
 
 实际部署地址、端口和认证代理由部署环境提供；不要把真实令牌写入前端环境变量或源码。浏览器请求的唯一业务接口是 `GET {VITE_DASHBOARD_API_URL}/api/dashboard/snapshot`，响应必须是统一的 `DashboardSnapshot`。
 
+若前端与 API 不同源（不同主机、端口或协议），必须同时在后端配置 `SCIWEAVE_DASHBOARD_CORS_ORIGIN` 为本站的确切 origin，否则浏览器 CORS 预检会失败，界面持续提示"数据服务暂时无法连接"。推荐通过反向代理把前端与 `/api` 放在同一源下，这样无需 CORS。详见 [`../dashboard-api/README.md`](../dashboard-api/README.md) 的"跨源部署"一节。
+
 ## 验证
 
 ```powershell
