@@ -1,4 +1,3 @@
-﻿# ai4-4r0h 的索引归属与简介（人工维护）
+# ai4-4r0h 的索引归属与简介（人工维护）
 module = "agent"
-summary = "套件出厂配置的一致性：agent 定义可加载、workflow 库路径生效、env 缺项补齐"
-
+summary = "套件出厂配置的一致性与可加载性：agent 定义加载为空、Workflow YAML 双份、libs 路径变量未实现"
