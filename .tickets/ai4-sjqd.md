@@ -1,6 +1,6 @@
 ---
 id: ai4-sjqd
-status: open
+status: closed
 deps: []
 links: []
 created: 2026-10-28T20:21:06Z
@@ -20,3 +20,11 @@ coordinator/src/main.py:77 默认消费组为 'coordinator'，docker sciweave-ce
 
 两套栈并存时事件确定由预期一方消费；启动日志可见消费组名；不改动 topic 与分区语义。
 
+
+## Notes
+
+**2026-10-29 / hanjiang**
+
+已实现并验证（fix(coordinator): governance consumer group env prefix）：
+- _resolve_governance_group()：显式 SCIWEAVE_COORDINATOR_KAFKA_GROUP_ID 优先；否则 coordinator-<SCIWEAVE_DEPLOYMENT_ENV>；否则兼容旧 coordinator。启动日志打印实际消费组。
+- 测试：coordinator 90 passed（含 3 项新增）。

@@ -1,6 +1,6 @@
 ---
 id: ai4-pwgl
-status: open
+status: closed
 deps: []
 links: []
 created: 2026-10-28T20:21:06Z
@@ -20,3 +20,11 @@ registry/src/registry/service.py:109-110 role 仅允许 researcher/project_owner
 
 服务主体可按既定语义登记，不再返回 invalid_role；与 register_workflow_agent 语义一致；相关测试通过。
 
+
+## Notes
+
+**2026-10-29 / hanjiang**
+
+已实现并验证（fix(registry): accept service principal role）：
+- egister_principal 的角色集合新增 service（_PRINCIPAL_ROLES），与 egister_workflow_agent 的 service:xxx 语义一致。
+- 测试：registry 16 passed（含 1 项新增）。

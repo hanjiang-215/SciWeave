@@ -1,6 +1,6 @@
 ---
 id: ai4-ysr9
-status: open
+status: closed
 deps: []
 links: []
 created: 2026-10-28T20:21:05Z
@@ -20,3 +20,12 @@ mapping 看板唯一状态来源是映射节点文档自身 execution_status/tas
 
 看板 succeeded/completed 计数与执行事实一致；不再出现恒 unknown；不改写正式映射文档。
 
+
+## Notes
+
+**2026-10-29 / hanjiang**
+
+已实现并验证（feat(mapping): derive task status from execution facts）：
+- 新增只读 ExecutionStatusResolver，按 (mapping_domain_id, task_node_version_ref)（从 usiness_key 解析）关联网关 execution_records 推导任务状态。
+- _task_status 在节点自身无状态字段时回退到 resolver；uild_mapping_fragment/server 支持注入；由 SCIWEAVE_MAPPING_EXECUTION_DB 开启，不改写入正式映射（方案 2，只读聚合）。
+- 测试：research-map 137 passed（含 2 项新增）。
