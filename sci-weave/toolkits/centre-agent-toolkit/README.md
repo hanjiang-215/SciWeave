@@ -3,14 +3,19 @@
 装在中央服务器上，以 `centre` 身份工作：订阅候选事件与正式版本发布事件，拉全量候选快照做预审，
 把报告追加到领域治理日志，判定失效，必要时合成混合候选，并在完成或受阻时通知 Project Owner。
 
-**它读得到所有域的候选，但一个都不能批。** 这条线不是约定，而是能力上限：本套件声明的
-`mcp[].capabilities` 里没有 `formalize`，`suitecheck` 会拒绝越界的清单。
+**它读得到所有域的候选，但一个都不能批。** 这条线不是约定，而是能力上限：中央侧
+`centre-agents/libs/mcp-libs/` 的卡片里没有 `formalize` 类工具，`worker` 的静态校验会
+拒绝越界的卡片。
 
 ## 装在哪、不装什么
 
-套件**不打包中央服务的源码**。中央服务器本来就有 `sci-weave/centre-control/centre-agents`
-的检出，`ADR-0002` 又明确要求 Task Agent 与 Centre Agent 两份源码互不 path 依赖。
-再复制一棵树进来，只会让同一份服务有两个版本。
+套件**不打包中央服务的源码，也不打包它的能力描述**。中央服务器本来就有
+`sci-weave/centre-control/centre-agents` 的检出，`ADR-0002` 又明确要求 Task Agent 与
+Centre Agent 两份源码互不 path 依赖。再复制一棵树进来，只会让同一份服务有两个版本。
+
+Agent 定义（`definitions/`）、MCP 卡片（`libs/mcp-libs/`）、预审判据（`rules/`）现在都在
+那个检出里，与被描述的服务同源。它们是**服务的一部分**，不是套件的载荷：套件曾经持有一份
+卡片，于是卡片搬到源码侧之后，`suitecheck` 报了五条 `mcp_card_missing`（`ai4-349h`）。
 
 所以套件装的是服务仓库里没有的东西：
 
@@ -20,11 +25,12 @@
 | `systemd/` | 两个 user 级 unit；install.sh 会把 `%h/.sciweave/centre` 换成实际目标 |
 | `cron/prereview-sweep.sh` | 只读的停滞检测；**不写**任何治理日志 |
 | `<skill>/SKILL.md` | 5 个技能，装到 `$SCIWEAVE_CENTRE_SKILLS_HOME`（默认 `~/.sciweave/centre-skills`） |
-| `mcp/` | 5 张卡片：两个领域 MCP、registry、email-service、处置面 |
 | `.env.example` | 只有变量名和示例，没有令牌 |
 
-不装：预审判据文件。规则是 `<version>.json`，受 Git 版本化，由领域 MCP 经
-`SCIWEAVE_MAPPING/WIKI_PREREVIEW_RULES_DIR` 解析。套件复制一份就变成第三份真相。
+不装：MCP 卡片、Agent 定义、预审判据文件。三者的位置见
+`centre-agents/README.md` 的「当前项目结构」。规则是 `<version>.json`，受 Git 版本化，
+由领域 MCP 经 `SCIWEAVE_MAPPING/WIKI_PREREVIEW_RULES_DIR` 解析；套件复制一份就变成
+第三份真相。
 
 ## 五个技能
 
@@ -38,13 +44,20 @@
 
 ## 能力上限
 
-| MCP | 能力 | 为什么就这些 |
+卡片在 `centre-agents/libs/mcp-libs/`，五个 MCP 各自声明工具清单，`worker` 按 agent 的
+`allowed_tools` 再收一次窄：
+
+| MCP | 实际可达的工具 | 为什么就这些 |
 | --- | --- | --- |
-| `research-mapping` | `read` `centre` `prereview_log` `merged_candidate` | 没有 `formalize`：预审和裁决合成一个人，两套套件就没意义了 |
+| `research-mapping` | 读候选与正式版本、`append_prereview_log`、`create_merged_candidate` | 没有 `formalize_candidate`：预审和裁决合成一个人，两套套件就没意义了 |
 | `research-wiki` | 同上 | 同上；Wiki 侧的裁决工具是 `decide_wiki_review`，同样不在卡片里 |
-| `registry` | `centre` | 只读 `get_agent_registration` 与 `health`，判断「要通知的那个 Agent 是不是在线」 |
-| `email-service` | `read` | 只发 `prereview_completed` 和 `agent_unavailable` 两类通知 |
-| `disposition` | `read` | 观察与处置自己的执行；没有 `submit_owner_command`，不发起执行 |
+| `registry` | `get_agent_registration`、`health` | 只判断「要通知的那个 Agent 是不是在线」 |
+| `email-service` | `send_notification` | 只发预审完成与不可用两类通知 |
+| `disposition` | 处置面读工具 | 观察与处置自己的执行；没有发起执行的工具 |
+
+工作流本身在 `centre-agents/definitions/centre-prereview.yaml`：五步 Chain，写权限只在
+最后一步身上。这是配置层就能验证的边界——一个「既能取快照又能写日志」的单 agent 无法
+证明自己没有先写结论。
 
 ## 安装
 
