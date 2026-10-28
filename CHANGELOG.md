@@ -491,6 +491,7 @@
 - *(changelog)* Regenerate for the 2026-10-28 review round
 - *(tickets)* Record the ready-to-run SciencePal package on ai4-aaff
 - *(demo)* Note the ready-to-run SciencePal package in the demo prerequisites
+- *(changelog)* Regenerate for the conflict resolution commit
 
 ### 🚜 Refactor
 
@@ -569,9 +570,12 @@
 - *(tickets)* Link the deployment PR into the four tickets
 - *(tickets)* File the Linux cross-platform verification evidence linked to ai4-grlc
 - *(tickets)* Adopt the develop version of ai4-grlc after its scope narrowing
+- *(tickets)* Adopt the five develop-side agent tickets and index their meta
 
 ### 💼 Other
 
 - *(task-agent)* Add fast-agent runtime dependency
 - *(agent-libs)* Lock package metadata
 - *(email-service)* 将邮件实现并入 feature/frank-qi
+- *(buffer)* Switch to uv_build backend, disable pytest cache
+- *(runtime)* Switch to uv_build backend, disable pytest cache
