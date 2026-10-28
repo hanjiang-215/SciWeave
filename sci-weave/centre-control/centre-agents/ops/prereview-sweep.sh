@@ -18,16 +18,32 @@ set -eu
 
 DB="${SCIWEAVE_INGEST_DB:-}"
 MAX_AGE="${SCIWEAVE_PREREVIEW_SWEEP_MAX_AGE_SECONDS:-1800}"
-DOMAIN_URL="${SCIWEAVE_DOMAIN_MCP_URL:-}"
-DOMAIN_TOKEN="${SCIWEAVE_DOMAIN_MCP_TOKEN:-}"
+
+# Which domain MCP health endpoints to probe. A deployment either names them
+# explicitly (`SCIWEAVE_PREREVIEW_SWEEP_MCP_URLS`, comma separated) or leaves the
+# two per-domain variables the cards already use. The older single-domain
+# `SCIWEAVE_DOMAIN_MCP_URL` is still honoured because a host that runs one ingest
+# per domain has no reason to repeat itself here.
+URLS="${SCIWEAVE_PREREVIEW_SWEEP_MCP_URLS:-}"
+if [ -z "$URLS" ]; then
+  URLS="${RESEARCH_MAPPING_MCP_URL:-},${LLM_WIKI_MCP_URL:-}"
+fi
+# POSIX sh has no `${VAR//,/}`; strip the separators instead.
+if [ -z "$(printf '%s' "$URLS" | tr -d ',')" ] && [ -n "${SCIWEAVE_DOMAIN_MCP_URL:-}" ]; then
+  URLS="$SCIWEAVE_DOMAIN_MCP_URL"
+fi
 
 if [ -z "$DB" ]; then
   echo "SCIWEAVE_INGEST_DB is unset: cannot tell whether ingest is alive" >&2
   exit 2
 fi
 if [ ! -f "$DB" ]; then
-  echo "ingest database $DB does not exist: has the consumer ever run?" >&2
-  exit 1
+  # Exit 2, not 1: a missing file means either a wrong path or an ingest that
+  # never started, and both are fixed by looking at configuration rather than
+  # at a stalled process. Reporting "stalled" here would send the operator to
+  # restart something that was never running.
+  echo "ingest database $DB does not exist: check SCIWEAVE_INGEST_DB, or the consumer never started" >&2
+  exit 2
 fi
 
 # 1. Is the consumer still committing? processed_events.handled_at is written in
@@ -68,32 +84,36 @@ if age > max_age:
         file=sys.stderr,
     )
     raise SystemExit(1)
-print(f"sweep: ingest alive, last handled {int(age)}s ago")
+print(f"sweep: ingest alive, last handled {int(age)}s ago (last status {status})")
 PY
 else
   echo "python3 is required to read the ingest database" >&2
   exit 2
 fi
 
-# 2. Is the domain MCP the consumer writes through actually answering? Liveness
+# 2. Is each domain MCP the consumer writes through actually answering? Liveness
 #    of the consumer is worthless if its only write target is down: it would
-#    commit offsets past events it could not record.
-if [ -n "$DOMAIN_URL" ] && [ -n "$DOMAIN_TOKEN" ]; then
+#    commit offsets past events it could not record. Mapping and Wiki are
+#    separate services, so both get probed — one domain answering says nothing
+#    about the other.
+#
+#    /health is the unauthenticated probe both domain MCPs serve, which is also
+#    why it says nothing about capability: this checks reachability, not rights.
+for url in $(printf '%s' "$URLS" | tr ',' ' '); do
+  [ -n "$url" ] || continue
   if ! command -v curl >/dev/null 2>&1; then
-    echo "curl is required to probe $DOMAIN_URL" >&2
+    echo "curl is required to probe $url" >&2
     exit 2
   fi
-  # /health is the unauthenticated probe both domain MCPs serve; it answers
-  # without a token, which is also why it says nothing about capability.
-  health_url="${DOMAIN_URL%/}/health"
-  case "$DOMAIN_URL" in
-    */mcp) health_url="${DOMAIN_URL%/mcp}/health" ;;
+  health_url="${url%/}/health"
+  case "$url" in
+    */mcp) health_url="${url%/mcp}/health" ;;
   esac
   if ! curl --silent --show-error --fail --max-time 5 "$health_url" >/dev/null; then
     echo "sweep: domain MCP health probe failed at $health_url" >&2
     exit 1
   fi
-  echo "sweep: domain MCP reachable"
-fi
+  echo "sweep: domain MCP reachable at $health_url"
+done
 
 exit 0
