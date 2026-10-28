@@ -540,7 +540,7 @@ TOOL_DEFINITIONS = [
     },
     {
         "name": "create_merge_request",
-        "description": "Lock a ready candidate preview into a merge-request buffer and return its buffer_id. Requires candidate_review or centre capability.",
+        "description": "Lock a ready candidate preview into a merge-request buffer and return its buffer_id. Requires the candidate_review capability.",
         "inputSchema": {
             "type": "object",
             "required": ["preview_id"],
