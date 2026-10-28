@@ -62,8 +62,8 @@ SciWeave 是一个面向科研团队的协作与智能体平台，把「科研�
 | 模型 | 演示 T2 基线使用固定参数 KNN（标准库实现），未引入外部模型；fast-agent 运行时用于 Work Agent 执行，未使用需单独授权的模型凭据 |
 | 数据 | UCI Iris（CC BY 4.0，DOI `10.24432/C56C76`，须署名）；NOAA CO₂ 仅作替换验证设计，未打包再分发 |
 | 代码 | 全部为本项目赛期开发；无赛前既有产品代码复用 |
-| API/外部工具 | 本机 TerminusDB 12.0.8（Docker 本地验证服务，非生产依赖）；Gitee（协作）；Docker（本地容器） |
+| API/外部工具 | SciencePal 平台（2026-10-28 实跑 T1/T2：run `dc72a8e8…`/`a666fe3d…`，产物哈希见 `demo-evidence/evidence-card.md`）；本机 TerminusDB 12.0.8（Docker 本地验证服务，非生产依赖）；Gitee（协作）；Docker（本地容器） |
 | 团队分工 | 由 hanjiang 与 Frank Qi 在 `feature/*` 分支分别推进；本文件作者为 hanjiang |
 | 合规 | 仓库不提交真实凭据、`.env`、构建产物；数据集使用遵守各自许可并保留署名 |
 
-> 待 SciencePal 实际运行后，补充其工作流链接、执行记录与外部模型/API 使用清单。
+> SciencePal 实际运行证据已于 2026-10-28 补齐（平台侧 run ID、沙箱 ID、执行时间与产物 sha256 记在 `demo-evidence/evidence-card.md`）；公开评审链接需平台登录态，录制时以实时操作轨迹呈现。

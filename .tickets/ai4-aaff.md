@@ -67,7 +67,7 @@ tags: [wayfinder:prototype, product, sciencepal, ai4science]
 - [x] 提供提交可复现的最小数字数据/证据包，并记录来源、版本或快照哈希、访问限制、许可证和替代数据方案；调研已核实官方来源与许可证，但快照尚未固定为交付物。
 - [x] 定义最小数字证据卡的字段、与完整 `ResourceVersion` 治理的边界，以及从证据卡回到官方资源和执行产物的路径。
 - [ ] 提供并实际计时一条 3—5 分钟可复现的演示脚本：SciencePal 执行、结果提交、数字证据引用、TaskNode Owner 结果接纳、失败或路线调整、Mapping Proposal、Diff/影响预览以及 Project Owner 批准或驳回。
-- [ ] 提供 SciencePal 实际承载核心 Agent/任务的运行链接、输出及执行记录，并说明人工接管点；SciencePal 不能只用于展示文案。
+- [x] 提供 SciencePal 实际承载核心 Agent/任务的运行链接、输出及执行记录，并说明人工接管点；SciencePal 不能只用于展示文案。
 - [x] 在设计中区分 TaskNode Owner 的结果接纳审核与 Project Owner 的 Formal Mapping 路线正式发布审核；首版不以一次批准替代两者，也不新增独立的“正式科研结论”对象。
 - [x] 确认所选样例只用通用 TaskNode、Dependency Edge、Execution Record、Resource Reference 和 Mapping Proposal 表达，不把学科对象加入平台核心模型。
 - [x] 记录一次真实成功路径和一次失败/驳回路径的可观察证据，包括执行记录、审计时间线、Proposal 状态和 Formal MappingRevision 结果（如批准）；平台治理链路部分已用真实 TerminusDB + 真实管理 MCP 产出（`iris_platform_pipeline.json`），SciencePal 执行记录仍待补齐。
@@ -165,3 +165,27 @@ T1/T2 执行包已固化并本地验证：`humans/competition/demo-evidence/scie
 **2026-10-28T02:55:00Z**
 
 PR #54（centre-stack 部署 + 治理接线 + 本票 SciencePal 执行包）已更新并通过全量回归：Windows CI 21/21 阶段、874 用例通过，`mergeable:true`（Gitee 已重算）。本轮附带修复 runtime/buffer 构建后端（setuptools→uv_build，Windows 沙箱 egg-info 写入限制）并加 pytest `-p no:cacheprovider`，不影响本票演示路径——SciencePal 执行包与 T1/T2 脚本仍是独立交付物。本票剩余未勾选验收（计时演示脚本、SciencePal 实际承载执行、5 页定稿）仍全部依赖 sciencepal.ai 平台可达，网络恢复即跑 `run_t1_t2_on_sciencepal.py` 实链取证。
+
+**2026-10-28T04:00:00Z**
+
+**SciencePal 平台已恢复，T1/T2 真实执行完成（硬门槛闭合）**
+
+sciencepal.ai 由「超时不可达」恢复为正常（`https://sciencepal.ai/api` 稳定响应，0.2–1.8s）。`run_t1_t2_on_sciencepal.py` 对真实平台实跑通过，退出码 0，证据落盘 `humans/competition/demo-evidence/sciencepal_t1_t2_evidence.json`：
+
+| 项 | T1 输入检查 | T2 基线分类 |
+| --- | --- | --- |
+| run_id | `dc72a8e8-b981-461a-b72f-2fd6afb1c23b` | `a666fe3d-b9e5-4027-8e8e-dbb677a97b97` |
+| thread_id | `233fcb57-22d3-48e6-a94f-4ae8e7a3d09e` | `c9800117-e4d6-47da-af54-d360e4b5a81b` |
+| sandbox_id | `ddacdd98-0c7a-4bbd-9fea-442dab15429d` | `d6bdcba2-fe04-456c-8415-4a5405a314b7` |
+| 平台执行时间 | 2026-10-28T03:49:50Z | 2026-10-28T03:51:01Z |
+| 产物（sha256 前 8 位） | `t1_check_result.json` 657 B `2ed7915f…` | `t2_baseline_result.json` 868 B `15596f26…` |
+| 关键结果 | `status: ok`、150 行、3 类各 50、0 缺失、快照 `ea110d42…b6f9f4` | `status: ok`、KNN k=3 seed 20261023、准确率 0.955556（43/45）、混淆矩阵完整 |
+| 平台 Python | 3.11.14（仅标准库） | 3.11.14（仅标准库） |
+
+执行确在平台侧：产物带平台侧时间戳与沙箱 ID，输入快照哈希与本地锁定值逐字一致；本地只做编排（上传、轮询、下载、核对），不执行科研逻辑。据此勾选验收「提供 SciencePal 实际承载核心 Agent/任务的运行链接、输出及执行记录」——运行链接为平台 run 页（需登录态，URL 由 run/thread ID 定位，不做公网匿名分享）。
+
+**期间修复一处真实缺陷**：首跑与二跑均在平台执行中途因一次瞬时连接重置（`sciencepal_unavailable`）提前退出，而该 run 事后查为 `completed`（03:49:28→03:51:50 完成）——轮询对瞬时错误零容忍会使长任务取证必然失败。已在 `run_t1_t2_on_sciencepal.py` 增加轮询容错：仅对 `sciencepal_unavailable` 计数并在 `--max-errors`（默认 20）内继续等待，鉴权/404/5xx 语义错误仍然立即暴露；修复后三跑一次通过。`demo-evidence` 项目 20 条测试仍全绿。
+
+人工接管点：T2 前的人工确认（参数与数据快照审查）、T3 结果接纳、以及路线变更 Proposal 审批均由人执行，SciencePal 只承担 T1 校验与 T2 计算。
+
+剩余未勾选：仅「提供并实际计时一条 3—5 分钟可复现的演示脚本」——依赖录制与口播实测（脚本、执行入口、平台证据已全部就绪）。

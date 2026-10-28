@@ -1,12 +1,12 @@
 # 3–5 分钟可复现演示脚本（草稿）
 
-> 状态：脚本草稿（2026-10-23），2026-10-24 补充平台治理链路实演，2026-10-27 在合并 `develop` 后的 HEAD 上复跑、回填实测耗时，并按计时核对把估算从 310s 压到 260s。输入快照、T1 检查、T2 基线、失败注入与真实治理链路均已在当前 HEAD 上跑通（见 `demo-evidence/`），仅 SciencePal 实演记录与口播实测待回填。
+> 状态：脚本草稿（2026-10-23），2026-10-24 补充平台治理链路实演，2026-10-27 在合并 `develop` 后的 HEAD 上复跑、回填实测耗时，并按计时核对把估算从 310s 压到 260s；**2026-10-28 T1/T2 已由真实 SciencePal 平台执行完成并留证**。输入快照、T1 检查、T2 基线、失败注入、真实治理链路与 SciencePal 实演均已在当前 HEAD 上跑通，仅口播实测与录制待完成。
 
 ## 前置（SciencePal 接入后）
 
 - SciencePal 项目/工作流链接：待回填
 - 固定 T1/T2 脚本与参数（`check_iris_input.py`、`run_iris_baseline.py`）
-- **一键执行入口已就绪**：`demo-evidence/sciencepal-runs/run_t1_t2_on_sciencepal.py`（含 README）把两个脚本 + 锁定数据快照交给 SciencePal 沙箱执行、下载产物、核对后落盘 `sciencepal_t1_t2_evidence.json`；已用假 SciencePal 服务本地验证全流程，平台网络恢复即可实跑
+- **一键执行入口已实跑通过**：`demo-evidence/sciencepal-runs/run_t1_t2_on_sciencepal.py`（含 README）把两个脚本 + 锁定数据快照交给 SciencePal 沙箱执行、下载产物、核对后落盘 `sciencepal_t1_t2_evidence.json`；2026-10-28 已对真实平台实跑（T1 run `dc72a8e8…`、T2 run `a666fe3d…`，均 `completed`，产物哈希见证据卡）
 - 真实平台治理链路已可独立实演（不依赖 SciencePal）：`run_iris_mapping_pipeline.py`，前置为本机 TerminusDB 已启动、凭据经环境变量提供
 - 准备好 2 个窗口：SciencePal、终端（终端里同时展示治理链路输出与 TerminusDB 查询结果）
 

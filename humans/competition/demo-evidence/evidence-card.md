@@ -1,6 +1,6 @@
 # SciWeave 默认科研示例场景：最小数字证据卡
 
-> 状态：输入快照与 T1 检查已固化；T2 确定性基线已在本机运行并留证（2026-10-27 复跑）。SciencePal 实际承载执行仍是赛事硬门槛，见下方「待 SciencePal 补的交割物」。
+> 状态：输入快照与 T1 检查已固化；**T1/T2 已由 SciencePal 平台真实执行并留证（2026-10-28）**，平台侧运行 ID、沙箱 ID、产物哈希见「SciencePal 真实执行记录」。SciencePal 硬门槛的「实际承载核心执行」已满足，剩余为演示录制与说明定稿。
 >
 > 关联工单：`ai4-aaff`（SciWeave 默认科研示例场景与验证证据）、`ai4-483l`（T1 行尾归一化）、`ai4-j7g2`（T2 输入哈希实测）、`ai4-fe3w`（证据编码）
 
@@ -44,7 +44,7 @@ T1 的判定顺序（自 `ai4-483l` 起）是**结构在前、哈希最后**。�
 | execution_record_id | 由执行侧回填 |
 | card 边界 | 首版为轻量证据卡，不等同完整 `ResourceVersion` 治理 |
 
-## T2 分析参数（本机确定性基线已运行，待 SciencePal 回填）
+## T2 分析参数（本机与 SciencePal 平台均已运行）
 
 T2 采用固定参数的确定性 KNN 基线，本机已用纯标准库运行并产出可复现结果：
 
@@ -121,16 +121,31 @@ python humans/competition/demo-evidence/run_iris_mapping_pipeline.py
 5. 失败注入：使用移除目标列的临时副本，T1 检查失败、留 Execution Record 且不产出可引用结果；恢复官方输入后普通重试成功，不创建 Proposal。
 6. 驳回分支（可选）：Project Owner 驳回未验证候选，保留理由与审计事件，候选不得进入正式查询或调度。
 
-## 待 SciencePal 补的交割物
+## SciencePal 真实执行记录（2026-10-28，平台侧执行）
 
-- SciencePal 可访问项目/工作流链接；
-- T2 实际运行输出（指标记录、混淆矩阵、结果文件）；
-- 承接 T1/T2 的执行记录与输入/输出快照哈希；
-- 人工接管点说明。
+`sciencepal-runs/run_t1_t2_on_sciencepal.py` 已对真实 SciencePal 平台实跑通过（退出码 0），证据落盘 `demo-evidence/sciencepal_t1_t2_evidence.json`：
 
-> **执行入口已就绪**：`sciencepal-runs/run_t1_t2_on_sciencepal.py`（含 README）把 `check_iris_input.py` + `run_iris_baseline.py` + 锁定数据快照交给 SciencePal 沙箱执行，轮询到终态、下载产物、核对 `status=ok`/accuracy 后落盘 `sciencepal_t1_t2_evidence.json`。已在本地用假 SciencePal 服务验证全流程（staging→run→collect→核对→证据），SciencePal 平台网络恢复即可实跑（当前仅 sciencepal.ai 超时，2026-10-28 凌晨确认）。
+| 项 | T1 输入检查 | T2 基线分类 |
+| --- | --- | --- |
+| run_id | `dc72a8e8-b981-461a-b72f-2fd6afb1c23b` | `a666fe3d-b9e5-4027-8e8e-dbb677a97b97` |
+| thread_id | `233fcb57-22d3-48e6-a94f-4ae8e7a3d09e` | `c9800117-e4d6-47da-af54-d360e4b5a81b` |
+| sandbox_id | `ddacdd98-0c7a-4bbd-9fea-442dab15429d` | `d6bdcba2-fe04-456c-8415-4a5405a314b7` |
+| 平台执行时间 | 2026-10-28T03:49:50Z | 2026-10-28T03:51:01Z |
+| 产物 | `t1_check_result.json`（657 B，sha256 `2ed7915f…c8c049`） | `t2_baseline_result.json`（868 B，sha256 `15596f26…f3e0a1d`） |
+| 关键结果 | `status: ok`、150 行、3 类各 50、0 缺失、快照哈希 `ea110d42…b6f9f4` | `status: ok`、KNN k=3 seed 20261023、准确率 0.955556（43/45）、混淆矩阵完整 |
+| 平台 Python | 3.11.14（仅标准库） | 3.11.14（仅标准库） |
 
-这些就绪后，`ai4-aaff` 的「可执行初始 Research Mapping」「最小数字数据/证据包」「计时演示脚本」「真实成功与失败/驳回路径」四个未勾选验收项才能闭合。
+执行确在平台侧：产物带平台时间戳与沙箱 ID，输入快照哈希与本地锁定值逐字一致；本地只做编排（上传脚本与数据、轮询、下载、核对），不执行任何科研逻辑。
+
+> 复现时若轮询遇到瞬时连接重置，脚本按 `--max-errors`（默认 20）容忍后继续等待——首次实跑即因平台执行期间一次连接中断而提前退出（该 run 事后查为 `completed`），脚本已按此修复。
+
+## 待补交割物（SciencePal 执行已闭合）
+
+已补齐：T1/T2 的实际平台运行 ID 与执行记录、指标与混淆矩阵、输入/输出快照哈希（见上表）。
+
+仍待补：可公开访问的评审链接（平台 run 需登录态）；演示录制时的实时操作轨迹；人工接管点说明的成稿表述。
+
+这些就绪后，`ai4-aaff` 的「提供并实际计时一条 3—5 分钟可复现的演示脚本」「提供 SciencePal 实际承载核心任务的运行链接、输出及执行记录」两项按录制进度闭合。
 
 ## 替换验证（NOAA Mauna Loa CO₂）
 
