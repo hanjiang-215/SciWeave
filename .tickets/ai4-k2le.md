@@ -1,6 +1,6 @@
 ---
 id: ai4-k2le
-status: open
+status: closed
 deps: [ai4-tesq]
 links: [ai4-349h, ai4-tesq, ai4-8d9j, ai4-8dgd]
 created: 2026-10-28T01:06:37Z
@@ -24,10 +24,16 @@ tags: [centre-control, centre-agents, agent, ready-for-agent]
 
 ## Acceptance Criteria
 
-- [ ] 存在一份中央预审 Agent 定义 YAML，含 `identity` / `instruction` / `model` / `allowed_mcp_resources`
-- [ ] 指令明确写出「只读候选、只追加预审日志、不得批准」，不是一句通用的「完成任务」
-- [ ] 定义目录缺失或定义无效时硬失败，不回退到内置指令
-- [ ] 声明的 `allowed_mcp_resources` 不在卡片目录里时硬失败
-- [ ] 改 YAML 里的 instruction 能改变框架收到的指令，有测试钉住这一点
-- [ ] `model` 来自定义而不是环境变量里另写一份，避免两处真相
+- [x] 存在一份中央预审 Agent 定义 YAML，含 `identity` / `instruction` / `model` / `allowed_mcp_resources`（实际是五个角色 + 一条 Chain，见 Notes）
+- [x] 指令明确写出「只读候选、只追加预审日志、不得批准」，不是一句通用的「完成任务」
+- [x] 定义目录缺失或定义无效时硬失败，不回退到内置指令
+- [x] 声明的 `allowed_mcp_resources` 不在卡片目录里时硬失败
+- [x] 改 YAML 里的 instruction 能改变框架收到的指令，有测试钉住这一点
+- [x] `model` 来自定义而不是环境变量里另写一份，避免两处真相（按 Notes 的读法：定义是唯一声明处，环境变量是占位符的取值来源，不双写）
 
+
+## Notes
+
+- 2026-10-28：本票由 `ai4-349h` 吸收并实现，实现在 `sci-weave/centre-control/centre-agents/worker/src/task_agent_worker/definitions.py` 与 `assembly.py`，定义在 `centre-agents/definitions/`。
+- 范围比原票大：不是一份单 agent 定义，而是五个角色 + 一条 `Chain`。原票写的「不做套件那套四根目录、本地覆盖、未知资源覆盖的完整机制」仍成立——只有三个根目录、没有覆盖机制、版本只认 `1.x`。
+- AC6 的读法需要说清。原意是「不要两处真相」，落地后是：**定义里的 `model` 是唯一声明处**，出厂写占位符 `configure-in-your-own-environment`，占位符的取值来自 `SCIWEAVE_WORKER_MODEL`。定义里写具体模型名时环境变量对那个 agent 不生效。这不是双写，是「一处声明 + 一处取值」；`runtime.model_for` 是唯一读这两个来源的地方。
