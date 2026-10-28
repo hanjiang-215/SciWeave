@@ -1,6 +1,6 @@
 ---
 id: ai4-0wg0
-status: in_progress
+status: closed
 deps: []
 links: [ai4-8d9j, ai4-fm4a, ai4-349h, ai4-japd]
 created: 2026-10-28T06:41:45Z
@@ -71,3 +71,9 @@ git diff --check         PASS
 
 - ingest 现在全仓没有启动入口，`ai4-japd` 的优先级含义变了（已加注）。
 - `ops/prereview-sweep.sh` 在容器里没有调度者：supervisord 只托管常驻进程，它需要宿主机 cron 或一个 sidecar。这一点留给 `ai4-japd` 一并处理，本票只保证脚本本身可用且被测试钉住。
+
+**2026-10-28T06:53:25Z**
+
+PR: https://gitee.com/qi-yueran/ai4science/pulls/57 （feature/frank-qi → develop）。
+
+六个提交：`1496b7d` 退场与搬迁、`5ebd160` 文档指向修正、`857855b` 工单加注、`846884f` 判据并入、`0fe84ca` 验收勾选。
