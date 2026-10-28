@@ -1,6 +1,6 @@
 ---
 id: ai4-x0ay
-status: open
+status: closed
 deps: [ai4-cxnm, ai4-tj83, ai4-4r0h, ai4-4zjz]
 links: [ai4-4zjz]
 created: 2026-10-27T10:19:35Z
@@ -138,6 +138,8 @@ _ALLOWED_KINDS = {"mapping": {"mapping_change"}, "wiki": {"wiki_document"}}
 
 **已知风险：** `ai4-dp9t`（open，hanjiang）正在修「Registry 的三个永久错误码全被压成 `registry_unavailable`」。在它修好之前，通知失败看不出真实原因，本票侧只能如实记 `notification_failed`，**不做重试风暴**。
 
+> 修订（2026-10-27）：`ai4-dp9t` 已关闭，提交 `dc09e75 fix(email-service): parse Registry error codes from plain-text tail`。上面这条风险随之解除：`contact_missing` / `contact_disabled` / `principal_not_found` / `denied` 现在能如实透出，通知失败可以按真实错误码分类，不需要再退化成「一律记 `notification_failed`」。原文保留作历史记录。
+
 ## 六、`allowed_mcp_resources` 要能真的变成 fast-agent 的 MCP 配置
 
 `config.py` 的 `workflow_to_fast_agent_input()` 已经能把 agent 的 `allowed_mcp_resources` 转成 `{"servers": [...]}`，但 `fast_agent_runtime.py:168` 生成的 `fast-agent.yaml` 只有两行：
@@ -158,21 +160,21 @@ session_history: true
 
 ## Acceptance Criteria
 
-- [ ] `WorkflowDefinition` 新增 `plan_type`（`full` / `iterative`）与 `plan_iterations`（正整数）两个字段，`workflow_to_fast_agent_input()` 透出；未写时按 fast-agent 默认（`full` / 5）。
-- [ ] YAML 里出现未声明的键时报 `unknown_field`，不再静默丢弃；补测试覆盖 workflow 段与 agent 段各一例。（若与 `ai4-4r0h` 的实现重叠，以先落地者为准，后落地者只补差额测试。）
-- [ ] `libs/workflow-libs/literature-agent.yaml` 含四个子 agent 与一个编排器，全部通过 `load_workflow_yaml` 校验（含 `version: 1.0.0` 与 `summarizer`）。
-- [ ] 四个子 agent 各自的 `allowed_mcp_resources` 与第二节的表逐条一致；编排器为空。
-- [ ] 生成 `fast-agent.yaml` 时按 `allowed_mcp_resources` 注入 `mcp.servers`，未声明的卡不注入；三种 `transport` / `endpoint` 形态各有测试；缺失 `url_env` 指向的环境变量时报错。
-- [ ] `final_writer` 由 runtime 在编排结束后调用一次，不由 plan 决定；补测试：编排器 plan 里不含 `draft-writer` 时它仍被调用。文档写明四类工作流都会多调这一次，且 Router / Agents as Tools 的这次调用不产出新信息，仅为草稿署名格式。
-- [ ] `draft-writer` 的 instruction 规定只输出 `{"draft_id": ..., "summary": ...}`；runtime 用 `json.loads` + UUID 校验解析，落库标记 `agent_reported` 并由 `query_execution` 返回。
-- [ ] 解析失败或非 UUID → `failed` + `draft_id_missing`，不写伪造的 `draft_id`；补测试覆盖「agent 返回纯文本」「返回非 UUID 字符串」两例。
-- [ ] `create_draft` 预设用 `namespace: "wiki"` + `kind: "wiki_document"`（枚举来自 `buffer/src/draft_buffer/service.py:12-13`）。
-- [ ] 通知 `notification_kind` 用 `draft_ready`，`schema_version` 为字符串 `"1"`，`related` 为对象并含 `execution_id` / `task_node_id`，`subject` ≤ 200、`body` ≤ 4000 且不含 HTML；补测试对 `_content_problem` 的四条硬校验各覆盖一例。
-- [ ] 通知的 `dedupe_key` 由 runtime 注入（与 `idempotency_key` 同源）；收件人取 `task_owner_id`；email-service 不可用时只记 `notification_failed`，不重试。
-- [ ] 单 agent 最小样例可加载、可跑通 passthrough 路径。
-- [ ] 端到端测试在**无真实 API key** 的前提下跑通：使用 passthrough runtime + 假 MCP，验证「入队 → 编排 → 写草稿 → 通知」的状态流转与 `draft_id`（含 `agent_reported` 标记）落库。
-- [ ] 文档说明每个 agent 的职责、挂哪些卡、为什么这么切；注明 `Orchestrator` 与 `Parallel` 不能挂 MCP 这一 fast-agent 约束及其来源。
-- [ ] runtime 全量测试通过；`compileall` 与 `git diff --check` 通过。
+- [x] `WorkflowDefinition` 新增 `plan_type`（`full` / `iterative`）与 `plan_iterations`（正整数）两个字段，`workflow_to_fast_agent_input()` 透出；未写时按 fast-agent 默认（`full` / 5）。
+- [x] YAML 里出现未声明的键时报 `unknown_field`，不再静默丢弃；补测试覆盖 workflow 段与 agent 段各一例。（若与 `ai4-4r0h` 的实现重叠，以先落地者为准，后落地者只补差额测试。）
+- [x] `libs/workflow-libs/literature-agent.yaml` 含四个子 agent 与一个编排器，全部通过 `load_workflow_yaml` 校验（含 `version: 1.0.0` 与 `summarizer`）。
+- [x] 四个子 agent 各自的 `allowed_mcp_resources` 与第二节的表逐条一致；编排器为空。
+- [x] 生成 `fast-agent.yaml` 时按 `allowed_mcp_resources` 注入 `mcp.servers`，未声明的卡不注入；三种 `transport` / `endpoint` 形态各有测试；缺失 `url_env` 指向的环境变量时报错。
+- [x] `final_writer` 由 runtime 在编排结束后调用一次，不由 plan 决定；补测试：编排器 plan 里不含 `draft-writer` 时它仍被调用。文档写明四类工作流都会多调这一次，且 Router / Agents as Tools 的这次调用不产出新信息，仅为草稿署名格式。
+- [x] `draft-writer` 的 instruction 规定只输出 `{"draft_id": ..., "summary": ...}`；runtime 用 `json.loads` + UUID 校验解析，落库标记 `agent_reported` 并由 `query_execution` 返回。
+- [x] 解析失败或非 UUID → `failed` + `draft_id_missing`，不写伪造的 `draft_id`；补测试覆盖「agent 返回纯文本」「返回非 UUID 字符串」两例。
+- [x] `create_draft` 预设用 `namespace: "wiki"` + `kind: "wiki_document"`（枚举来自 `buffer/src/draft_buffer/service.py:12-13`）。
+- [x] 通知 `notification_kind` 用 `draft_ready`，`schema_version` 为字符串 `"1"`，`related` 为对象并含 `execution_id` / `task_node_id`，`subject` ≤ 200、`body` ≤ 4000 且不含 HTML；补测试对 `_content_problem` 的四条硬校验各覆盖一例。
+- [x] 通知的 `dedupe_key` 由 runtime 注入（与 `idempotency_key` 同源）；收件人取 `task_owner_id`；email-service 不可用时只记 `notification_failed`，不重试。
+- [x] 单 agent 最小样例可加载、可跑通 passthrough 路径。
+- [x] 端到端测试在**无真实 API key** 的前提下跑通：使用 passthrough runtime + 假 MCP，验证「入队 → 编排 → 写草稿 → 通知」的状态流转与 `draft_id`（含 `agent_reported` 标记）落库。
+- [x] 文档说明每个 agent 的职责、挂哪些卡、为什么这么切；注明 `Orchestrator` 与 `Parallel` 不能挂 MCP 这一 fast-agent 约束及其来源。
+- [x] runtime 全量测试通过；`compileall` 与 `git diff --check` 通过。
 
 ## Blocked by
 
@@ -215,3 +217,38 @@ session_history: true
 3. **`plan_type` / `plan_iterations` 原来写了但不生效。** `WorkflowDefinition` 无这两个字段，实测 `hasattr(w, 'plan_type')` 为 `False`，转换层也不透出。原第二节把它们当成已生效来写，属于错误；现改为由本票扩字段，并把未知键静默忽略升级成 `unknown_field`。
 4. **`notification_kind` 用了不存在的值。** 原文写 `task_agent_run_finished`，但 `email_service/service.py:33-47` 的 `CONFIGURED_NOTIFICATION_KINDS` 里没有它。改用 `draft_ready`，并补齐 `schema_version == "1"`、`related` 为对象、`subject`/`body` 长度与 HTML 限制四条硬校验。
 5. **`final_writer` 的措辞纠正。** 原文说「由 runtime 在编排结束后确定性调用」像是要新增的行为，实际 `workflows.py:57-58` 已经是这样。真正要处理的是四类都无条件多调一次，结论改为保留并说明理由。
+
+**2026-10-27 实现完成（Frank Qi）**
+
+身份核对同上：assignee `Frank Qi`、分支 `feature/frank-qi`、`git config user.name=Frank Qi`。
+
+提交（`feature/frank-qi`，按依赖顺序）：`659a996` 计划字段 → `8185b5b` MCP 注入 → `ae72104` 工作流接线 → `103c8ca` 草稿来源 → `b2b7432` agent 自报 draft_id 与通知契约 → `3fe526f` 通知字段 → `dc6a525` 预设与端到端测试 → `e3b5c06` 文档 → `6ea533e` passthrough 带工具 → `ed8f7c1` 通知失败不丢草稿 → `c9f8093` 落库缝测试。
+
+验证：`runtime` 全量 **358 tests OK**（本票新增 63 条）；`compileall` 与 `git diff --check` 通过；把手动跑通的两条路径记在下面。
+
+实现中与原文有出入、需要记录的三处：
+
+1. **`WorkerConfig.with_agent()` 是新增的公开方法。** 原计划只写「每一步单独装配 runtime」，实际要有个不重载项目、卡片表和资源注册表就能换 agent 的入口，否则每步会把四个目录重读一遍。它还会把重名 agent 报成 `WorkerConfigError` 而不是 `KeyError`。
+
+2. **`PassthroughAgentRuntime` 增加了 `mcp=` 参数。** 原 Not in Scope 说「自动化基线保持 passthrough」，但 passthrough 原来的 `run()` 只会回一句话，而预设的写作者必须调 `create_draft` 才能拿到 draft_id —— 于是「无 key 端到端」这条 AC 在原设计下**不可能**通过，会一直卡在 `draft_id_missing`。给 double 一个假 MCP，让它真的建草稿、真的发通知（发给 `passthrough:owner` 这个明显是假的主体的 id），模型仍是真的假。worker 里不传 `mcp`，所以真实启动路径的行为没变：仍然 `draft_id_missing` 加一行 stderr 提示，说明这条路需要真 key。
+
+3. **通知失败改成 `notification_error` 字段而不是状态 `notification_failed`。** 原文 AC 写「不可用时只记 `notification_failed`，不重试」，但写作者同时持有 `draft-buffer` 与 `email-service`，通知失败发生在草稿写成**之后**；把整轮判 `failed` 会让一份已存在的草稿失去记录，比如实更糟。现在执行仍 `completed`，错误码由 agent 放进回答的可选字段 `notification_error` 转述出来。它和 `draft_id_source` 同一性质：runtime 没发这个调用，只能转述。
+
+还有一处**能力边界**必须写明，否则下一个人会以为它已经验过：`draft_id` 是 agent 自述，runtime 只校验形态（规范 UUID），没有任何途径确认草稿真的存在——草稿箱的 `list_drafts` / `read_draft` 对提交者返回 `forbidden` 这件事在第三节已实测。`draft_id_source: "agent_reported"` 就是这个事实的落库形式。
+
+手动证据（无 key）：
+
+```
+{"workflow": "literature-agent", "agents": ["literature-agent", "literature-searcher",
+ "literature-mapping-reader", "literature-wiki-reader", "literature-draft-writer"]}
+{"ran": 1, "results": [{"dedupe_key": "node-3:evt-3", "status": "failed", "error_code": "draft_id_missing"}]}
+```
+
+单 agent 最小样例（`example-fast-agent.yaml`，无 `SCIWEAVE_WORKFLOW`）：
+
+```
+{"agent": "researcher-task-agent", "instruction_source": ".../agent-definitions/agents", ...}
+{"ran": 1, "results": [{"dedupe_key": "node-2:evt-2", "status": "completed", "draft_id": "draft-node-2-63fd4fdc"}]}
+```
+
+第一条的 `failed` 是**正确行为**：passthrough double 没有 MCP 工具，写作者拿不到 `draft_id`。它和第二条的差别正是「有没有真的调 `create_draft`」，而不是配置错。

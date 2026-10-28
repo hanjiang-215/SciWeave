@@ -1,0 +1,153 @@
+{
+  "status": "ok",
+  "message": {
+    "items": [
+      {
+        "indexed": {
+          "date-parts": [
+            [
+              2026,
+              9,
+              26
+            ]
+          ],
+          "date-time": "2026-09-26T05:29:34Z",
+          "timestamp": 1790400574696,
+          "version": "4.1.0"
+        },
+        "reference-count": 0,
+        "publisher": "IEE",
+        "content-domain": {
+          "domain": [],
+          "crossmark-restriction": false
+        },
+        "published-print": {
+          "date-parts": [
+            [
+              1998
+            ]
+          ]
+        },
+        "DOI": "10.1049/ic:19981011",
+        "type": "proceedings-article",
+        "created": {
+          "date-parts": [
+            [
+              2007,
+              1,
+              4
+            ]
+          ],
+          "date-time": "2007-01-04T23:39:01Z",
+          "timestamp": 1167953941000
+        },
+        "page": "7-7",
+        "source": "Crossref",
+        "is-referenced-by-count": 2,
+        "title": [
+          "Transformer ratings and transformer life"
+        ],
+        "prefix": "10.1049",
+        "volume": "1998",
+        "author": [
+          {
+            "given": "E.",
+            "family": "Simonson",
+            "sequence": "first",
+            "affiliation": [],
+            "role": [
+              {
+                "vocabulary": "crossref",
+                "role": "author"
+              }
+            ]
+          }
+        ],
+        "member": "265",
+        "event": {
+          "name": "IEE Colloquium Transformer Life Management",
+          "location": "London, UK"
+        },
+        "container-title": [
+          "IEE Colloquium Transformer Life Management"
+        ],
+        "deposited": {
+          "date-parts": [
+            [
+              2018,
+              12,
+              6
+            ]
+          ],
+          "date-time": "2018-12-06T20:05:43Z",
+          "timestamp": 1544126743000
+        },
+        "score": 13.184403,
+        "resource": {
+          "primary": {
+            "URL": "https://digital-library.theiet.org/content/conferences/10.1049/ic_19981011"
+          },
+          "secondary": [
+            {
+              "URL": "http://ieeexplore.ieee.org/lpdocs/epic03/wrapper.htm?arnumber=745399",
+              "label": "Xplore"
+            }
+          ]
+        },
+        "issued": {
+          "date-parts": [
+            [
+              1998
+            ]
+          ]
+        },
+        "references-count": 0,
+        "URL": "https://doi.org/10.1049/ic:19981011",
+        "published": {
+          "date-parts": [
+            [
+              1998
+            ]
+          ]
+        }
+      },
+      {
+        "DOI": "10.1038/nature14539",
+        "URL": "https://doi.org/10.1038/nature14539",
+        "title": [
+          "Deep learning"
+        ],
+        "author": [
+          {
+            "given": "Yann",
+            "family": "LeCun"
+          },
+          {
+            "given": "Yoshua",
+            "family": "Bengio"
+          },
+          {
+            "given": "Geoffrey",
+            "family": "Hinton"
+          }
+        ],
+        "published": {
+          "date-parts": [
+            [
+              2015,
+              5,
+              27
+            ]
+          ]
+        },
+        "license": [
+          {
+            "URL": "https://www.nature.com/articles/nature14539",
+            "content-version": "vor"
+          }
+        ],
+        "abstract": "<jats:p>Deep learning allows computational models &lt;b&gt;composed of multiple layers&lt;/b&gt; to learn.</jats:p>"
+      }
+    ]
+  }
+}

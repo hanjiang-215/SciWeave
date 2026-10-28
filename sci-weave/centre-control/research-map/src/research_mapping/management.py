@@ -130,6 +130,7 @@ class MappingManagementService:
             handlers["list_reviewable_candidates"] = self._list_reviewable_candidates
         if self._review_service is not None:
             handlers["preview_candidate"] = self._preview_candidate
+            handlers["create_merge_request"] = self._create_merge_request
             handlers["record_review"] = self._record_review
         if self._formalization_service is not None:
             handlers["formalize_candidate"] = self._formalize_candidate
@@ -366,6 +367,32 @@ class MappingManagementService:
             "route_impact": preview.route_impact,
         }
 
+    def _create_merge_request(self, arguments: dict[str, Any], actor_id: str) -> dict[str, Any]:
+        """Lock one ready preview into a merge-request buffer.
+
+        Until this tool existed, `create_buffer` was only reachable from tests
+        and a demo script, so the buffer id that `record_review` and
+        `formalize_candidate` take could not be produced through MCP at all: the
+        Wiki side had `create_wiki_merge_request` and the Mapping side did not.
+        A Project Owner holding `candidate_review` could preview a candidate and
+        then had nowhere to send the decision.
+
+        The buffer id stays derived from the preview (``create_buffer`` already
+        computes it as a digest, so the same preview yields the same buffer, and
+        a retry after a crash is idempotent). That is why the caller passes the
+        preview and not an id: an owner-chosen id would make the pairing between
+        preview and buffer a matter of caller discipline.
+        """
+        buffer = self._review_service.create_buffer(_required(arguments, "preview_id"))
+        return {
+            "buffer_id": buffer.buffer_id,
+            "preview_id": buffer.preview_id,
+            "proposal_id": buffer.proposal_id,
+            "base_formal_revision_id": buffer.base_formal_revision_id,
+            "candidate_head": buffer.candidate_commit_hash,
+            "status": "pending",
+        }
+
     def _record_review(self, arguments: dict[str, Any], actor_id: str) -> dict[str, Any]:
         decision = self._review_service.record_review(
             _required(arguments, "buffer_id"),
@@ -417,6 +444,7 @@ class MappingManagementService:
 _WRITE_TOOLS = frozenset({
     "submit_candidate",
     "preview_candidate",
+    "create_merge_request",
     "record_review",
     "formalize_candidate",
     "reconcile_formalization",
@@ -431,6 +459,7 @@ _TOOL_CAPABILITIES = {
     "list_reviewable_candidates": _READ_CAPABILITIES,
     "submit_candidate": _CANDIDATE_SUBMIT_CAPABILITIES,
     "preview_candidate": _CANDIDATE_REVIEW_CAPABILITIES,
+    "create_merge_request": _CANDIDATE_REVIEW_CAPABILITIES,
     "record_review": _CANDIDATE_REVIEW_CAPABILITIES,
     "formalize_candidate": _FORMALIZE_CAPABILITIES,
     "reconcile_formalization": _FORMALIZE_CAPABILITIES,
@@ -506,6 +535,16 @@ TOOL_DEFINITIONS = [
                 "base_formal_revision_id": {"type": "string"},
                 "candidate_head": {"type": "string"},
             },
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "create_merge_request",
+        "description": "Lock a ready candidate preview into a merge-request buffer and return its buffer_id. Requires the candidate_review capability.",
+        "inputSchema": {
+            "type": "object",
+            "required": ["preview_id"],
+            "properties": {"preview_id": {"type": "string"}},
             "additionalProperties": False,
         },
     },
@@ -683,6 +722,7 @@ def _target_type(tool: str) -> str:
         "list_reviewable_candidates": "MappingDomain",
         "submit_candidate": "MappingSubmission",
         "preview_candidate": "MappingCandidate",
+        "create_merge_request": "MappingMergeRequest",
         "record_review": "MappingMergeRequest",
         "formalize_candidate": "MappingMergeRequest",
         "reconcile_formalization": "MappingFormalizationOperation",
@@ -702,6 +742,8 @@ def _target_id(arguments: dict[str, Any], tool: str) -> str | None:
         return _text(arguments.get("mapping_domain_id"))
     if tool == "submit_candidate":
         return _text(arguments.get("idempotency_key"))
+    if tool == "create_merge_request":
+        return _text(arguments.get("preview_id"))
     if tool in {"preview_candidate", "record_review", "formalize_candidate"}:
         return _text(arguments.get("proposal_id")) or _text(arguments.get("buffer_id")) or _text(arguments.get("merge_request_id"))
     if tool == "reconcile_formalization":

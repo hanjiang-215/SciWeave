@@ -1,6 +1,12 @@
+# Orchestrator example. Agent names carry a file-level prefix because the loader
+# merges every YAML file in the directory into one namespace: an unprefixed `writer`
+# here collides with the `writer` in the other three examples and the whole
+# directory fails to load with [duplicate_definition].
+version: 1.0.0
+name: orchestrator-workflows
 agents:
   orchestrator: {identity: task orchestrator, instruction: decompose and synthesize, model: configure-locally, allowed_mcp_resources: [], resources: []}
-  researcher: {identity: evidence researcher, instruction: collect evidence, model: configure-locally, allowed_mcp_resources: [research-mapping, research-wiki], resources: []}
-  writer: {identity: final writer, instruction: write one draft, model: configure-locally, allowed_mcp_resources: [draft-buffer], resources: []}
+  orchestrator-researcher: {identity: evidence researcher, instruction: collect evidence, model: configure-locally, allowed_mcp_resources: [research-mapping, research-wiki], resources: []}
+  orchestrator-writer: {identity: final writer, instruction: write one draft, model: configure-locally, allowed_mcp_resources: [draft-buffer], resources: []}
 workflows:
-  orchestrator-example: {type: Orchestrator, entry_agent: orchestrator, sub_agents: [researcher], summarizer: orchestrator, final_writer: writer}
+  orchestrator-example: {type: Orchestrator, entry_agent: orchestrator, sub_agents: [orchestrator-researcher], summarizer: orchestrator, final_writer: orchestrator-writer}

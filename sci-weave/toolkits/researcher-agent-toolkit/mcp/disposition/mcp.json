@@ -1,0 +1,182 @@
+{
+  "name": "disposition",
+  "version": "0.1.0",
+  "description": "The researcher's own disposition surface for their Task Agent: look at what is queued, running or waiting for an answer, answer it, cancel it, and record an append-only accept/reject on a finished execution.",
+  "transport": "streamable-http",
+  "endpoint": {
+    "url_env": "DISPOSITION_MCP_URL"
+  },
+  "environment": [
+    "DISPOSITION_MCP_URL",
+    "DISPOSITION_MCP_TOKEN"
+  ],
+  "notes": [
+    "This is the local gateway/mcp role of the kit the researcher deployed; it is not the central gateway. It reads and writes the local execution store only.",
+    "There is deliberately no submit_owner_command and no tool that creates an execution. Handoffs arrive over the queue; a tool that could start one would be a back door around the handoff contract.",
+    "review_execution records a decision on a finished execution. It is not a candidate review and carries no formalize capability: the draft a worker writes still has to go through the draft box and the domain MCP."
+  ],
+  "tools": [
+    {
+      "name": "health",
+      "description": "Report whether the disposition surface and its execution store are usable.",
+      "input": {
+        "type": "object",
+        "required": [],
+        "properties": {}
+      },
+      "output": {
+        "status": "string",
+        "pending": "integer"
+      },
+      "allowed": [
+        "checking the local services before a debugging session"
+      ],
+      "failures": [
+        "store_unavailable"
+      ]
+    },
+    {
+      "name": "query_execution",
+      "description": "Read one execution: status, draft id, error code and failed agent.",
+      "input": {
+        "type": "object",
+        "required": [
+          "execution_id"
+        ],
+        "properties": {
+          "execution_id": {
+            "type": "string"
+          }
+        }
+      },
+      "output": {
+        "execution_id": "string",
+        "target_id": "string",
+        "status": "string",
+        "draft_id": "string|null",
+        "draft_id_source": "string",
+        "error_code": "string|null",
+        "failed_agent": "string|null",
+        "reviews": "array"
+      },
+      "allowed": [
+        "finding out why a handoff did not produce a draft"
+      ],
+      "failures": [
+        "execution_not_found"
+      ]
+    },
+    {
+      "name": "list_pending",
+      "description": "List executions that still need a human: queued, running or waiting for an answer.",
+      "input": {
+        "type": "object",
+        "required": [],
+        "properties": {}
+      },
+      "output": {
+        "executions": "array of execution records"
+      },
+      "allowed": [
+        "the daily 'is anything stuck' check"
+      ],
+      "failures": [
+        "store_unavailable"
+      ]
+    },
+    {
+      "name": "cancel_execution",
+      "description": "Cancel a queued, running or waiting execution. A finished execution keeps its status.",
+      "input": {
+        "type": "object",
+        "required": [
+          "execution_id"
+        ],
+        "properties": {
+          "execution_id": {
+            "type": "string"
+          }
+        }
+      },
+      "output": {
+        "execution_id": "string",
+        "status": "string"
+      },
+      "allowed": [
+        "stopping a handoff that was dispatched with the wrong target"
+      ],
+      "failures": [
+        "execution_not_found",
+        "invalid_transition"
+      ]
+    },
+    {
+      "name": "answer_question",
+      "description": "Answer a pending question and put its execution back in the queue.",
+      "input": {
+        "type": "object",
+        "required": [
+          "question_id",
+          "answer"
+        ],
+        "properties": {
+          "question_id": {
+            "type": "string"
+          },
+          "answer": {
+            "type": "string"
+          }
+        }
+      },
+      "output": {
+        "execution_id": "string",
+        "status": "string"
+      },
+      "allowed": [
+        "unblocking a worker that asked the researcher something"
+      ],
+      "failures": [
+        "question_not_found",
+        "invalid_transition"
+      ]
+    },
+    {
+      "name": "review_execution",
+      "description": "Record an append-only review decision (accepted or rejected) on a finished execution.",
+      "input": {
+        "type": "object",
+        "required": [
+          "execution_id",
+          "decision",
+          "reason"
+        ],
+        "properties": {
+          "execution_id": {
+            "type": "string"
+          },
+          "decision": {
+            "type": "string",
+            "enum": [
+              "accepted",
+              "rejected"
+            ]
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "output": {
+        "execution_id": "string",
+        "decision": "string"
+      },
+      "allowed": [
+        "recording that the researcher read the worker's own report"
+      ],
+      "failures": [
+        "execution_not_found",
+        "invalid_transition"
+      ]
+    }
+  ]
+}

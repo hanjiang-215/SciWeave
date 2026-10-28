@@ -66,6 +66,53 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(result, WorkflowRunResult.failed("child_agent_failed", "specialist"))
         self.assertEqual(drafts.calls, [])
 
+    def test_the_final_writer_runs_even_though_no_plan_named_it(self):
+        """`final_writer` is the runtime's call, not something the planner picks.
+
+        A model that plans "search, read, done" would otherwise skip the step
+        that produces the draft, and the run would end with an answer and no
+        draft to review — with nothing in the plan looking wrong.
+        """
+        for workflow_type in ("Router", "Orchestrator", "Parallel", "Agents as Tools"):
+            with self.subTest(workflow_type=workflow_type):
+                calls = []
+
+                def agent(name, prompt, tools=None):
+                    calls.append(name)
+                    if name == "entry" and workflow_type == "Router":
+                        return "specialist"
+                    return f"{name}-output"
+
+                result = WorkflowExecutor(config(workflow_type), agent, RecordingDraftBox()).run(
+                    "main", "question", target_id="task"
+                )
+                self.assertEqual(result.status, "completed")
+                self.assertIn("writer", calls)
+                self.assertEqual(calls[-1], "writer", "the writer must be the last model call")
+
+    def test_the_final_writer_reformats_rather_than_passing_the_answer_through(self):
+        """The draft payload is a different string from the step's own output.
+
+        The writer is a real model call whose job is to rewrite the answer in
+        draft form; a test that only counts calls would still pass if the
+        executor passed the previous string straight through.
+        """
+        drafts = RecordingDraftBox()
+
+        def agent(name, prompt, tools=None):
+            if name == "writer":
+                # Orchestrator replaces the child results with the summarizer's
+                # output, so what the writer sees is the summary, not the raw
+                # child answers.
+                self.assertIn("entry-output", prompt, "the writer must see the summarised result")
+                return "rewritten as a draft"
+            return f"{name}-output"
+
+        WorkflowExecutor(config("Orchestrator"), agent, drafts).run(
+            "main", "question", target_id="task"
+        )
+        self.assertEqual(drafts.calls, [("task", "rewritten as a draft")])
+
     def test_agents_as_tools_exposes_only_declared_child_tools(self):
         seen = []
         drafts = RecordingDraftBox()

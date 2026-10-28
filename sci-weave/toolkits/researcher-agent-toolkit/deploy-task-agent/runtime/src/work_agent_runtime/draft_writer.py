@@ -120,7 +120,7 @@ class BufferMCPDraftWriter:
                         "submitted_by": self.submitter_id,
                         "idempotency_key": f"draft:{target_id}",
                         "base_formal_revision_id": self.base_formal_revision_id,
-                        "source_target_node_id": target_id,
+                        "source_task_node_id": target_id,
                     },
                 },
             }

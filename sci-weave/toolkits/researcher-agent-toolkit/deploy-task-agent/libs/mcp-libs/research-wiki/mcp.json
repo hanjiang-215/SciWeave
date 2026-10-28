@@ -1,7 +1,7 @@
 {
   "name": "research-wiki",
   "version": "1.0.0",
-  "description": "Read formal Wiki revisions and manage Wiki candidates and merge requests via the permissioned management MCP.",
+  "description": "Read the formal LLM-Wiki document and the candidate submissions of a wiki domain through the permissioned management MCP. Read-only: submitting, reviewing, merging and formalizing wiki candidates require the Owner-side capability set and are not exposed here.",
   "transport": "streamable-http",
   "endpoint": {
     "url_env": "LLM_WIKI_MCP_URL"
@@ -23,13 +23,20 @@
           "wiki_domain_id": {
             "type": "string"
           }
-        }
+        },
+        "additionalProperties": false
       },
       "output": {
-        "status": "string",
+        "status": "string (available when a formal revision exists; otherwise a failure status)",
+        "reason_code": "string (null on success)",
         "wiki_domain_id": "string",
         "formal_wiki_revision_id": "string",
+        "terminus_store_id": "string",
+        "formal_branch_id": "string",
+        "formal_commit_hash": "string",
+        "content_digest": "string",
         "title": "string",
+        "description": "string",
         "body_markdown": "string",
         "references": "array of reference records"
       },
@@ -60,447 +67,24 @@
           "wiki_domain_id": {
             "type": "string"
           }
-        }
+        },
+        "additionalProperties": false
       },
       "output": {
-        "candidate": "candidate record or null"
+        "wiki_domain_id": "string",
+        "candidates": "array of {submission_id, wiki_domain_id, submitter_id, base_formal_revision_id, proposal_id, submitted_at, status}"
       },
       "examples": [
         {
-          "wiki_domain_id": "iris-demo"
+          "wiki_domain_id": "iris-wiki"
         }
       ],
       "allowed": [
-        "candidate review",
-        "pre-review inspection"
+        "candidate submission list lookup"
       ],
       "failures": [
         "denied",
         "unavailable"
-      ]
-    },
-    {
-      "name": "list_reviewable_wiki_candidates",
-      "description": "Read the same-time reviewable Wiki candidate set (not merged, rejected or abandoned) with exact candidate head, base formal revision and immutable content snapshot. Requires the read or centre capability.",
-      "input": {
-        "type": "object",
-        "required": [
-          "wiki_domain_id"
-        ],
-        "properties": {
-          "wiki_domain_id": {
-            "type": "string"
-          }
-        },
-        "additionalProperties": false
-      },
-      "output": {
-        "status": "string"
-      },
-      "examples": [],
-      "allowed": [],
-      "failures": [
-        "denied",
-        "unavailable",
-        "invalid_arguments"
-      ]
-    },
-    {
-      "name": "submit_wiki_candidate",
-      "description": "Submit a Wiki document change with its full reference set against the exact formal base. Requires candidate_submit or centre capability.",
-      "input": {
-        "type": "object",
-        "required": [
-          "document_change",
-          "idempotency_key"
-        ],
-        "properties": {
-          "document_change": {
-            "type": "object"
-          },
-          "idempotency_key": {
-            "type": "string"
-          }
-        }
-      },
-      "output": {
-        "status": "string",
-        "candidate_id": "string",
-        "candidate_head": "string",
-        "base_formal_revision_id": "string"
-      },
-      "examples": [
-        {
-          "document_change": {
-            "title": "update",
-            "body_markdown": "new text",
-            "references": []
-          },
-          "idempotency_key": "wiki-cand-1"
-        }
-      ],
-      "allowed": [
-        "proposing a wiki change"
-      ],
-      "failures": [
-        "denied",
-        "invalid_document_change",
-        "base_moved",
-        "idempotency_conflict"
-      ]
-    },
-    {
-      "name": "preview_wiki_review",
-      "description": "Build the review preview for a Wiki proposal. Requires candidate_review or centre capability.",
-      "input": {
-        "type": "object",
-        "required": [
-          "proposal_id"
-        ],
-        "properties": {
-          "proposal_id": {
-            "type": "string"
-          }
-        }
-      },
-      "output": {
-        "status": "string",
-        "proposal_id": "string",
-        "preview": "object"
-      },
-      "examples": [
-        {
-          "proposal_id": "prop-1"
-        }
-      ],
-      "allowed": [
-        "candidate review material"
-      ],
-      "failures": [
-        "denied",
-        "proposal_not_found",
-        "invalid_state"
-      ]
-    },
-    {
-      "name": "create_wiki_merge_request",
-      "description": "Lock a ready Wiki preview into a merge-request buffer for owner review. Requires candidate_review or centre capability.",
-      "input": {
-        "type": "object",
-        "required": [
-          "proposal_id",
-          "merge_request_id"
-        ],
-        "properties": {
-          "proposal_id": {
-            "type": "string"
-          },
-          "merge_request_id": {
-            "type": "string"
-          }
-        }
-      },
-      "output": {
-        "status": "string",
-        "merge_request_id": "string"
-      },
-      "examples": [
-        {
-          "proposal_id": "prop-1",
-          "merge_request_id": "mr-1"
-        }
-      ],
-      "allowed": [
-        "moving a reviewed candidate toward owner decision"
-      ],
-      "failures": [
-        "denied",
-        "proposal_not_found",
-        "invalid_state",
-        "merge_request_conflict"
-      ]
-    },
-    {
-      "name": "decide_wiki_review",
-      "description": "Record the Project Owner decision for a Wiki merge request. Requires formalize or centre capability.",
-      "input": {
-        "type": "object",
-        "required": [
-          "merge_request_id",
-          "decision",
-          "reason",
-          "selected_solution_id"
-        ],
-        "properties": {
-          "merge_request_id": {
-            "type": "string"
-          },
-          "decision": {
-            "type": "string",
-            "enum": [
-              "approved",
-              "rejected"
-            ]
-          },
-          "reason": {
-            "type": "string"
-          },
-          "selected_solution_id": {
-            "type": "string"
-          }
-        }
-      },
-      "output": {
-        "status": "string",
-        "merge_request_id": "string",
-        "decision": "string"
-      },
-      "examples": [
-        {
-          "merge_request_id": "mr-1",
-          "decision": "approved",
-          "reason": "references verified",
-          "selected_solution_id": "sol-1"
-        }
-      ],
-      "allowed": [
-        "Project Owner decision"
-      ],
-      "failures": [
-        "denied",
-        "merge_request_not_found",
-        "invalid_decision",
-        "invalid_state"
-      ]
-    },
-    {
-      "name": "formalize_wiki",
-      "description": "Promote an Owner-approved Wiki candidate through atomic SQLite activation. Requires formalize or centre capability.",
-      "input": {
-        "type": "object",
-        "required": [
-          "merge_request_id",
-          "operation_id"
-        ],
-        "properties": {
-          "merge_request_id": {
-            "type": "string"
-          },
-          "operation_id": {
-            "type": "string"
-          }
-        }
-      },
-      "output": {
-        "status": "string",
-        "formal_wiki_revision_id": "string",
-        "reason_code": "string"
-      },
-      "examples": [
-        {
-          "merge_request_id": "mr-1",
-          "operation_id": "op-1"
-        }
-      ],
-      "allowed": [
-        "Project Owner formalization"
-      ],
-      "failures": [
-        "denied",
-        "not_approved",
-        "operation_id_conflict",
-        "activation_failed"
-      ]
-    },
-    {
-      "name": "reconcile_wiki_formalization",
-      "description": "Resume the same Wiki formalization operation identity. Requires formalize or centre capability.",
-      "input": {
-        "type": "object",
-        "required": [
-          "operation_id"
-        ],
-        "properties": {
-          "operation_id": {
-            "type": "string"
-          }
-        }
-      },
-      "output": {
-        "status": "string",
-        "formal_wiki_revision_id": "string",
-        "reason_code": "string"
-      },
-      "examples": [
-        {
-          "operation_id": "op-1"
-        }
-      ],
-      "allowed": [
-        "recovering an interrupted formalization"
-      ],
-      "failures": [
-        "denied",
-        "unknown_operation",
-        "activation_failed"
-      ]
-    },
-    {
-      "name": "append_prereview_log",
-      "description": "Append one Wiki prereview report, or one invalidation decision, to the Wiki governance log. Append-only: reports and decisions are never edited. Passing ``reason`` (head_moved/base_moved) appends an invalidation decision; otherwise a report row is appended under the (candidate_id, candidate_head, rule_set_version) unique key. Requires the prereview_log capability.",
-      "input": {
-        "type": "object",
-        "required": [
-          "candidate_id",
-          "candidate_head"
-        ],
-        "properties": {
-          "candidate_id": {
-            "type": "string"
-          },
-          "candidate_head": {
-            "type": "string"
-          },
-          "base_formal_revision_id": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "rule_set_version": {
-            "type": "string"
-          },
-          "verdict": {
-            "type": "string",
-            "enum": [
-              "passed",
-              "failed"
-            ]
-          },
-          "checks": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "properties": {
-                "name": {
-                  "type": "string"
-                },
-                "verdict": {
-                  "type": "string"
-                },
-                "reason_code": {
-                  "type": [
-                    "string",
-                    "null"
-                  ]
-                },
-                "evidence_summary": {
-                  "type": [
-                    "string",
-                    "null"
-                  ]
-                }
-              }
-            }
-          },
-          "conflict_matrix": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "properties": {
-                "candidate_id": {
-                  "type": "string"
-                },
-                "overlap": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "reason": {
-            "type": "string",
-            "enum": [
-              "head_moved",
-              "base_moved"
-            ]
-          },
-          "superseding_report_id": {
-            "type": [
-              "string",
-              "null"
-            ]
-          }
-        },
-        "additionalProperties": false
-      },
-      "output": {
-        "status": "string"
-      },
-      "examples": [],
-      "allowed": [],
-      "failures": [
-        "denied",
-        "unavailable",
-        "invalid_arguments"
-      ]
-    },
-    {
-      "name": "create_merged_candidate",
-      "description": "Create one merged Wiki candidate branch from source candidates on the same formal base. Only creates a new branch; existing candidates are never edited. The author field records every source author; source authors get no operation rights; a merged candidate may not be merged again. Requires the merged_candidate capability.",
-      "input": {
-        "type": "object",
-        "required": [
-          "wiki_domain_id",
-          "source_proposal_ids",
-          "base_formal_revision_id",
-          "document_change",
-          "idempotency_key"
-        ],
-        "properties": {
-          "wiki_domain_id": {
-            "type": "string"
-          },
-          "source_proposal_ids": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "base_formal_revision_id": {
-            "type": "string"
-          },
-          "document_change": {
-            "type": "object",
-            "properties": {
-              "submission_id": {
-                "type": "string"
-              },
-              "proposal_id": {
-                "type": "string"
-              },
-              "document": {
-                "type": "object"
-              },
-              "references": {
-                "type": "array"
-              }
-            }
-          },
-          "idempotency_key": {
-            "type": "string"
-          }
-        },
-        "additionalProperties": false
-      },
-      "output": {
-        "status": "string"
-      },
-      "examples": [],
-      "allowed": [],
-      "failures": [
-        "denied",
-        "unavailable",
-        "invalid_arguments"
       ]
     }
   ]

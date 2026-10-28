@@ -1,0 +1,199 @@
+{
+  "name": "research-mapping",
+  "version": "1.0.0",
+  "description": "The Project Owner's adjudication surface for Research Mapping: read the formal graph and any candidate, author a candidate when a route must continue, preview, obtain the merge-request buffer, record the review, then formalize or reconcile.",
+  "transport": "streamable-http",
+  "endpoint": {
+    "url_env": "RESEARCH_MAPPING_MCP_URL"
+  },
+  "environment": [
+    "RESEARCH_MAPPING_MCP_URL",
+    "RESEARCH_MAPPING_MCP_TOKEN"
+  ],
+  "notes": [
+    "list_reviewable_candidates is absent on purpose: it is the Centre Agent's whole-domain snapshot read. The Owner reads named candidates and never holds the centre tier, because holding it would let one call sweep every candidate of a domain at once and turn adjudication into pre-review.",
+    "preview_candidate alone changes nothing and returns a preview_id that no buffer tool accepts. create_merge_request is the step that turns a preview into the buffer_id that record_review and formalize_candidate consume. Skipping it is how a release stalls with a preview and no request.",
+    "record_review(decision=approved) is necessary but not sufficient: formalize_candidate re-checks the approval actor against the domain's Project Owner list, so an approval recorded by someone else is refused with owner_approval_required.",
+    "reconcile_formalization resumes the same operation_id after a half-finished activation. Do not retry with a fresh operation_id: that is a second formalization, not a retry, and it is refused by the operation-identity check.",
+    "submit_candidate is here because a continuing route needs new TaskNode / DependencyEdge candidates authored by the Owner. It is not a second path around pre-review: what the Owner authors still goes through the Centre Agent and comes back as a candidate."
+  ],
+  "tools": [
+    {
+      "name": "get_formal_mapping",
+      "description": "Read the current formal Research Mapping graph for a domain. Requires the read or centre capability.",
+      "input": {
+        "type": "object",
+        "required": [
+          "mapping_domain_id"
+        ],
+        "properties": {
+          "mapping_domain_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_formal_mapping_at_revision",
+      "description": "Read the exact formal Research Mapping snapshot pinned by a specific formal_revision_id (historical activated revision), using the same consistency gates as the current pointer read. Requires the read or centre capability.",
+      "input": {
+        "type": "object",
+        "required": [
+          "mapping_domain_id",
+          "formal_revision_id"
+        ],
+        "properties": {
+          "mapping_domain_id": {
+            "type": "string"
+          },
+          "formal_revision_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "list_candidates",
+      "description": "Read the candidate record associated with a submission. Requires the read or centre capability.",
+      "input": {
+        "type": "object",
+        "required": [
+          "submission_id"
+        ],
+        "properties": {
+          "submission_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "submit_candidate",
+      "description": "Submit a Mapping candidate change set against the exact formal base. Requires candidate_submit or centre capability.",
+      "input": {
+        "type": "object",
+        "required": [
+          "change_set",
+          "idempotency_key"
+        ],
+        "properties": {
+          "change_set": {
+            "type": "object"
+          },
+          "idempotency_key": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "preview_candidate",
+      "description": "Build immutable diff review evidence for a fixed candidate head. Requires candidate_review or centre capability.",
+      "input": {
+        "type": "object",
+        "required": [
+          "proposal_id",
+          "base_formal_revision_id",
+          "candidate_head"
+        ],
+        "properties": {
+          "proposal_id": {
+            "type": "string"
+          },
+          "base_formal_revision_id": {
+            "type": "string"
+          },
+          "candidate_head": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "create_merge_request",
+      "description": "Lock a ready candidate preview into a merge-request buffer and return its buffer_id. Requires candidate_review or centre capability.",
+      "input": {
+        "type": "object",
+        "required": [
+          "preview_id"
+        ],
+        "properties": {
+          "preview_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "record_review",
+      "description": "Record a review decision for a merge-request buffer. Requires candidate_review or centre capability.",
+      "input": {
+        "type": "object",
+        "required": [
+          "buffer_id",
+          "decision",
+          "reason"
+        ],
+        "properties": {
+          "buffer_id": {
+            "type": "string"
+          },
+          "decision": {
+            "type": "string",
+            "enum": [
+              "approved",
+              "returned",
+              "rejected"
+            ]
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "formalize_candidate",
+      "description": "Promote an Owner-approved candidate through atomic SQLite activation. Requires formalize or centre capability.",
+      "input": {
+        "type": "object",
+        "required": [
+          "merge_request_id",
+          "operation_id"
+        ],
+        "properties": {
+          "merge_request_id": {
+            "type": "string"
+          },
+          "operation_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "reconcile_formalization",
+      "description": "Resume the same formalization operation identity. Requires formalize or centre capability.",
+      "input": {
+        "type": "object",
+        "required": [
+          "operation_id"
+        ],
+        "properties": {
+          "operation_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  ]
+}

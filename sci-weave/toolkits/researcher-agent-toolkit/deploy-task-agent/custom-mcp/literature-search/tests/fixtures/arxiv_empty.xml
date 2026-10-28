@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<feed xmlns:opensearch="http://a9.com/-/spec/opensearch/1.1/" xmlns:arxiv="http://arxiv.org/schemas/atom" xmlns="http://www.w3.org/2005/Atom">
+  <id>https://arxiv.org/api/hRXy3rfxa3HE0npARfqoFUDeFzU</id>
+  <title>arXiv Query: search_query=all:transformer&amp;id_list=&amp;start=0&amp;max_results=2</title>
+  <updated>2026-10-27T12:59:21Z</updated>
+  <opensearch:totalResults>183298</opensearch:totalResults>
+  </feed>

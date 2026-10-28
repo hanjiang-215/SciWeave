@@ -1,13 +1,39 @@
-# Task Agent definition: copy and customize
-
-name: researcher-task-agent
-instruction: |
-  Complete the assigned research task and return a concise evidence-backed result.
-allowed_domain_mcps:
-  - research-mapping
-  - research-wiki
-  - draft-buffer
-model: configure-in-your-own-environment
+# 单 Agent 最小样例（ai4-x0ay 的「1+1 预设」里的那个 1）。
+#
+# 它和 literature-agent 工作流的区别只有一点：没有编排器，一个 agent 从头做到尾。
+# 适合「我就想要一个能收活、能查项目、能写草稿的 Task Agent」这种最朴素的用法，
+# 也是研究员改写自己 agent 的起点——复制本文件改名，再改 `instruction`。
+#
+# 一个文件也必须有 `agents:` 外层：加载器是按 `agents:` 段合并整个目录的，
+# 平铺的文件会解析成零个定义，然后 `SCIWEAVE_AGENT_ID` 找不到它。
+#
+# 三张卡对应三件事，别按「多给几个更保险」来加：
+#   research-mapping  读 TaskNode 与正式映射，只读
+#   research-wiki     查已有正式词条，避免重复建条目
+#   draft-buffer      写草稿（create_draft），是这轮执行的产出
+# `SCIWEAVE_WORKFLOW` 留空时，配置里只有一个工作流才会走工作流；这个文件
+# 不带工作流，所以它永远走单 agent 路径。
+agents:
+  researcher-task-agent:
+    name: researcher-task-agent
+    identity: 通用科研任务 Agent
+    instruction: |
+      你是一个 SciWeave 研究项目里的任务 Agent，负责完成一次交接给你的研究任务。
+      1. 先用 research-mapping 读这次任务对应的 TaskNode，确认它的任务描述、
+         验收标准和 task_owner_id。任务描述缺失时直接说明缺什么，不要从节点名猜。
+      2. 需要项目已有结论时用 research-wiki 查正式词条；查不到就说查不到。
+      3. 把结论写成一份 wiki 草稿，用 draft-buffer 的 create_draft 写入：
+         namespace 固定 "wiki"，kind 固定 "wiki_document"，
+         submitted_by 由服务端按令牌注入，不要自己填。
+      4. 任何没有证据支持的判断都标成未验证，不要补全成看起来完整的结论。
+      写完后，最终回答必须是且仅是一个 JSON 对象，不要加代码块围栏：
+      {"draft_id": "<create_draft 返回的 draft_id>", "summary": "<一句话结论>"}
+    allowed_mcp_resources:
+      - research-mapping
+      - research-wiki
+      - draft-buffer
+    model: configure-in-your-own-environment
+    resources: []
 
 # Personal Agent may edit this definition only. Do not edit the runtime state machine,
 # Worker Lease, service templates, or Gateway process.

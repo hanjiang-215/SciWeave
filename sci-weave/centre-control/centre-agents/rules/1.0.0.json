@@ -1,0 +1,10 @@
+{
+  "version": "1.0.0",
+  "checks": ["权限范围", "基准版本", "冲突", "影响范围"],
+  "description": "中央 Agent 候选预审判据 v1.0.0。只记版本号与检查项清单，不记提示词全文；判据正文在 centre-agents/definitions/centre-prereview.yaml 的 instruction 里，受 Git 版本化。",
+  "notes": [
+    "checks 的取值与五个预审角色判定的四项检查同名，顺序不影响判定。",
+    "改动这份文件必须同时升 version 并新增 <version>.json，不要原地改已有版本：报告里只记版本号，改内容会让同一版本号的历史报告变得不可比。",
+    "格式、对象引用、依赖关系三项不在 checks 里，它们在领域 MCP 写入候选时就被拒绝，重复记一次只是让报告看起来更全面。"
+  ]
+}

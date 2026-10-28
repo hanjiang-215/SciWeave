@@ -1,5 +1,8 @@
 name: research.workflow
 version: 1.0.0
 kind: workflow_helper
+# Must name a workflow that actually exists under libs/workflow-libs/. It used to
+# point at `sequential-research`, which appears nowhere else in the tree, so the
+# researcher would go looking for a workflow that was never shipped (ai4-4zjz).
 value:
-  workflow: sequential-research
+  workflow: orchestrator-example

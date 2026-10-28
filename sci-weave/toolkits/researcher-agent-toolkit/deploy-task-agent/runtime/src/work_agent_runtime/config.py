@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass
 
 import yaml
@@ -10,6 +11,29 @@ from pathlib import Path
 from typing import Any, Mapping
 
 SUPPORTED_WORKFLOW_TYPES = ("Router", "Orchestrator", "Parallel", "Agents as Tools")
+
+# Legal keys per section. Anything else is a stable `unknown_field` error instead of
+# being silently dropped: a YAML key that never reaches the runtime is worse than a
+# rejected one, because the researcher sees a config that "loads fine" and does nothing.
+_TOP_LEVEL_KEYS = frozenset({"agents", "workflows", "version", "name"})
+_AGENT_KEYS = frozenset({
+    "name", "identity", "instruction", "model", "allowed_mcp_resources", "resources",
+    "references", "tools", "allowed_domain_mcps", "children",
+})
+_WORKFLOW_KEYS = frozenset({
+    "name", "type", "entry_agent", "sub_agents", "summarizer", "final_writer",
+    "plan_type", "plan_iterations",
+})
+
+#: fast-agent's own planning modes for the Orchestrator type. `full` plans once
+#: up front; `iterative` re-plans after each round of sub-agent results.
+PLAN_TYPES = ("full", "iterative")
+
+#: fast-agent's defaults, used when a workflow does not state them. Repeating
+#: them here is deliberate: the YAML is the contract, and a config that omits a
+#: key should behave the same whether the framework default changes or not.
+DEFAULT_PLAN_TYPE = "full"
+DEFAULT_PLAN_ITERATIONS = 5
 
 
 class ConfigError(ValueError):
@@ -42,6 +66,11 @@ class WorkflowDefinition:
     sub_agents: tuple[str, ...]
     summarizer: str
     final_writer: str
+    #: Orchestrator planning mode (ai4-x0ay). Carried for every type because a
+    #: workflow's type can change without the rest of the YAML changing, and a
+    #: key that is accepted for one type and rejected for another is a trap.
+    plan_type: str = DEFAULT_PLAN_TYPE
+    plan_iterations: int = DEFAULT_PLAN_ITERATIONS
 
 
 @dataclass(frozen=True)
@@ -75,6 +104,22 @@ def _mapping(value: Any, path: str) -> Mapping[str, Any]:
     return value
 
 
+def _reject_unknown_keys(data: Mapping[str, Any], allowed: frozenset[str], path: str) -> None:
+    unknown = sorted(set(map(str, data)) - allowed)
+    if unknown:
+        raise ConfigError("unknown_field", path, ", ".join(unknown))
+
+
+def _optional_path(name: str, *fallbacks: str) -> Path | None:
+    """First non-empty environment variable wins; `LOCAL_WORKFLOW_LIBS` keeps the
+    unprefixed spelling of its two siblings usable."""
+    for candidate in (name, *fallbacks):
+        value = os.getenv(candidate, "")
+        if value:
+            return Path(value)
+    return None
+
+
 def load_config(source: Mapping[str, Any] | str | Path, *, known_mcp_resources: set[str] | frozenset[str] = frozenset(), known_agent_resources: set[str] | frozenset[str] = frozenset(), mcp_catalog: Mapping[str, Any] | None = None) -> TaskAgentConfig:
     """Load and validate a mapping or JSON document without contacting services."""
     if isinstance(source, Path):
@@ -88,6 +133,7 @@ def load_config(source: Mapping[str, Any] | str | Path, *, known_mcp_resources: 
         except json.JSONDecodeError as exc:
             raise ConfigError("invalid_document", "config", "expected JSON object") from exc
     root = _mapping(source, "config")
+    _reject_unknown_keys(root, _TOP_LEVEL_KEYS, "config")
     raw_agents = _mapping(_required(root, "agents", "config"), "config.agents")
     raw_workflows = _mapping(_required(root, "workflows", "config"), "config.workflows")
     agents: dict[str, AgentDefinition] = {}
@@ -95,6 +141,7 @@ def load_config(source: Mapping[str, Any] | str | Path, *, known_mcp_resources: 
         if not isinstance(name, str) or not name:
             raise ConfigError("invalid_agent_name", "config.agents", "names must be non-empty strings")
         data = _mapping(raw, f"config.agents.{name}")
+        _reject_unknown_keys(data, _AGENT_KEYS, f"config.agents.{name}")
         mcp = _strings(data.get("allowed_mcp_resources", data.get("allowed_domain_mcps")), "invalid_mcp_resources", f"config.agents.{name}.allowed_mcp_resources")
         unknown_mcp = sorted(set(mcp) - set(known_mcp_resources))
         if unknown_mcp:
@@ -107,24 +154,55 @@ def load_config(source: Mapping[str, Any] | str | Path, *, known_mcp_resources: 
     workflows: dict[str, WorkflowDefinition] = {}
     for name, raw in raw_workflows.items():
         data = _mapping(raw, f"config.workflows.{name}")
+        _reject_unknown_keys(data, _WORKFLOW_KEYS, f"config.workflows.{name}")
         workflow_type = _required(data, "type", f"config.workflows.{name}")
         if workflow_type not in SUPPORTED_WORKFLOW_TYPES:
             raise ConfigError("unknown_workflow_type", f"config.workflows.{name}.type", str(workflow_type))
         sub_agents = _strings(_required(data, "sub_agents", f"config.workflows.{name}"), "missing_sub_agents", f"config.workflows.{name}.sub_agents")
         if not sub_agents:
             raise ConfigError("missing_sub_agents", f"config.workflows.{name}.sub_agents", "at least one required")
-        workflows[name] = WorkflowDefinition(name, workflow_type, str(_required(data, "entry_agent", f"config.workflows.{name}")), sub_agents, str(_required(data, "summarizer", f"config.workflows.{name}")), str(_required(data, "final_writer", f"config.workflows.{name}")))
+        plan_type = str(data.get("plan_type", DEFAULT_PLAN_TYPE))
+        if plan_type not in PLAN_TYPES:
+            raise ConfigError(
+                "invalid_plan_type",
+                f"config.workflows.{name}.plan_type",
+                f"must be one of {', '.join(PLAN_TYPES)}",
+            )
+        plan_iterations = data.get("plan_iterations", DEFAULT_PLAN_ITERATIONS)
+        # JSON/YAML booleans are `int` in Python, so `plan_iterations: true`
+        # would otherwise be accepted as 1 and quietly plan once.
+        if isinstance(plan_iterations, bool) or not isinstance(plan_iterations, int) or plan_iterations < 1:
+            raise ConfigError(
+                "invalid_plan_iterations",
+                f"config.workflows.{name}.plan_iterations",
+                "must be a positive integer",
+            )
+        workflows[name] = WorkflowDefinition(
+            name,
+            workflow_type,
+            str(_required(data, "entry_agent", f"config.workflows.{name}")),
+            sub_agents,
+            str(_required(data, "summarizer", f"config.workflows.{name}")),
+            str(_required(data, "final_writer", f"config.workflows.{name}")),
+            plan_type,
+            plan_iterations,
+        )
     _validate_references(agents, workflows)
     return TaskAgentConfig(dict(agents), dict(workflows), mcp_catalog or {})
 
 
-def load_workflow_yaml(source: str | Path, *, known_mcp_resources: set[str] | frozenset[str] = frozenset(), known_agent_resources: set[str] | frozenset[str] = frozenset(), mcp_catalog: Mapping[str, Any] | None = None) -> TaskAgentConfig:
-    """Load one Workflow YAML file or all YAML files in a directory."""
+def _read_documents(source: str | Path, *, allow_empty: bool = False) -> list[tuple[Path, Mapping[str, Any]]]:
+    """Read one Workflow YAML file or every YAML file in a directory."""
     path = Path(source)
     paths = [path] if path.is_file() else sorted((*path.glob("*.yaml"), *path.glob("*.yml")))
     if not paths:
+        if allow_empty:
+            # The shipped `libs/local-workflow-libs/` holds only a README. A researcher
+            # who points LOCAL_WORKFLOW_LIBS_PATH at an empty directory means "no
+            # overrides", not "the kit is broken".
+            return []
         raise ConfigError("config_read_error", str(path), "no YAML files found")
-    documents = []
+    documents: list[tuple[Path, Mapping[str, Any]]] = []
     for item in paths:
         try:
             data = yaml.safe_load(item.read_text(encoding="utf-8"))
@@ -135,9 +213,20 @@ def load_workflow_yaml(source: str | Path, *, known_mcp_resources: set[str] | fr
         version = data.get("version", "1.0.0")
         if not isinstance(version, str) or not version.startswith("1."):
             raise ConfigError("unsupported_config_version", f"{item}.version", str(version))
-        documents.append(data)
-    merged: dict[str, Any] = {"agents": {}, "workflows": {}}
-    for document in documents:
+        documents.append((item, data))
+    return documents
+
+
+def _merge_documents(documents: list[tuple[Path, Mapping[str, Any]]], source_label: str) -> dict[str, dict[str, Any]]:
+    """Merge `agents` / `workflows` sections of one source; duplicates within it are errors."""
+    merged: dict[str, dict[str, Any]] = {"agents": {}, "workflows": {}}
+    for item, document in documents:
+        is_workflow_document = "agents" in document or "workflows" in document
+        if is_workflow_document:
+            # Only checked for real Workflow documents: a flat single-agent file has
+            # agent keys at the top level, and that case must report `no_definitions`
+            # rather than a misleading `unknown_field`.
+            _reject_unknown_keys(document, _TOP_LEVEL_KEYS, str(item))
         for section in ("agents", "workflows"):
             values = document.get(section, {})
             if not isinstance(values, Mapping):
@@ -146,6 +235,51 @@ def load_workflow_yaml(source: str | Path, *, known_mcp_resources: set[str] | fr
             if duplicate:
                 raise ConfigError("duplicate_definition", f"config.{section}", ", ".join(sorted(duplicate)))
             merged[section].update(values)
+    if not merged["agents"] and not merged["workflows"]:
+        # A directory of flat agent files parses to zero definitions. Returning an empty
+        # project with exit code 0 is how the researcher ends up with a config that looks
+        # loaded and does nothing, so this is a hard error instead.
+        raise ConfigError(
+            "no_definitions",
+            source_label,
+            "files parsed but declared no agents or workflows; wrap flat agent files in an 'agents:' section",
+        )
+    return merged
+
+
+def load_workflow_yaml(source: str | Path, *, known_mcp_resources: set[str] | frozenset[str] = frozenset(), known_agent_resources: set[str] | frozenset[str] = frozenset(), mcp_catalog: Mapping[str, Any] | None = None) -> TaskAgentConfig:
+    """Load one Workflow YAML file or all YAML files in a directory."""
+    merged = _merge_documents(_read_documents(source), str(source))
+    return load_config(merged, known_mcp_resources=known_mcp_resources, known_agent_resources=known_agent_resources, mcp_catalog=mcp_catalog)
+
+
+def load_workflow_libs(*, standard_path: str | Path | None = None, local_path: str | Path | None = None, known_mcp_resources: set[str] | frozenset[str] = frozenset(), known_agent_resources: set[str] | frozenset[str] = frozenset(), mcp_catalog: Mapping[str, Any] | None = None) -> TaskAgentConfig:
+    """Load the standard Workflow libs, then let the researcher's local libs override them.
+
+    Mirrors `load_agent_registry` / `load_mcp_registry`: `WORKFLOW_LIBS_PATH` is the
+    shipped directory, `LOCAL_WORKFLOW_LIBS_PATH` is the researcher's own directory, and
+    a local definition wins over the standard one it shares a name with.
+    """
+    standard_root = Path(standard_path) if standard_path is not None else _optional_path("WORKFLOW_LIBS_PATH")
+    local_root = Path(local_path) if local_path is not None else _optional_path("LOCAL_WORKFLOW_LIBS_PATH", "LOCAL_WORKFLOW_LIBS")
+    merged: dict[str, dict[str, Any]] = {"agents": {}, "workflows": {}}
+    for root, is_local in ((standard_root, False), (local_root, True)):
+        if root is None:
+            continue
+        if not root.exists():
+            # A missing local directory is normal (most researchers have none); a missing
+            # standard directory means the kit was not deployed and is worth failing on.
+            if is_local:
+                continue
+            raise ConfigError("config_read_error", str(root), "no YAML files found")
+        documents = _read_documents(root, allow_empty=is_local)
+        if not documents:
+            continue
+        section = _merge_documents(documents, str(root))
+        for name in ("agents", "workflows"):
+            merged[name].update(section[name])
+    if not merged["agents"] and not merged["workflows"]:
+        raise ConfigError("no_definitions", "config", "no Workflow libs configured; set WORKFLOW_LIBS_PATH")
     return load_config(merged, known_mcp_resources=known_mcp_resources, known_agent_resources=known_agent_resources, mcp_catalog=mcp_catalog)
 
 
@@ -162,6 +296,8 @@ def workflow_to_fast_agent_input(config: TaskAgentConfig, workflow_name: str) ->
         "sub_agents": list(workflow.sub_agents),
         "summarizer": workflow.summarizer,
         "final_writer": workflow.final_writer,
+        "plan_type": workflow.plan_type,
+        "plan_iterations": workflow.plan_iterations,
         "agents": {
             name: {
                 "instruction": agent.instruction,

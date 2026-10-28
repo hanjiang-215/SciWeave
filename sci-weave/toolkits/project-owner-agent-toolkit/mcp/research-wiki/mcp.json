@@ -1,0 +1,179 @@
+{
+  "name": "research-wiki",
+  "version": "1.0.0",
+  "description": "The Project Owner's adjudication surface for LLM-Wiki: read formal revisions and candidates, author a document change, preview, open the merge request, decide the review, then formalize or reconcile.",
+  "transport": "streamable-http",
+  "endpoint": {
+    "url_env": "LLM_WIKI_MCP_URL"
+  },
+  "environment": [
+    "LLM_WIKI_MCP_URL",
+    "LLM_WIKI_MCP_TOKEN"
+  ],
+  "notes": [
+    "The Wiki side spells the decision decide_wiki_review rather than record_review. Same act, same formalize capability; do not look for record_review here.",
+    "The Wiki merge request differs from the Mapping one in a way that bites: create_wiki_merge_request takes merge_request_id from the caller, while the Mapping create_merge_request derives buffer_id from preview_id. There is nothing to read back — pick a stable id, e.g. wiki-mr-<proposal_id>, and reuse it on retry. A fresh id on retry is a second merge request.",
+    "decide_wiki_review requires selected_solution_id. A Wiki candidate may carry more than one solution; the decision names which one is being approved, and leaving it out is a schema rejection rather than a default.",
+    "decide_wiki_review is only approved/rejected — there is no returned. Sending a Wiki candidate back for a new version means rejecting it with a reason, and that reason is what the author has to work from.",
+    "list_reviewable_wiki_candidates is the Centre Agent's snapshot read and is absent for the same reason as on the Mapping side.",
+    "submit_wiki_candidate authoring is not a shortcut around review: decide_wiki_review still runs and formalize_wiki still re-checks the approval actor."
+  ],
+  "tools": [
+    {
+      "name": "get_formal_wiki",
+      "description": "Read the current formal Wiki revision for a domain. Requires the read or centre capability.",
+      "input": {
+        "type": "object",
+        "required": [
+          "wiki_domain_id"
+        ],
+        "properties": {
+          "wiki_domain_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "list_wiki_candidates",
+      "description": "Read candidate submissions for a Wiki domain. Requires the read or centre capability.",
+      "input": {
+        "type": "object",
+        "required": [
+          "wiki_domain_id"
+        ],
+        "properties": {
+          "wiki_domain_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "submit_wiki_candidate",
+      "description": "Submit a Wiki document change with its full reference set against the exact formal base. Requires candidate_submit or centre capability.",
+      "input": {
+        "type": "object",
+        "required": [
+          "document_change",
+          "idempotency_key"
+        ],
+        "properties": {
+          "document_change": {
+            "type": "object"
+          },
+          "idempotency_key": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "preview_wiki_review",
+      "description": "Build the review preview for a Wiki proposal. Requires candidate_review or centre capability.",
+      "input": {
+        "type": "object",
+        "required": [
+          "proposal_id"
+        ],
+        "properties": {
+          "proposal_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "create_wiki_merge_request",
+      "description": "Lock a ready Wiki preview into a merge-request buffer for owner review. Requires candidate_review or centre capability.",
+      "input": {
+        "type": "object",
+        "required": [
+          "proposal_id",
+          "merge_request_id"
+        ],
+        "properties": {
+          "proposal_id": {
+            "type": "string"
+          },
+          "merge_request_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "decide_wiki_review",
+      "description": "Record the Project Owner decision for a Wiki merge request. Requires formalize or centre capability.",
+      "input": {
+        "type": "object",
+        "required": [
+          "merge_request_id",
+          "decision",
+          "reason",
+          "selected_solution_id"
+        ],
+        "properties": {
+          "merge_request_id": {
+            "type": "string"
+          },
+          "decision": {
+            "type": "string",
+            "enum": [
+              "approved",
+              "rejected"
+            ]
+          },
+          "reason": {
+            "type": "string"
+          },
+          "selected_solution_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "formalize_wiki",
+      "description": "Promote an Owner-approved Wiki candidate through atomic SQLite activation. Requires formalize or centre capability.",
+      "input": {
+        "type": "object",
+        "required": [
+          "merge_request_id",
+          "operation_id"
+        ],
+        "properties": {
+          "merge_request_id": {
+            "type": "string"
+          },
+          "operation_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "reconcile_wiki_formalization",
+      "description": "Resume the same Wiki formalization operation identity. Requires formalize or centre capability.",
+      "input": {
+        "type": "object",
+        "required": [
+          "operation_id"
+        ],
+        "properties": {
+          "operation_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  ]
+}

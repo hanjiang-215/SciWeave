@@ -1,0 +1,126 @@
+{
+  "name": "literature-search",
+  "version": "0.1.0",
+  "description": "Search arXiv and Crossref for papers and read one paper's abstract by arXiv id or DOI. Both sources are public and need no credential.",
+  "transport": "stdio",
+  "startup": {
+    "executable": "uv",
+    "args": ["run", "--env-file", ".env", "python", "src/main.py"],
+    "project_dir_env": "LITERATURE_MCP_PROJECT_DIR"
+  },
+  "environment": [
+    "LITERATURE_ARXIV_ENDPOINT",
+    "LITERATURE_CROSSREF_ENDPOINT",
+    "LITERATURE_CONTACT_EMAIL",
+    "LITERATURE_TIMEOUT_SECONDS"
+  ],
+  "tools": [
+    {
+      "name": "search",
+      "description": "Search arXiv or Crossref. Returns a JSON array of {title, authors, published, id, abstract, url, source}; id is an arXiv id for arxiv and a DOI for crossref.",
+      "input": {
+        "type": "object",
+        "required": ["query"],
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Free-text query. arxiv searches all fields; crossref uses its relevance ranking."
+          },
+          "source": {
+            "type": "string",
+            "enum": ["arxiv", "crossref"],
+            "default": "arxiv"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 20,
+            "default": 5,
+            "description": "Results to return. Above 20 the call fails with invalid_arguments instead of truncating."
+          }
+        }
+      },
+      "output": {
+        "type": "array",
+        "items": {
+          "title": "string",
+          "authors": "array of string",
+          "published": "string (ISO 8601; crossref may be YYYY-MM-01 when the record only states a year)",
+          "id": "string (arXiv id with version suffix, or DOI)",
+          "abstract": "string (empty when the source states none)",
+          "url": "string",
+          "source": "arxiv | crossref"
+        }
+      },
+      "examples": [
+        {
+          "query": "retrieval augmented generation",
+          "source": "arxiv",
+          "limit": 5
+        },
+        {
+          "query": "protein structure prediction",
+          "source": "crossref",
+          "limit": 3
+        }
+      ],
+      "allowed": ["read public literature metadata"],
+      "failures": [
+        "invalid_arguments",
+        "unsupported_source",
+        "literature_timeout",
+        "literature_unavailable",
+        "literature_request_rejected",
+        "literature_bad_response"
+      ]
+    },
+    {
+      "name": "get_abstract",
+      "description": "Read one paper by arXiv id or DOI. Returns {title, abstract, authors, published, url, license, source, id}. license is null when the source states none; null never means public domain.",
+      "input": {
+        "type": "object",
+        "required": ["id"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "arXiv id (1706.03762, hep-th/9901001, or an abs URL) or a DOI (10.1038/nature14539)."
+          },
+          "source": {
+            "type": "string",
+            "enum": ["arxiv", "crossref"],
+            "description": "Optional. Defaults to the source implied by the id's shape."
+          }
+        }
+      },
+      "output": {
+        "title": "string",
+        "abstract": "string (empty when the source states none)",
+        "authors": "array of string",
+        "published": "string (ISO 8601)",
+        "url": "string",
+        "license": "string | null (a URL when the source deposits one)",
+        "source": "arxiv | crossref",
+        "id": "string"
+      },
+      "examples": [
+        {
+          "id": "1706.03762"
+        },
+        {
+          "id": "10.1038/nature14539",
+          "source": "crossref"
+        }
+      ],
+      "allowed": ["read public literature metadata"],
+      "failures": [
+        "invalid_arguments",
+        "unsupported_source",
+        "literature_not_found",
+        "literature_timeout",
+        "literature_unavailable",
+        "literature_request_rejected",
+        "literature_bad_response"
+      ]
+    }
+  ]
+}

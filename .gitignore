@@ -8,6 +8,7 @@ logs/
 
 # 临时文件
 tmp/
+.tmp_dsh/
 *.tmp
 
 # 缓存
@@ -41,6 +42,9 @@ docs/tickets/modules/
 
 # shared/ 协议包不提交锁文件（本地跑测试会生成，可再生成）
 sci-weave/centre-control/shared/*/uv.lock
+
+# suitecheck 只有一个依赖（pyyaml），锁文件只会随本机镜像配置漂移，没有锁定的价值
+sci-weave/toolkits/suitecheck/uv.lock
 
 # 看板本地演示的运行态产物（SQLite 与进程登记，可再生成）
 scripts/.demo-dashboard.json

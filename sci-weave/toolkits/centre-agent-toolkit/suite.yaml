@@ -1,0 +1,61 @@
+suite: centre-agent-toolkit
+role: machine
+actor: centre
+title: 中央调度 Agent 的工作套件
+version: 0.1.0
+summary: >
+  中央服务器上的一套东西：订阅候选事件与正式版本发布事件，拉全量候选快照做预审，
+  把报告追加到领域治理日志，判定失效，必要时生成混合候选，并在完成或受阻时通知
+  Project Owner。它读得到所有域的候选，但永远不批准任何一份。
+boundary:
+  may_modify:
+    - 领域预审日志（append_prereview_log：报告与失效判定，只追加）
+    - 混合候选分支（create_merged_candidate：新建，不改源候选）
+    - 自己的执行记录（处置面：回答提问、追加裁决、取消）
+    - 给 Project Owner 的通知（prereview_completed、agent_unavailable）
+  must_not:
+    - 批准或拒绝候选（formalize_candidate / formalize_wiki / decide_wiki_review / record_review）——那是 Project Owner 的动作
+    - 进入中央草稿箱；草稿是研究员与人的一审材料，中央 Agent 不看
+    - 派发任务、发起执行、代替 Project Owner 下命令
+    - 一次调用同时改 Mapping 与 Wiki
+    - 修好源候选、改历史预审报告、二次混合已混合的候选
+    - 判断「下一步该谁动」
+requires:
+  env:
+    - RESEARCH_MAPPING_MCP_URL
+    - RESEARCH_MAPPING_MCP_TOKEN
+    - LLM_WIKI_MCP_URL
+    - LLM_WIKI_MCP_TOKEN
+    - EMAIL_MCP_URL
+    - EMAIL_MCP_TOKEN
+    - SCIWEAVE_CENTRE_REGISTRY_URL
+    - SCIWEAVE_CENTRE_REGISTRY_TOKEN
+    - DISPOSITION_MCP_URL
+    - DISPOSITION_MCP_TOKEN
+    - SCIWEAVE_QUEUE_GROUP_ID
+    - SCIWEAVE_SUBSCRIBER_TOPICS
+    - SCIWEAVE_DOMAIN_MCP_URL
+    - SCIWEAVE_DOMAIN_MCP_TOKEN
+    - SCIWEAVE_INGEST_DB
+  services:
+    - sciweave-centre-agent-ingest.service
+    - sciweave-centre-agent-mcp.service
+skills:
+  - name: prereview-checks
+    path: prereview-checks
+  - name: conflict-matrix
+    path: conflict-matrix
+  - name: merged-candidate
+    path: merged-candidate
+  - name: invalidation
+    path: invalidation
+  - name: audit-candidate-branches
+    path: audit-candidate-branches
+mcp: []
+hooks: []
+cron:
+  - name: prereview-sweep
+    path: cron/prereview-sweep.sh
+    schedule: "*/10 * * * *"
+install: [./install.sh]
+check: [./check.sh]

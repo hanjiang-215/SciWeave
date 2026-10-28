@@ -60,7 +60,7 @@ class BufferMCPDraftWriterTests(unittest.TestCase):
             self.assertEqual(len(buffer.calls), 1)
             call = buffer.calls[0]
             self.assertEqual(call["namespace"], "mapping")
-            self.assertEqual(call["source_target_node_id"], "node-1")
+            self.assertEqual(call["source_task_node_id"], "node-1")
             self.assertEqual(call["submitted_by"], "agent-1")
         finally:
             server.shutdown()

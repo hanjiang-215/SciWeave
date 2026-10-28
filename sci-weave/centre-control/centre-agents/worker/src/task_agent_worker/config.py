@@ -15,6 +15,26 @@ def _required_worker_path(name: str) -> Path:
     return Path(value)
 
 
+_DRIVE_PREFIX = re.compile(r"^[A-Za-z]:")
+
+
+def ensure_relative_session_dir(value: str, message: str) -> None:
+    """Reject a session dir that could escape the Worker home on either platform.
+
+    ``Path(...).is_absolute()`` is not enough: on POSIX ``Path("C:/absolute")`` is
+    relative and ``Path(r"..\\..\\outside")`` is a single path part, so both would
+    slip through and land under the working directory instead of being refused
+    (ai4-grlc). The checks are therefore textual as well as pathlib-based.
+    """
+    if not value or not value.strip():
+        raise ValueError(message)
+    if Path(value).is_absolute() or _DRIVE_PREFIX.match(value):
+        raise ValueError(message)
+    parts = [part for part in value.replace("\\", "/").split("/") if part]
+    if any(part in {".", ".."} for part in parts):
+        raise ValueError(message)
+
+
 @dataclass(frozen=True)
 class WorkerSettings:
     """Non-secret Worker settings; the API key is never exposed in results."""
@@ -46,8 +66,7 @@ class WorkerSettings:
             raise ValueError("SCIWEAVE_WORKER_MODEL must be configured")
         if not self.session_dir or Path(self.session_dir).is_absolute():
             raise ValueError("SCIWEAVE_WORKER_SESSION_DIR must be a relative path")
-        if any(part in {".", ".."} for part in Path(self.session_dir).parts):
-            raise ValueError("SCIWEAVE_WORKER_SESSION_DIR must stay within Worker home")
+        ensure_relative_session_dir(self.session_dir, "SCIWEAVE_WORKER_SESSION_DIR must stay within Worker home")
         if not re.fullmatch(r"[A-Za-z0-9_-]+", self.connection_scope):
             raise ValueError("SCIWEAVE_WORKER_CONNECTION_SCOPE has invalid characters")
 

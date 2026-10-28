@@ -1,0 +1,206 @@
+{
+  "name": "research-wiki",
+  "version": "1.0.0",
+  "description": "Pre-review surface for LLM-Wiki: read the formal revision, read the same-time reviewable candidate set, append prereview reports and invalidation decisions, and create one merged candidate.",
+  "transport": "streamable-http",
+  "endpoint": {
+    "url_env": "LLM_WIKI_MCP_URL"
+  },
+  "environment": [
+    "LLM_WIKI_MCP_URL",
+    "LLM_WIKI_MCP_TOKEN"
+  ],
+  "notes": [
+    "No formalize_wiki, no decide_wiki_review, no preview_wiki_review, no create_wiki_merge_request. Adjudication belongs to the Project Owner.",
+    "The Wiki side spells the review decision decide_wiki_review and gates it on the formalize capability; it is absent here for the same reason formalize_candidate is absent on the Mapping side.",
+    "append_prereview_log and create_merged_candidate are the same two tools as the Mapping card, with the same append-only and no-re-merge rules; only the domain identifier and the payload shape differ (document_change instead of change_set)."
+  ],
+  "tools": [
+    {
+      "name": "get_formal_wiki",
+      "description": "Read the current formal Wiki revision for a domain. Requires the read or centre capability.",
+      "input": {
+        "type": "object",
+        "required": [
+          "wiki_domain_id"
+        ],
+        "properties": {
+          "wiki_domain_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "list_wiki_candidates",
+      "description": "Read candidate submissions for a Wiki domain. Requires the read or centre capability.",
+      "input": {
+        "type": "object",
+        "required": [
+          "wiki_domain_id"
+        ],
+        "properties": {
+          "wiki_domain_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "list_reviewable_wiki_candidates",
+      "description": "Read the same-time reviewable Wiki candidate set (not merged, rejected or abandoned) with exact candidate head, base formal revision and immutable content snapshot. Requires the read or centre capability.",
+      "input": {
+        "type": "object",
+        "required": [
+          "wiki_domain_id"
+        ],
+        "properties": {
+          "wiki_domain_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "append_prereview_log",
+      "description": "Append one Wiki prereview report, or one invalidation decision, to the Wiki governance log. Append-only: reports and decisions are never edited. Passing ``reason`` (head_moved/base_moved) appends an invalidation decision; otherwise a report row is appended under the (candidate_id, candidate_head, rule_set_version, base_formal_revision_id) unique key. Requires the prereview_log capability.",
+      "input": {
+        "type": "object",
+        "required": [
+          "candidate_id",
+          "candidate_head"
+        ],
+        "properties": {
+          "candidate_id": {
+            "type": "string"
+          },
+          "candidate_head": {
+            "type": "string"
+          },
+          "base_formal_revision_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "rule_set_version": {
+            "type": "string"
+          },
+          "verdict": {
+            "type": "string",
+            "enum": [
+              "passed",
+              "failed"
+            ]
+          },
+          "checks": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "verdict": {
+                  "type": "string"
+                },
+                "reason_code": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "evidence_summary": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              }
+            }
+          },
+          "conflict_matrix": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "candidate_id": {
+                  "type": "string"
+                },
+                "overlap": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "head_moved",
+              "base_moved"
+            ]
+          },
+          "superseding_report_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "create_merged_candidate",
+      "description": "Create one merged Wiki candidate branch from source candidates on the same formal base. Only creates a new branch; existing candidates are never edited. The author field records every source author; source authors get no operation rights; a merged candidate may not be merged again. Requires the merged_candidate capability.",
+      "input": {
+        "type": "object",
+        "required": [
+          "wiki_domain_id",
+          "source_proposal_ids",
+          "base_formal_revision_id",
+          "document_change",
+          "idempotency_key"
+        ],
+        "properties": {
+          "wiki_domain_id": {
+            "type": "string"
+          },
+          "source_proposal_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "base_formal_revision_id": {
+            "type": "string"
+          },
+          "document_change": {
+            "type": "object",
+            "properties": {
+              "submission_id": {
+                "type": "string"
+              },
+              "proposal_id": {
+                "type": "string"
+              },
+              "document": {
+                "type": "object"
+              },
+              "references": {
+                "type": "array"
+              }
+            }
+          },
+          "idempotency_key": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  ]
+}
