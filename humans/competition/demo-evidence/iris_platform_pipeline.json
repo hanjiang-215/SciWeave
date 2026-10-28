@@ -1,19 +1,19 @@
 {
   "dataset": "UCI Iris",
   "domain": "iris-demo",
-  "base_revision_id": "rev-base-d5143f76dd",
-  "terminus_database": "sciweave_iris_demo_3afc4189",
+  "base_revision_id": "rev-base-bfa4d976a7",
+  "terminus_database": "sciweave_iris_demo_6253667b",
   "flow": "get_formal_mapping -> submit_candidate -> preview_candidate -> record_review -> formalize_candidate -> get_formal_mapping",
   "events": [
     {
       "stage": "create_database",
       "status": 200,
-      "database": "sciweave_iris_demo_3afc4189"
+      "database": "sciweave_iris_demo_6253667b"
     },
     {
       "stage": "seed_initial_route",
       "title_count": 3,
-      "base_commit": "1wf6xnomn5m84b3xtwgrqbcrrp7it5u"
+      "base_commit": "id9tka5c0fq3j5u56l6b4qp1ubxyrqt"
     },
     {
       "stage": "tools_list",
@@ -36,17 +36,17 @@
         "content": [
           {
             "type": "text",
-            "text": "{\"status\": \"available\", \"reason_code\": \"ok\", \"mapping_domain_id\": \"iris-demo\", \"formal_revision_id\": \"rev-base-d5143f76dd\", \"store_id\": \"admin\", \"branch_id\": \"main\", \"commit_hash\": \"1wf6xnomn5m84b3xtwgrqbcrrp7it5u\", \"content_digest\": \"7060f268420f686e4c90fe6c76815c8b0f9e42d724d8fe2745e4a7243c0f1914\", \"published_by\": \"project-owner\", \"documents\": [{\"@id\": \"TaskNode/t1-v1\", \"@type\": \"TaskNode\", \"acceptance_criteria\": [\"Input snapshot is fixed and checkable\"], \"created_at\": \"2026-10-24T00:00:00Z\", \"created_by\": \"iris-demo\", \"expected_outputs\": [\"Formal route revision\"], \"lifecycle_state\": \"formal\", \"logical_id\": \"task-t1-v1\", \"mapping_domain_id\": \"iris-demo\", \"objective\": \"Reproduce UCI Iris baseline\", \"required_evidence\": [\"Owner approval\"], \"scope\": \"Demo evidence\", \"task_owner_id\": \"project-owner\", \"title\": \"T1 固定并检查输入\", \"version_id\": \"t1-v1\"}, {\"@id\": \"TaskNode/t2-v1\", \"@type\": \"TaskNode\", \"acceptance_criteria\": [\"Input snapshot is fixed and checkable\"], \"created_at\": \"2026-10-24T00:00:00Z\", \"created_by\": \"iris-demo\", \"expected_outputs\": [\"Formal route revision\"], \"lifecycle_state\": \"formal\", \"logical_id\": \"task-t2-v1\", \"mapping_domain_id\": \"iris-demo\", \"objective\": \"Reproduce UCI Iris baseline\", \"required_evidence\": [\"Owner approval\"], \"scope\": \"Demo evidence\", \"task_owner_id\": \"project-owner\", \"title\": \"T2 执行基线分类\", \"version_id\": \"t2-v1\"}, {\"@id\": \"TaskNode/t3-v1\", \"@type\": \"TaskNode\", \"acceptance_criteria\": [\"Input snapshot is fixed and checkable\"], \"created_at\": \"2026-10-24T00:00:00Z\", \"created_by\": \"iris-demo\", \"expected_outputs\": [\"Formal route revision\"], \"lifecycle_state\": \"formal\", \"logical_id\": \"task-t3-v1\", \"mapping_domain_id\": \"iris-demo\", \"objective\": \"Reproduce UCI Iris baseline\", \"required_evidence\": [\"Owner approval\"], \"scope\": \"Demo evidence\", \"task_owner_id\": \"project-owner\", \"title\": \"T3 研究人员复核并接纳\", \"version_id\": \"t3-v1\"}]}"
+            "text": "{\"status\": \"available\", \"reason_code\": \"ok\", \"mapping_domain_id\": \"iris-demo\", \"formal_revision_id\": \"rev-base-bfa4d976a7\", \"store_id\": \"admin\", \"branch_id\": \"main\", \"commit_hash\": \"id9tka5c0fq3j5u56l6b4qp1ubxyrqt\", \"content_digest\": \"7060f268420f686e4c90fe6c76815c8b0f9e42d724d8fe2745e4a7243c0f1914\", \"published_by\": \"project-owner\", \"documents\": [{\"@id\": \"TaskNode/t1-v1\", \"@type\": \"TaskNode\", \"acceptance_criteria\": [\"Input snapshot is fixed and checkable\"], \"created_at\": \"2026-10-24T00:00:00Z\", \"created_by\": \"iris-demo\", \"expected_outputs\": [\"Formal route revision\"], \"lifecycle_state\": \"formal\", \"logical_id\": \"task-t1-v1\", \"mapping_domain_id\": \"iris-demo\", \"objective\": \"Reproduce UCI Iris baseline\", \"required_evidence\": [\"Owner approval\"], \"scope\": \"Demo evidence\", \"task_owner_id\": \"project-owner\", \"title\": \"T1 固定并检查输入\", \"version_id\": \"t1-v1\"}, {\"@id\": \"TaskNode/t2-v1\", \"@type\": \"TaskNode\", \"acceptance_criteria\": [\"Input snapshot is fixed and checkable\"], \"created_at\": \"2026-10-24T00:00:00Z\", \"created_by\": \"iris-demo\", \"expected_outputs\": [\"Formal route revision\"], \"lifecycle_state\": \"formal\", \"logical_id\": \"task-t2-v1\", \"mapping_domain_id\": \"iris-demo\", \"objective\": \"Reproduce UCI Iris baseline\", \"required_evidence\": [\"Owner approval\"], \"scope\": \"Demo evidence\", \"task_owner_id\": \"project-owner\", \"title\": \"T2 执行基线分类\", \"version_id\": \"t2-v1\"}, {\"@id\": \"TaskNode/t3-v1\", \"@type\": \"TaskNode\", \"acceptance_criteria\": [\"Input snapshot is fixed and checkable\"], \"created_at\": \"2026-10-24T00:00:00Z\", \"created_by\": \"iris-demo\", \"expected_outputs\": [\"Formal route revision\"], \"lifecycle_state\": \"formal\", \"logical_id\": \"task-t3-v1\", \"mapping_domain_id\": \"iris-demo\", \"objective\": \"Reproduce UCI Iris baseline\", \"required_evidence\": [\"Owner approval\"], \"scope\": \"Demo evidence\", \"task_owner_id\": \"project-owner\", \"title\": \"T3 研究人员复核并接纳\", \"version_id\": \"t3-v1\"}]}"
           }
         ],
         "structuredContent": {
           "status": "available",
           "reason_code": "ok",
           "mapping_domain_id": "iris-demo",
-          "formal_revision_id": "rev-base-d5143f76dd",
+          "formal_revision_id": "rev-base-bfa4d976a7",
           "store_id": "admin",
           "branch_id": "main",
-          "commit_hash": "1wf6xnomn5m84b3xtwgrqbcrrp7it5u",
+          "commit_hash": "id9tka5c0fq3j5u56l6b4qp1ubxyrqt",
           "content_digest": "7060f268420f686e4c90fe6c76815c8b0f9e42d724d8fe2745e4a7243c0f1914",
           "published_by": "project-owner",
           "documents": [
@@ -132,18 +132,18 @@
         "content": [
           {
             "type": "text",
-            "text": "{\"status\": \"confirmed\", \"reason_code\": \"ok\", \"submission_id\": \"submission-t4-ae00b8edad\", \"proposal_id\": \"proposal-t4-301f983d01\", \"candidate_commit_id\": \"candidate-commit-00bafd2fbd602683\", \"branch_id\": \"candidate-9cae2ae3574ad16aa99368f2607fd17601cfbce6d12b568595024f0924ed60b1\", \"commit_hash\": \"aydybxrhfi3i1py5djuesg8d09tf80i\", \"content_digest\": \"fc2a1766928bd1d5bbc8170925a4932b2832226dde4de5249a84bcb9e2eba426\"}"
+            "text": "{\"status\": \"confirmed\", \"reason_code\": \"ok\", \"submission_id\": \"submission-t4-7bebe6c22d\", \"proposal_id\": \"proposal-t4-1e2bf6099f\", \"candidate_commit_id\": \"candidate-commit-deb133ffc559f86f\", \"branch_id\": \"candidate-877ddd0626b9dbce52778b7e97e4a88f5410536954a565d229e866bc6603460a\", \"commit_hash\": \"2oivwwvgv30rbdkycu6dkpm2mbcxqiw\", \"content_digest\": \"cc2dd1210f0c315618f4fc3d787a7a46fe021a57d6e9a14a6883d84ad682db7f\"}"
           }
         ],
         "structuredContent": {
           "status": "confirmed",
           "reason_code": "ok",
-          "submission_id": "submission-t4-ae00b8edad",
-          "proposal_id": "proposal-t4-301f983d01",
-          "candidate_commit_id": "candidate-commit-00bafd2fbd602683",
-          "branch_id": "candidate-9cae2ae3574ad16aa99368f2607fd17601cfbce6d12b568595024f0924ed60b1",
-          "commit_hash": "aydybxrhfi3i1py5djuesg8d09tf80i",
-          "content_digest": "fc2a1766928bd1d5bbc8170925a4932b2832226dde4de5249a84bcb9e2eba426"
+          "submission_id": "submission-t4-7bebe6c22d",
+          "proposal_id": "proposal-t4-1e2bf6099f",
+          "candidate_commit_id": "candidate-commit-deb133ffc559f86f",
+          "branch_id": "candidate-877ddd0626b9dbce52778b7e97e4a88f5410536954a565d229e866bc6603460a",
+          "commit_hash": "2oivwwvgv30rbdkycu6dkpm2mbcxqiw",
+          "content_digest": "cc2dd1210f0c315618f4fc3d787a7a46fe021a57d6e9a14a6883d84ad682db7f"
         },
         "isError": false
       }
@@ -170,13 +170,13 @@
         "content": [
           {
             "type": "text",
-            "text": "{\"status\": \"rejected\", \"reason_code\": \"base_revision_missing\", \"submission_id\": \"submission-stale-a1d3ed9c55\"}"
+            "text": "{\"status\": \"rejected\", \"reason_code\": \"base_revision_missing\", \"submission_id\": \"submission-stale-38a8ae503b\"}"
           }
         ],
         "structuredContent": {
           "status": "rejected",
           "reason_code": "base_revision_missing",
-          "submission_id": "submission-stale-a1d3ed9c55"
+          "submission_id": "submission-stale-38a8ae503b"
         },
         "isError": false
       }
@@ -189,14 +189,14 @@
         "content": [
           {
             "type": "text",
-            "text": "{\"status\": \"available\", \"reason_code\": null, \"preview_id\": \"preview-74ff9ba7ab595aba6963a5d8d85831779439fb4d67634224a6fac9ec91774a0f\", \"evidence_id\": \"evidence-32b9a15f463e823d6b1059c2969ee53e2282bb1efe4309289fbe5b7c7f89072c\", \"changes\": [{\"object_type\": \"TaskNode\", \"object_id\": \"TaskNode/t4-v1\", \"field\": \"@id\", \"before\": null, \"after\": \"TaskNode/t4-v1\"}, {\"object_type\": \"TaskNode\", \"object_id\": \"TaskNode/t4-v1\", \"field\": \"@type\", \"before\": null, \"after\": \"TaskNode\"}, {\"object_type\": \"TaskNode\", \"object_id\": \"TaskNode/t4-v1\", \"field\": \"acceptance_criteria\", \"before\": null, \"after\": [\"Input snapshot is fixed and checkable\"]}, {\"object_type\": \"TaskNode\", \"object_id\": \"TaskNode/t4-v1\", \"field\": \"base_formal_revision_id\", \"before\": null, \"after\": \"rev-base-d5143f76dd\"}, {\"object_type\": \"TaskNode\", \"object_id\": \"TaskNode/t4-v1\", \"field\": \"created_at\", \"before\": null, \"after\": \"2026-10-24T00:00:00Z\"}, {\"object_type\": \"TaskNode\", \"object_id\": \"TaskNode/t4-v1\", \"field\": \"created_by\", \"before\": null, \"after\": \"iris-demo\"}, {\"object_type\": \"TaskNode\", \"object_id\": \"TaskNode/t4-v1\", \"field\": \"expected_outputs\", \"before\": null, \"after\": [\"Formal route revision\"]}, {\"object_type\": \"TaskNode\", \"object_id\": \"TaskNode/t4-v1\", \"field\": \"logical_id\", \"before\": null, \"after\": \"task-t4-v1\"}, {\"object_type\": \"TaskNode\", \"object_id\": \"TaskNode/t4-v1\", \"field\": \"mapping_domain_id\", \"before\": null, \"after\": \"iris-demo\"}, {\"object_type\": \"TaskNode\", \"object_id\": \"TaskNode/t4-v1\", \"field\": \"objective\", \"before\": null, \"after\": \"Reproduce UCI Iris baseline\"}, {\"object_type\": \"TaskNode\", \"object_id\": \"TaskNode/t4-v1\", \"field\": \"proposal_id\", \"before\": null, \"after\": \"proposal-t4-301f983d01\"}, {\"object_type\": \"TaskNode\", \"object_id\": \"TaskNode/t4-v1\", \"field\": \"required_evidence\", \"before\": null, \"after\": [\"Owner approval\"]}, {\"object_type\": \"TaskNode\", \"object_id\": \"TaskNode/t4-v1\", \"field\": \"scope\", \"before\": null, \"after\": \"Demo evidence\"}, {\"object_type\": \"TaskNode\", \"object_id\": \"TaskNode/t4-v1\", \"field\": \"task_owner_id\", \"before\": null, \"after\": \"project-owner\"}, {\"object_type\": \"TaskNode\", \"object_id\": \"TaskNode/t4-v1\", \"field\": \"title\", \"before\": null, \"after\": \"T4 分层交叉验证（路线变更）\"}, {\"object_type\": \"TaskNode\", \"object_id\": \"TaskNode/t4-v1\", \"field\": \"version_id\", \"before\": null, \"after\": \"t4-v1\"}], \"affected_objects\": [\"TaskNode/t4-v1\"], \"route_impact\": \"changed\"}"
+            "text": "{\"status\": \"available\", \"reason_code\": null, \"preview_id\": \"preview-e2baebac6b6e0e627042fba1c40782fb51169459c50e8907c12942c4d430cd5f\", \"evidence_id\": \"evidence-15346374f10794b0b1df79728614e9cdcf38e579b3e7053882c4166695e31dc5\", \"changes\": [{\"object_type\": \"TaskNode\", \"object_id\": \"TaskNode/t4-v1\", \"field\": \"@id\", \"before\": null, \"after\": \"TaskNode/t4-v1\"}, {\"object_type\": \"TaskNode\", \"object_id\": \"TaskNode/t4-v1\", \"field\": \"@type\", \"before\": null, \"after\": \"TaskNode\"}, {\"object_type\": \"TaskNode\", \"object_id\": \"TaskNode/t4-v1\", \"field\": \"acceptance_criteria\", \"before\": null, \"after\": [\"Input snapshot is fixed and checkable\"]}, {\"object_type\": \"TaskNode\", \"object_id\": \"TaskNode/t4-v1\", \"field\": \"base_formal_revision_id\", \"before\": null, \"after\": \"rev-base-bfa4d976a7\"}, {\"object_type\": \"TaskNode\", \"object_id\": \"TaskNode/t4-v1\", \"field\": \"created_at\", \"before\": null, \"after\": \"2026-10-24T00:00:00Z\"}, {\"object_type\": \"TaskNode\", \"object_id\": \"TaskNode/t4-v1\", \"field\": \"created_by\", \"before\": null, \"after\": \"iris-demo\"}, {\"object_type\": \"TaskNode\", \"object_id\": \"TaskNode/t4-v1\", \"field\": \"expected_outputs\", \"before\": null, \"after\": [\"Formal route revision\"]}, {\"object_type\": \"TaskNode\", \"object_id\": \"TaskNode/t4-v1\", \"field\": \"logical_id\", \"before\": null, \"after\": \"task-t4-v1\"}, {\"object_type\": \"TaskNode\", \"object_id\": \"TaskNode/t4-v1\", \"field\": \"mapping_domain_id\", \"before\": null, \"after\": \"iris-demo\"}, {\"object_type\": \"TaskNode\", \"object_id\": \"TaskNode/t4-v1\", \"field\": \"objective\", \"before\": null, \"after\": \"Reproduce UCI Iris baseline\"}, {\"object_type\": \"TaskNode\", \"object_id\": \"TaskNode/t4-v1\", \"field\": \"proposal_id\", \"before\": null, \"after\": \"proposal-t4-1e2bf6099f\"}, {\"object_type\": \"TaskNode\", \"object_id\": \"TaskNode/t4-v1\", \"field\": \"required_evidence\", \"before\": null, \"after\": [\"Owner approval\"]}, {\"object_type\": \"TaskNode\", \"object_id\": \"TaskNode/t4-v1\", \"field\": \"scope\", \"before\": null, \"after\": \"Demo evidence\"}, {\"object_type\": \"TaskNode\", \"object_id\": \"TaskNode/t4-v1\", \"field\": \"task_owner_id\", \"before\": null, \"after\": \"project-owner\"}, {\"object_type\": \"TaskNode\", \"object_id\": \"TaskNode/t4-v1\", \"field\": \"title\", \"before\": null, \"after\": \"T4 分层交叉验证（路线变更）\"}, {\"object_type\": \"TaskNode\", \"object_id\": \"TaskNode/t4-v1\", \"field\": \"version_id\", \"before\": null, \"after\": \"t4-v1\"}], \"affected_objects\": [\"TaskNode/t4-v1\"], \"route_impact\": \"changed\"}"
           }
         ],
         "structuredContent": {
           "status": "available",
           "reason_code": null,
-          "preview_id": "preview-74ff9ba7ab595aba6963a5d8d85831779439fb4d67634224a6fac9ec91774a0f",
-          "evidence_id": "evidence-32b9a15f463e823d6b1059c2969ee53e2282bb1efe4309289fbe5b7c7f89072c",
+          "preview_id": "preview-e2baebac6b6e0e627042fba1c40782fb51169459c50e8907c12942c4d430cd5f",
+          "evidence_id": "evidence-15346374f10794b0b1df79728614e9cdcf38e579b3e7053882c4166695e31dc5",
           "changes": [
             {
               "object_type": "TaskNode",
@@ -226,7 +226,7 @@
               "object_id": "TaskNode/t4-v1",
               "field": "base_formal_revision_id",
               "before": null,
-              "after": "rev-base-d5143f76dd"
+              "after": "rev-base-bfa4d976a7"
             },
             {
               "object_type": "TaskNode",
@@ -277,7 +277,7 @@
               "object_id": "TaskNode/t4-v1",
               "field": "proposal_id",
               "before": null,
-              "after": "proposal-t4-301f983d01"
+              "after": "proposal-t4-1e2bf6099f"
             },
             {
               "object_type": "TaskNode",
@@ -333,16 +333,16 @@
         "content": [
           {
             "type": "text",
-            "text": "{\"event_id\": \"88b27345-cfb4-45da-bde5-75a243a6a39a\", \"buffer_id\": \"buffer-e44e6b94c30838a16d9984f1ba795f70068987021d9f55858692bfb14cbc334e\", \"actor_id\": \"project-owner\", \"decision\": \"rejected\", \"reason\": \"驳回分支演示：证据不足\", \"occurred_at\": \"2026-10-27T01:10:39.796189Z\"}"
+            "text": "{\"event_id\": \"71524b1d-562d-4f0c-8705-407a930d8c62\", \"buffer_id\": \"buffer-0ede00815c8532cfa8b838750aed3332bff5bd2eb2851bcf6fa0c3c874f9192d\", \"actor_id\": \"project-owner\", \"decision\": \"rejected\", \"reason\": \"驳回分支演示：证据不足\", \"occurred_at\": \"2026-10-28T03:59:38.391990Z\"}"
           }
         ],
         "structuredContent": {
-          "event_id": "88b27345-cfb4-45da-bde5-75a243a6a39a",
-          "buffer_id": "buffer-e44e6b94c30838a16d9984f1ba795f70068987021d9f55858692bfb14cbc334e",
+          "event_id": "71524b1d-562d-4f0c-8705-407a930d8c62",
+          "buffer_id": "buffer-0ede00815c8532cfa8b838750aed3332bff5bd2eb2851bcf6fa0c3c874f9192d",
           "actor_id": "project-owner",
           "decision": "rejected",
           "reason": "驳回分支演示：证据不足",
-          "occurred_at": "2026-10-27T01:10:39.796189Z"
+          "occurred_at": "2026-10-28T03:59:38.391990Z"
         },
         "isError": false
       }
@@ -355,17 +355,17 @@
         "content": [
           {
             "type": "text",
-            "text": "{\"status\": \"available\", \"reason_code\": \"ok\", \"mapping_domain_id\": \"iris-demo\", \"formal_revision_id\": \"rev-base-d5143f76dd\", \"store_id\": \"admin\", \"branch_id\": \"main\", \"commit_hash\": \"1wf6xnomn5m84b3xtwgrqbcrrp7it5u\", \"content_digest\": \"7060f268420f686e4c90fe6c76815c8b0f9e42d724d8fe2745e4a7243c0f1914\", \"published_by\": \"project-owner\", \"documents\": [{\"@id\": \"TaskNode/t1-v1\", \"@type\": \"TaskNode\", \"acceptance_criteria\": [\"Input snapshot is fixed and checkable\"], \"created_at\": \"2026-10-24T00:00:00Z\", \"created_by\": \"iris-demo\", \"expected_outputs\": [\"Formal route revision\"], \"lifecycle_state\": \"formal\", \"logical_id\": \"task-t1-v1\", \"mapping_domain_id\": \"iris-demo\", \"objective\": \"Reproduce UCI Iris baseline\", \"required_evidence\": [\"Owner approval\"], \"scope\": \"Demo evidence\", \"task_owner_id\": \"project-owner\", \"title\": \"T1 固定并检查输入\", \"version_id\": \"t1-v1\"}, {\"@id\": \"TaskNode/t2-v1\", \"@type\": \"TaskNode\", \"acceptance_criteria\": [\"Input snapshot is fixed and checkable\"], \"created_at\": \"2026-10-24T00:00:00Z\", \"created_by\": \"iris-demo\", \"expected_outputs\": [\"Formal route revision\"], \"lifecycle_state\": \"formal\", \"logical_id\": \"task-t2-v1\", \"mapping_domain_id\": \"iris-demo\", \"objective\": \"Reproduce UCI Iris baseline\", \"required_evidence\": [\"Owner approval\"], \"scope\": \"Demo evidence\", \"task_owner_id\": \"project-owner\", \"title\": \"T2 执行基线分类\", \"version_id\": \"t2-v1\"}, {\"@id\": \"TaskNode/t3-v1\", \"@type\": \"TaskNode\", \"acceptance_criteria\": [\"Input snapshot is fixed and checkable\"], \"created_at\": \"2026-10-24T00:00:00Z\", \"created_by\": \"iris-demo\", \"expected_outputs\": [\"Formal route revision\"], \"lifecycle_state\": \"formal\", \"logical_id\": \"task-t3-v1\", \"mapping_domain_id\": \"iris-demo\", \"objective\": \"Reproduce UCI Iris baseline\", \"required_evidence\": [\"Owner approval\"], \"scope\": \"Demo evidence\", \"task_owner_id\": \"project-owner\", \"title\": \"T3 研究人员复核并接纳\", \"version_id\": \"t3-v1\"}]}"
+            "text": "{\"status\": \"available\", \"reason_code\": \"ok\", \"mapping_domain_id\": \"iris-demo\", \"formal_revision_id\": \"rev-base-bfa4d976a7\", \"store_id\": \"admin\", \"branch_id\": \"main\", \"commit_hash\": \"id9tka5c0fq3j5u56l6b4qp1ubxyrqt\", \"content_digest\": \"7060f268420f686e4c90fe6c76815c8b0f9e42d724d8fe2745e4a7243c0f1914\", \"published_by\": \"project-owner\", \"documents\": [{\"@id\": \"TaskNode/t1-v1\", \"@type\": \"TaskNode\", \"acceptance_criteria\": [\"Input snapshot is fixed and checkable\"], \"created_at\": \"2026-10-24T00:00:00Z\", \"created_by\": \"iris-demo\", \"expected_outputs\": [\"Formal route revision\"], \"lifecycle_state\": \"formal\", \"logical_id\": \"task-t1-v1\", \"mapping_domain_id\": \"iris-demo\", \"objective\": \"Reproduce UCI Iris baseline\", \"required_evidence\": [\"Owner approval\"], \"scope\": \"Demo evidence\", \"task_owner_id\": \"project-owner\", \"title\": \"T1 固定并检查输入\", \"version_id\": \"t1-v1\"}, {\"@id\": \"TaskNode/t2-v1\", \"@type\": \"TaskNode\", \"acceptance_criteria\": [\"Input snapshot is fixed and checkable\"], \"created_at\": \"2026-10-24T00:00:00Z\", \"created_by\": \"iris-demo\", \"expected_outputs\": [\"Formal route revision\"], \"lifecycle_state\": \"formal\", \"logical_id\": \"task-t2-v1\", \"mapping_domain_id\": \"iris-demo\", \"objective\": \"Reproduce UCI Iris baseline\", \"required_evidence\": [\"Owner approval\"], \"scope\": \"Demo evidence\", \"task_owner_id\": \"project-owner\", \"title\": \"T2 执行基线分类\", \"version_id\": \"t2-v1\"}, {\"@id\": \"TaskNode/t3-v1\", \"@type\": \"TaskNode\", \"acceptance_criteria\": [\"Input snapshot is fixed and checkable\"], \"created_at\": \"2026-10-24T00:00:00Z\", \"created_by\": \"iris-demo\", \"expected_outputs\": [\"Formal route revision\"], \"lifecycle_state\": \"formal\", \"logical_id\": \"task-t3-v1\", \"mapping_domain_id\": \"iris-demo\", \"objective\": \"Reproduce UCI Iris baseline\", \"required_evidence\": [\"Owner approval\"], \"scope\": \"Demo evidence\", \"task_owner_id\": \"project-owner\", \"title\": \"T3 研究人员复核并接纳\", \"version_id\": \"t3-v1\"}]}"
           }
         ],
         "structuredContent": {
           "status": "available",
           "reason_code": "ok",
           "mapping_domain_id": "iris-demo",
-          "formal_revision_id": "rev-base-d5143f76dd",
+          "formal_revision_id": "rev-base-bfa4d976a7",
           "store_id": "admin",
           "branch_id": "main",
-          "commit_hash": "1wf6xnomn5m84b3xtwgrqbcrrp7it5u",
+          "commit_hash": "id9tka5c0fq3j5u56l6b4qp1ubxyrqt",
           "content_digest": "7060f268420f686e4c90fe6c76815c8b0f9e42d724d8fe2745e4a7243c0f1914",
           "published_by": "project-owner",
           "documents": [
@@ -451,16 +451,16 @@
         "content": [
           {
             "type": "text",
-            "text": "{\"event_id\": \"a52596f6-e868-48a1-bac1-c3481f2267f7\", \"buffer_id\": \"buffer-e44e6b94c30838a16d9984f1ba795f70068987021d9f55858692bfb14cbc334e\", \"actor_id\": \"project-owner\", \"decision\": \"approved\", \"reason\": \"采纳 T4 路线变更：增加分层交叉验证\", \"occurred_at\": \"2026-10-27T01:10:39.824564Z\"}"
+            "text": "{\"event_id\": \"d3d7e8d3-3d3d-4ac5-a672-555ebb90923a\", \"buffer_id\": \"buffer-0ede00815c8532cfa8b838750aed3332bff5bd2eb2851bcf6fa0c3c874f9192d\", \"actor_id\": \"project-owner\", \"decision\": \"approved\", \"reason\": \"采纳 T4 路线变更：增加分层交叉验证\", \"occurred_at\": \"2026-10-28T03:59:38.468743Z\"}"
           }
         ],
         "structuredContent": {
-          "event_id": "a52596f6-e868-48a1-bac1-c3481f2267f7",
-          "buffer_id": "buffer-e44e6b94c30838a16d9984f1ba795f70068987021d9f55858692bfb14cbc334e",
+          "event_id": "d3d7e8d3-3d3d-4ac5-a672-555ebb90923a",
+          "buffer_id": "buffer-0ede00815c8532cfa8b838750aed3332bff5bd2eb2851bcf6fa0c3c874f9192d",
           "actor_id": "project-owner",
           "decision": "approved",
           "reason": "采纳 T4 路线变更：增加分层交叉验证",
-          "occurred_at": "2026-10-27T01:10:39.824564Z"
+          "occurred_at": "2026-10-28T03:59:38.468743Z"
         },
         "isError": false
       }
@@ -473,14 +473,14 @@
         "content": [
           {
             "type": "text",
-            "text": "{\"status\": \"succeeded\", \"formalization_operation_id\": \"formalize-t4-4ac6b910dd\", \"result_id\": \"40c6aa75-9a39-4c25-aafa-f10d51ec1bc0\", \"formal_revision_id\": \"formal-04f1a18ab9e040f95b264584f5b2ed095ccdf4487d076f6daf74536486ea9f0a\", \"reason_code\": null, \"attempt_number\": 1}"
+            "text": "{\"status\": \"succeeded\", \"formalization_operation_id\": \"formalize-t4-0353918654\", \"result_id\": \"aa3fd84e-e46f-4898-8c55-f7430e5c0fac\", \"formal_revision_id\": \"formal-d9ce823405fc4b5c0e27f02a8100d25dcaa7ad3c2d70c6e2acb9db08b83c20b8\", \"reason_code\": null, \"attempt_number\": 1}"
           }
         ],
         "structuredContent": {
           "status": "succeeded",
-          "formalization_operation_id": "formalize-t4-4ac6b910dd",
-          "result_id": "40c6aa75-9a39-4c25-aafa-f10d51ec1bc0",
-          "formal_revision_id": "formal-04f1a18ab9e040f95b264584f5b2ed095ccdf4487d076f6daf74536486ea9f0a",
+          "formalization_operation_id": "formalize-t4-0353918654",
+          "result_id": "aa3fd84e-e46f-4898-8c55-f7430e5c0fac",
+          "formal_revision_id": "formal-d9ce823405fc4b5c0e27f02a8100d25dcaa7ad3c2d70c6e2acb9db08b83c20b8",
           "reason_code": null,
           "attempt_number": 1
         },
@@ -495,18 +495,18 @@
         "content": [
           {
             "type": "text",
-            "text": "{\"status\": \"available\", \"reason_code\": \"ok\", \"mapping_domain_id\": \"iris-demo\", \"formal_revision_id\": \"formal-04f1a18ab9e040f95b264584f5b2ed095ccdf4487d076f6daf74536486ea9f0a\", \"store_id\": \"admin\", \"branch_id\": \"candidate-9cae2ae3574ad16aa99368f2607fd17601cfbce6d12b568595024f0924ed60b1\", \"commit_hash\": \"aydybxrhfi3i1py5djuesg8d09tf80i\", \"content_digest\": \"4e50fe168da36ecc0932f3beaf95442898fa4256cfd943ec63f39b5f4f2dc8f1\", \"published_by\": \"project-owner\", \"documents\": [{\"@id\": \"TaskNode/t1-v1\", \"@type\": \"TaskNode\", \"acceptance_criteria\": [\"Input snapshot is fixed and checkable\"], \"created_at\": \"2026-10-24T00:00:00Z\", \"created_by\": \"iris-demo\", \"expected_outputs\": [\"Formal route revision\"], \"lifecycle_state\": \"formal\", \"logical_id\": \"task-t1-v1\", \"mapping_domain_id\": \"iris-demo\", \"objective\": \"Reproduce UCI Iris baseline\", \"required_evidence\": [\"Owner approval\"], \"scope\": \"Demo evidence\", \"task_owner_id\": \"project-owner\", \"title\": \"T1 固定并检查输入\", \"version_id\": \"t1-v1\"}, {\"@id\": \"TaskNode/t2-v1\", \"@type\": \"TaskNode\", \"acceptance_criteria\": [\"Input snapshot is fixed and checkable\"], \"created_at\": \"2026-10-24T00:00:00Z\", \"created_by\": \"iris-demo\", \"expected_outputs\": [\"Formal route revision\"], \"lifecycle_state\": \"formal\", \"logical_id\": \"task-t2-v1\", \"mapping_domain_id\": \"iris-demo\", \"objective\": \"Reproduce UCI Iris baseline\", \"required_evidence\": [\"Owner approval\"], \"scope\": \"Demo evidence\", \"task_owner_id\": \"project-owner\", \"title\": \"T2 执行基线分类\", \"version_id\": \"t2-v1\"}, {\"@id\": \"TaskNode/t3-v1\", \"@type\": \"TaskNode\", \"acceptance_criteria\": [\"Input snapshot is fixed and checkable\"], \"created_at\": \"2026-10-24T00:00:00Z\", \"created_by\": \"iris-demo\", \"expected_outputs\": [\"Formal route revision\"], \"lifecycle_state\": \"formal\", \"logical_id\": \"task-t3-v1\", \"mapping_domain_id\": \"iris-demo\", \"objective\": \"Reproduce UCI Iris baseline\", \"required_evidence\": [\"Owner approval\"], \"scope\": \"Demo evidence\", \"task_owner_id\": \"project-owner\", \"title\": \"T3 研究人员复核并接纳\", \"version_id\": \"t3-v1\"}, {\"@id\": \"TaskNode/t4-v1\", \"@type\": \"TaskNode\", \"acceptance_criteria\": [\"Input snapshot is fixed and checkable\"], \"created_at\": \"2026-10-24T00:00:00Z\", \"created_by\": \"iris-demo\", \"expected_outputs\": [\"Formal route revision\"], \"lifecycle_state\": \"candidate\", \"logical_id\": \"task-t4-v1\", \"mapping_domain_id\": \"iris-demo\", \"objective\": \"Reproduce UCI Iris baseline\", \"required_evidence\": [\"Owner approval\"], \"scope\": \"Demo evidence\", \"task_owner_id\": \"project-owner\", \"title\": \"T4 分层交叉验证（路线变更）\", \"version_id\": \"t4-v1\", \"base_formal_revision_id\": \"rev-base-d5143f76dd\", \"proposal_id\": \"proposal-t4-301f983d01\"}]}"
+            "text": "{\"status\": \"available\", \"reason_code\": \"ok\", \"mapping_domain_id\": \"iris-demo\", \"formal_revision_id\": \"formal-d9ce823405fc4b5c0e27f02a8100d25dcaa7ad3c2d70c6e2acb9db08b83c20b8\", \"store_id\": \"admin\", \"branch_id\": \"candidate-877ddd0626b9dbce52778b7e97e4a88f5410536954a565d229e866bc6603460a\", \"commit_hash\": \"2oivwwvgv30rbdkycu6dkpm2mbcxqiw\", \"content_digest\": \"7f6962955b3e9f4e1d4372f84af4de6ad5105b404d32e9c6fb57f7c5013aae2c\", \"published_by\": \"project-owner\", \"documents\": [{\"@id\": \"TaskNode/t1-v1\", \"@type\": \"TaskNode\", \"acceptance_criteria\": [\"Input snapshot is fixed and checkable\"], \"created_at\": \"2026-10-24T00:00:00Z\", \"created_by\": \"iris-demo\", \"expected_outputs\": [\"Formal route revision\"], \"lifecycle_state\": \"formal\", \"logical_id\": \"task-t1-v1\", \"mapping_domain_id\": \"iris-demo\", \"objective\": \"Reproduce UCI Iris baseline\", \"required_evidence\": [\"Owner approval\"], \"scope\": \"Demo evidence\", \"task_owner_id\": \"project-owner\", \"title\": \"T1 固定并检查输入\", \"version_id\": \"t1-v1\"}, {\"@id\": \"TaskNode/t2-v1\", \"@type\": \"TaskNode\", \"acceptance_criteria\": [\"Input snapshot is fixed and checkable\"], \"created_at\": \"2026-10-24T00:00:00Z\", \"created_by\": \"iris-demo\", \"expected_outputs\": [\"Formal route revision\"], \"lifecycle_state\": \"formal\", \"logical_id\": \"task-t2-v1\", \"mapping_domain_id\": \"iris-demo\", \"objective\": \"Reproduce UCI Iris baseline\", \"required_evidence\": [\"Owner approval\"], \"scope\": \"Demo evidence\", \"task_owner_id\": \"project-owner\", \"title\": \"T2 执行基线分类\", \"version_id\": \"t2-v1\"}, {\"@id\": \"TaskNode/t3-v1\", \"@type\": \"TaskNode\", \"acceptance_criteria\": [\"Input snapshot is fixed and checkable\"], \"created_at\": \"2026-10-24T00:00:00Z\", \"created_by\": \"iris-demo\", \"expected_outputs\": [\"Formal route revision\"], \"lifecycle_state\": \"formal\", \"logical_id\": \"task-t3-v1\", \"mapping_domain_id\": \"iris-demo\", \"objective\": \"Reproduce UCI Iris baseline\", \"required_evidence\": [\"Owner approval\"], \"scope\": \"Demo evidence\", \"task_owner_id\": \"project-owner\", \"title\": \"T3 研究人员复核并接纳\", \"version_id\": \"t3-v1\"}, {\"@id\": \"TaskNode/t4-v1\", \"@type\": \"TaskNode\", \"acceptance_criteria\": [\"Input snapshot is fixed and checkable\"], \"created_at\": \"2026-10-24T00:00:00Z\", \"created_by\": \"iris-demo\", \"expected_outputs\": [\"Formal route revision\"], \"lifecycle_state\": \"candidate\", \"logical_id\": \"task-t4-v1\", \"mapping_domain_id\": \"iris-demo\", \"objective\": \"Reproduce UCI Iris baseline\", \"required_evidence\": [\"Owner approval\"], \"scope\": \"Demo evidence\", \"task_owner_id\": \"project-owner\", \"title\": \"T4 分层交叉验证（路线变更）\", \"version_id\": \"t4-v1\", \"base_formal_revision_id\": \"rev-base-bfa4d976a7\", \"proposal_id\": \"proposal-t4-1e2bf6099f\"}]}"
           }
         ],
         "structuredContent": {
           "status": "available",
           "reason_code": "ok",
           "mapping_domain_id": "iris-demo",
-          "formal_revision_id": "formal-04f1a18ab9e040f95b264584f5b2ed095ccdf4487d076f6daf74536486ea9f0a",
+          "formal_revision_id": "formal-d9ce823405fc4b5c0e27f02a8100d25dcaa7ad3c2d70c6e2acb9db08b83c20b8",
           "store_id": "admin",
-          "branch_id": "candidate-9cae2ae3574ad16aa99368f2607fd17601cfbce6d12b568595024f0924ed60b1",
-          "commit_hash": "aydybxrhfi3i1py5djuesg8d09tf80i",
-          "content_digest": "4e50fe168da36ecc0932f3beaf95442898fa4256cfd943ec63f39b5f4f2dc8f1",
+          "branch_id": "candidate-877ddd0626b9dbce52778b7e97e4a88f5410536954a565d229e866bc6603460a",
+          "commit_hash": "2oivwwvgv30rbdkycu6dkpm2mbcxqiw",
+          "content_digest": "7f6962955b3e9f4e1d4372f84af4de6ad5105b404d32e9c6fb57f7c5013aae2c",
           "published_by": "project-owner",
           "documents": [
             {
@@ -600,8 +600,8 @@
               "task_owner_id": "project-owner",
               "title": "T4 分层交叉验证（路线变更）",
               "version_id": "t4-v1",
-              "base_formal_revision_id": "rev-base-d5143f76dd",
-              "proposal_id": "proposal-t4-301f983d01"
+              "base_formal_revision_id": "rev-base-bfa4d976a7",
+              "proposal_id": "proposal-t4-1e2bf6099f"
             }
           ]
         },
@@ -616,26 +616,26 @@
         "content": [
           {
             "type": "text",
-            "text": "{\"submission_id\": \"submission-t4-ae00b8edad\", \"candidate\": {\"submission_id\": \"submission-t4-ae00b8edad\", \"mapping_domain_id\": \"iris-demo\", \"submitter_id\": \"researcher\", \"base_formal_revision_id\": \"rev-base-d5143f76dd\", \"submission_status\": \"candidate_created\", \"submitted_at\": \"2026-10-27T01:10:39.637525+00:00\", \"proposal_id\": \"proposal-t4-301f983d01\", \"proposal_status\": \"merged\", \"candidate_commit_id\": \"candidate-commit-00bafd2fbd602683\", \"terminus_store_id\": \"admin\", \"branch_id\": \"candidate-9cae2ae3574ad16aa99368f2607fd17601cfbce6d12b568595024f0924ed60b1\", \"commit_hash\": \"aydybxrhfi3i1py5djuesg8d09tf80i\", \"candidate_snapshot_digest\": \"fc2a1766928bd1d5bbc8170925a4932b2832226dde4de5249a84bcb9e2eba426\", \"created_at\": \"2026-10-27T01:10:39.732470+00:00\"}}"
+            "text": "{\"submission_id\": \"submission-t4-7bebe6c22d\", \"candidate\": {\"submission_id\": \"submission-t4-7bebe6c22d\", \"mapping_domain_id\": \"iris-demo\", \"submitter_id\": \"researcher\", \"base_formal_revision_id\": \"rev-base-bfa4d976a7\", \"submission_status\": \"candidate_created\", \"submitted_at\": \"2026-10-28T03:59:37.948880+00:00\", \"proposal_id\": \"proposal-t4-1e2bf6099f\", \"proposal_status\": \"merged\", \"candidate_commit_id\": \"candidate-commit-deb133ffc559f86f\", \"terminus_store_id\": \"admin\", \"branch_id\": \"candidate-877ddd0626b9dbce52778b7e97e4a88f5410536954a565d229e866bc6603460a\", \"commit_hash\": \"2oivwwvgv30rbdkycu6dkpm2mbcxqiw\", \"candidate_snapshot_digest\": \"cc2dd1210f0c315618f4fc3d787a7a46fe021a57d6e9a14a6883d84ad682db7f\", \"created_at\": \"2026-10-28T03:59:38.212728+00:00\"}}"
           }
         ],
         "structuredContent": {
-          "submission_id": "submission-t4-ae00b8edad",
+          "submission_id": "submission-t4-7bebe6c22d",
           "candidate": {
-            "submission_id": "submission-t4-ae00b8edad",
+            "submission_id": "submission-t4-7bebe6c22d",
             "mapping_domain_id": "iris-demo",
             "submitter_id": "researcher",
-            "base_formal_revision_id": "rev-base-d5143f76dd",
+            "base_formal_revision_id": "rev-base-bfa4d976a7",
             "submission_status": "candidate_created",
-            "submitted_at": "2026-10-27T01:10:39.637525+00:00",
-            "proposal_id": "proposal-t4-301f983d01",
+            "submitted_at": "2026-10-28T03:59:37.948880+00:00",
+            "proposal_id": "proposal-t4-1e2bf6099f",
             "proposal_status": "merged",
-            "candidate_commit_id": "candidate-commit-00bafd2fbd602683",
+            "candidate_commit_id": "candidate-commit-deb133ffc559f86f",
             "terminus_store_id": "admin",
-            "branch_id": "candidate-9cae2ae3574ad16aa99368f2607fd17601cfbce6d12b568595024f0924ed60b1",
-            "commit_hash": "aydybxrhfi3i1py5djuesg8d09tf80i",
-            "candidate_snapshot_digest": "fc2a1766928bd1d5bbc8170925a4932b2832226dde4de5249a84bcb9e2eba426",
-            "created_at": "2026-10-27T01:10:39.732470+00:00"
+            "branch_id": "candidate-877ddd0626b9dbce52778b7e97e4a88f5410536954a565d229e866bc6603460a",
+            "commit_hash": "2oivwwvgv30rbdkycu6dkpm2mbcxqiw",
+            "candidate_snapshot_digest": "cc2dd1210f0c315618f4fc3d787a7a46fe021a57d6e9a14a6883d84ad682db7f",
+            "created_at": "2026-10-28T03:59:38.212728+00:00"
           }
         },
         "isError": false
@@ -644,13 +644,13 @@
   ],
   "failure_paths": {
     "reviewer_without_submit": "forbidden",
-    "stale_base_candidate": "{\"status\": \"rejected\", \"reason_code\": \"base_revision_missing\", \"submission_id\": \"submission-stale-a1d3ed9c55\"}",
+    "stale_base_candidate": "{\"status\": \"rejected\", \"reason_code\": \"base_revision_missing\", \"submission_id\": \"submission-stale-38a8ae503b\"}",
     "rejected_review": "rejected"
   },
   "result": {
     "status": "completed",
     "formal_mapping_contains_t4": true,
-    "candidate_head": "aydybxrhfi3i1py5djuesg8d09tf80i",
-    "rejected_buffer_id": "buffer-e44e6b94c30838a16d9984f1ba795f70068987021d9f55858692bfb14cbc334e"
+    "candidate_head": "2oivwwvgv30rbdkycu6dkpm2mbcxqiw",
+    "rejected_buffer_id": "buffer-0ede00815c8532cfa8b838750aed3332bff5bd2eb2851bcf6fa0c3c874f9192d"
   }
 }
