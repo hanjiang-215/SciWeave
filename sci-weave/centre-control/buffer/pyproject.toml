@@ -9,8 +9,14 @@ dependencies = []
 sciweave-draft-buffer = "draft_buffer.main:main"
 
 [build-system]
-requires = ["setuptools==80.9.0"]
-build-backend = "setuptools.build_meta"
+requires = ["uv_build>=0.13.6,<0.14"]
+build-backend = "uv_build"
 
-[tool.setuptools.packages.find]
-where = ["src"]
+[tool.uv.build-backend]
+module-name = "draft_buffer"
+
+[tool.uv]
+package = true
+
+[tool.pytest.ini_options]
+addopts = "-p no:cacheprovider"
