@@ -90,11 +90,15 @@ class AssemblyLoadTests(_TreeCase):
         self.assertIn("rule set 1.0.0", config.instruction("step-write"))
         self.assertNotIn(RULE_SET_PLACEHOLDER, config.instruction("step-write"))
 
-    def test_the_sources_are_reported_for_diagnostics(self) -> None:
+    def test_the_resolved_paths_are_reported_for_diagnostics(self) -> None:
+        config = self.load()
         self.assertEqual(
-            sorted(self.load().sources),
+            sorted(config.paths),
             ["CENTRE_DEFINITIONS_PATH", "CENTRE_MCP_LIBS_PATH", "CENTRE_RULES_DIR"],
         )
+        # The card directory as a path, not a string: callers that need to read a
+        # card's raw document should not be re-parsing `paths`.
+        self.assertEqual(config.cards_root, self.root / "libs" / "mcp-libs")
 
 
 class AssemblyRejectionTests(_TreeCase):

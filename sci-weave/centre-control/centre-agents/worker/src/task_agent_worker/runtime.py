@@ -1,4 +1,10 @@
-"""Fast-agent runtimes used by the Task Agent Worker."""
+"""Fast-agent runtimes used by the Centre Agent Worker.
+
+Two of them: a passthrough that writes a stub history so automated checks can run
+without a model credential, and the real DeepSeek-backed one. The real one owns no
+knowledge of the job — the workflow, its steps and their instructions all come from
+``definitions/`` via ``CentreConfig``.
+"""
 
 from __future__ import annotations
 
@@ -8,6 +14,10 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
+
+#: The fast-agent app name. One constant because it appears in both runtimes and a
+#: typo in one of them would only surface as a second, empty session directory.
+APP_NAME = "sciweave-centre-agent-worker"
 
 from .assembly import CentreConfig, load_centre_config
 from .config import WorkerSettings, ensure_relative_session_dir
@@ -47,7 +57,7 @@ class FastAgentPassthroughRuntime:
             from fast_agent import FastAgent
 
             self.home.mkdir(parents=True, exist_ok=True)
-            FastAgent("sciweave-centre-agent-worker", home=self.home, parse_cli_args=False, quiet=True)
+            FastAgent(APP_NAME, home=self.home, parse_cli_args=False, quiet=True)
             history_dir = self.home / self.session_dir / request.task_node_id
             history_dir.mkdir(parents=True, exist_ok=True)
             history_path = history_dir / "history.json"
@@ -150,7 +160,7 @@ class FastAgentDeepSeekRuntime:
         try:
             chain_name = self.config.workflow_name
             fast = FastAgent(
-                "sciweave-centre-agent-worker",
+                APP_NAME,
                 config_path=config_path,
                 home=self.settings.home / self.settings.session_dir,
                 parse_cli_args=False,

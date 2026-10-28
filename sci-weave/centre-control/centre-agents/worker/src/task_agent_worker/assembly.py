@@ -79,9 +79,13 @@ class CentreConfig:
     workflow: WorkflowDefinition
     agents: tuple[AgentDefinition, ...]
     cards: Mapping[str, MCPCard]
+    cards_root: Path
     rule_set_version: str
     environ: Mapping[str, str]
-    sources: Mapping[str, str] = field(default_factory=dict)
+    #: Which file each of the three roots resolved to. Diagnostics only: the
+    #: error messages already name the variable, but an operator asking "which
+    #: rules/ did the container actually read" has nowhere else to look.
+    paths: Mapping[str, str] = field(default_factory=dict)
     #: Rendered during loading, not on first use: a missing ``*_MCP_URL`` is a
     #: deployment mistake, and discovering it half-way through a chain turns it
     #: into ``fast_agent_runtime_error``, which names nothing.
@@ -262,9 +266,10 @@ def load_centre_config(
         workflow=workflow,
         agents=agents,
         cards=cards,
+        cards_root=cards_path,
         rule_set_version=rule_set_version,
         environ=env,
-        sources={
+        paths={
             "CENTRE_DEFINITIONS_PATH": str(definitions_path),
             "CENTRE_MCP_LIBS_PATH": str(cards_path),
             "CENTRE_RULES_DIR": str(rules_dir),
