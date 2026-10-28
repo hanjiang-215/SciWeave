@@ -1,0 +1,107 @@
+# Agent 与 Workflow YAML schema v1（中央侧）
+
+中央 Agent 与 Task Agent 共用同一套描述层词汇，差异只有两处：中央侧多一种工作流类型
+`Chain`，agent 多一个 `allowed_tools`。这两个键的理由写在下面，别再引入第三个差异。
+
+## 顶层结构
+
+一份文件包含 `version: 1.x` 与 `agents` 段；`workflows` 段可选。
+
+```yaml
+version: 1.0.0
+name: centre-prereview-workflows   # 可选，仅用于人读
+agents:
+  <agent-name>: { ... }
+workflows:
+  <workflow-name>: { ... }
+```
+
+`agents` 段必填——扁平的单 agent 文件解析出来是零个定义，加载层报 `no_definitions`。
+同一目录下所有 `*.yaml` / `*.yml` 会被合并成一个命名空间，因此 **agent 名与工作流名在整个
+目录内必须唯一**，重名报 `duplicate_definition`。当前只有一个文件，所以名字只带
+`centre-prereview-` 前缀；以后加文件时这个约定不用改。
+
+`version` 强制 `1.x`。非 `1.x` 报 `unsupported_config_version`，不尝试兼容。
+
+## Agent 定义
+
+```yaml
+agents:
+  <name>:
+    identity: string                  # 必填，一句话说这个角色是什么
+    instruction: string               # 必填，模型看到的全部指令
+    model: string                     # 必填，见「模型取值」
+    allowed_mcp_resources: [string]   # 必填，可为空；决定 mcp.servers 与 servers=
+    allowed_tools: {string: [string]} # 可选；每服务器工具白名单，决定 tools=
+    resources: [string]               # 必填，可为空；当前中央侧不使用非空值
+    references: [string]              # 可选
+```
+
+`allowed_tools` 的键必须是 `allowed_mcp_resources` 里的服务器名，值必须在那张卡片的
+`tools` 里声明过。两处都对不上时加载层报错并给出两者名字——写错一个工具名等于让它
+消失，而「模型手里少一个工具」的第一个症状是模型绕着它编话。
+
+### 为什么 `allowed_tools` 不叫 `tools`
+
+部署模板里 `tools` 的含义是「Agents as Tools 的子 agent 列表」。同一个键在两个代码库
+里表示两种东西，是下一次读代码的人一定会踩的坑，因此中央侧另起一个名字。中央侧没有
+「Agents as Tools」这种工作流类型，也就不需要那个含义。
+
+## Workflow 定义
+
+```yaml
+workflows:
+  <name>:
+    type: Chain
+    sequence: [agent, agent, ...]   # 必填，非空，按执行顺序
+    cumulative: true                # 可选，默认 true
+```
+
+`cumulative: true` 表示每个角色都能看到前面所有角色的输出。预审这一串必须这样：
+判冲突要看得见取快照的结果，写结论要看得见核事实与判冲突的结果。设成 `false` 等于把
+这五个角色拆成五次互不知情的独立对话，那不是一条工作流。
+
+### 为什么只有 `Chain`
+
+部署模板的四种类型（Router / Orchestrator / Parallel / Agents as Tools）都描述「谁去调
+谁」。预审这一串没有分派、没有并行、没有循环：它按顺序往下走。
+
+硬套 `Orchestrator` 会得到一次自由的重新规划，而重新规划会再调一次
+`list_reviewable_candidates`——「同一时点快照」是冲突判定的前提，多拉一次就破了。
+硬套 `Router` 会得到一个假的「路由」，只有一个目的地。
+
+### 三个推导字段
+
+部署模板的 workflow 必填 `entry_agent` / `summarizer` / `final_writer`。`Chain` 不写这三
+个，由加载层推导：
+
+| 字段 | 取值 |
+| --- | --- |
+| `entry_agent` | `sequence[0]` |
+| `summarizer` | `sequence[-1]` |
+| `final_writer` | `sequence[-1]` |
+
+`summarizer` 与 `final_writer` 同一个人，因为在这条链上「汇总」和「写出去」是同一个动作
+的两半：写结论的角色把前面四个角色的产出收成一次 `append_prereview_log`。
+
+## 模型取值
+
+| 定义里的 `model` | 实际使用的模型 |
+| --- | --- |
+| 具体模型名（如 `deepseek-chat`） | 就是它，逐 agent 的例外 |
+| `configure-in-your-own-environment` | `SCIWEAVE_WORKER_MODEL` |
+| 空或缺失 | 启动失败 |
+
+出厂定义全部写占位符：`SCIWEAVE_WORKER_MODEL` 已经是部署侧必经的一项，写死具体模型名
+会让那个变量变成死配置，而「部署时改了没生效」是最费时间的一类排障。
+
+## 键白名单
+
+顶层、`agents.<name>`、`workflows.<name>` 三处都做键白名单校验，多出来的键报
+`unknown_field` 并列出键名，不静默丢弃。上表列出的键就是白名单。
+
+## 与能力上限的关系
+
+定义层能收紧，不能放开。卡片里不得出现 `formalize_candidate` / `formalize_wiki` /
+`decide_wiki_review` / `record_review` 这条，由静态校验守着，不因为「YAML 里只声明了读
+工具」而放松——模型看得到工具的完整描述。

@@ -15,6 +15,7 @@ import os
 import sys
 import threading
 
+from task_agent_worker.assembly import CentreConfigError
 from task_agent_worker.config import WorkerSettings
 from task_agent_worker.runtime import FastAgentDeepSeekRuntime, FastAgentPassthroughRuntime
 from task_agent_worker.store import ExecutionStore
@@ -40,9 +41,17 @@ def build_runtime(settings: WorkerSettings):
     ``completed``, so falling back to it on a missing key made an unconfigured
     subscriber look like a working one. It now requires
     ``SCIWEAVE_GATEWAY_PASSTHROUGH_RUNTIME=1``; otherwise the caller fails fast.
+
+    ai4-349h: the real runtime reads ``definitions/``, ``libs/mcp-libs/`` and
+    ``rules/`` in its constructor, so a broken definition stops the subscriber at
+    startup with the variable and path named. Before that it stopped on the first
+    execution, as ``fast_agent_runtime_error``.
     """
     if settings.api_key:
-        return FastAgentDeepSeekRuntime(settings)
+        try:
+            return FastAgentDeepSeekRuntime(settings)
+        except CentreConfigError as error:
+            raise SystemExit(f"centre agent configuration is unusable: {error}") from error
     if os.environ.get("SCIWEAVE_GATEWAY_PASSTHROUGH_RUNTIME") == "1":
         return FastAgentPassthroughRuntime(
             str(settings.home), settings.connection_scope, settings.session_dir
