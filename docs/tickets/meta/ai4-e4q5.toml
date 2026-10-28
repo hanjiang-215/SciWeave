@@ -1,0 +1,2 @@
+module = "governance"
+summary = "subscriber 缺少 task_completed 生产者，下游永不解除阻塞"

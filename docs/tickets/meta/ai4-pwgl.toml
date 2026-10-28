@@ -1,0 +1,2 @@
+module = "agent"
+summary = "registry register_principal 的 role 枚举不接受 service"

@@ -1,0 +1,2 @@
+module = "agent"
+summary = "register_workflow_agent 的 principal_id 标为可选但实际必填"
