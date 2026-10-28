@@ -466,7 +466,7 @@ class ReviewFormalizationToolTestCase(unittest.TestCase):
         )
         self.assertEqual(formal_denied.error_code, "forbidden")
 
-    def test_record_review_and_formalize_candidate_end_to_end(self):
+    def _preview(self) -> str:
         preview = self.service.call_tool(
             "preview_candidate", {"proposal_id": "proposal", "base_formal_revision_id": BASE, "candidate_head": "candidate-commit"},
             actor_id="reviewer",
@@ -474,15 +474,56 @@ class ReviewFormalizationToolTestCase(unittest.TestCase):
         self.assertEqual(preview.status, "ok")
         preview_id = preview.result["preview_id"]  # type: ignore[index]
         self.assertTrue(preview_id)
-        from research_mapping.review import MappingReviewService
-        buffer = MappingReviewService(self.sqlite, self.terminus, terminus_database="db").create_buffer(preview_id)
+        return preview_id
+
+    def test_create_merge_request_returns_the_buffer_the_owner_needs(self):
+        """The gap this tool closes.
+
+        `buffer_id` is what `record_review` and `formalize_candidate` take, and
+        before this tool the only way to obtain one was to import
+        `MappingReviewService.create_buffer` and call it in-process. A Project
+        Owner holding `candidate_review` could preview a candidate and then had
+        nowhere to send the decision.
+        """
+        preview_id = self._preview()
+        created = self.service.call_tool("create_merge_request", {"preview_id": preview_id}, actor_id="reviewer")
+        self.assertEqual(created.status, "ok")
+        self.assertTrue(created.result["buffer_id"])  # type: ignore[index]
+        self.assertEqual(created.result["proposal_id"], "proposal")  # type: ignore[index]
+        self.assertEqual(created.result["base_formal_revision_id"], BASE)  # type: ignore[index]
+        self.assertEqual(created.result["candidate_head"], "candidate-commit")  # type: ignore[index]
+
         decision = self.service.call_tool(
-            "record_review", {"buffer_id": buffer.buffer_id, "decision": "approved", "reason": "looks good"}, actor_id="owner",
+            "record_review",
+            {"buffer_id": created.result["buffer_id"], "decision": "approved", "reason": "looks good"},  # type: ignore[index]
+            actor_id="owner",
+        )
+        self.assertEqual(decision.result["decision"], "approved")  # type: ignore[index]
+
+    def test_create_merge_request_is_idempotent_for_one_preview(self):
+        """The buffer id is derived from the preview, so a retry does not fork it."""
+        preview_id = self._preview()
+        first = self.service.call_tool("create_merge_request", {"preview_id": preview_id}, actor_id="reviewer")
+        second = self.service.call_tool("create_merge_request", {"preview_id": preview_id}, actor_id="reviewer")
+        self.assertEqual(first.result["buffer_id"], second.result["buffer_id"])  # type: ignore[index]
+
+    def test_create_merge_request_requires_the_review_capability(self):
+        preview_id = self._preview()
+        denied = self.service.call_tool("create_merge_request", {"preview_id": preview_id}, actor_id="reader")
+        self.assertEqual(denied.error_code, "forbidden")
+        unknown = self.service.call_tool("create_merge_request", {"preview_id": "no-such-preview"}, actor_id="reviewer")
+        self.assertEqual(unknown.error_code, "invalid_arguments")
+
+    def test_record_review_and_formalize_candidate_end_to_end(self):
+        created = self.service.call_tool("create_merge_request", {"preview_id": self._preview()}, actor_id="reviewer")
+        buffer_id = created.result["buffer_id"]  # type: ignore[index]
+        decision = self.service.call_tool(
+            "record_review", {"buffer_id": buffer_id, "decision": "approved", "reason": "looks good"}, actor_id="owner",
         )
         self.assertEqual(decision.status, "ok")
         self.assertEqual(decision.result["decision"], "approved")  # type: ignore[index]
         outcome = self.service.call_tool(
-            "formalize_candidate", {"merge_request_id": buffer.buffer_id, "operation_id": "op-1"}, actor_id="owner",
+            "formalize_candidate", {"merge_request_id": buffer_id, "operation_id": "op-1"}, actor_id="owner",
         )
         self.assertEqual(outcome.status, "ok")
         self.assertEqual(outcome.result["status"], "succeeded")  # type: ignore[index]
