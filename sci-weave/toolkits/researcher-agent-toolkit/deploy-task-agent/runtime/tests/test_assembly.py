@@ -69,7 +69,16 @@ class ShippedConfigurationTests(unittest.TestCase):
     def test_the_workflow_libs_are_loaded(self) -> None:
         self.assertEqual(
             sorted(self.config.project.workflows),
-            ["agents-as-tools-example", "literature-agent", "orchestrator-example", "parallel-example", "router-example"],
+            [
+                "agents-as-tools-example",
+                "literature-agent",
+                "orchestrator-example",
+                "parallel-example",
+                "router-example",
+                "sciencepal-analysis-review",
+                "sciencepal-data-quality",
+                "sciencepal-execution",
+            ],
         )
 
     def test_every_source_directory_is_reported(self) -> None:
@@ -206,7 +215,7 @@ class EnvironmentTests(unittest.TestCase):
                 encoding="utf-8",
             )
             config = load_worker_config(_env(AGENT_DEFINITIONS_PATH=empty))
-        self.assertEqual(len(config.project.workflows), 5)
+        self.assertEqual(len(config.project.workflows), 8)
         self.assertIn("research-wiki", {resource.name for resource in config.mcp.resources})
 
     def test_the_test_runner_environment_is_not_leaking_in(self) -> None:

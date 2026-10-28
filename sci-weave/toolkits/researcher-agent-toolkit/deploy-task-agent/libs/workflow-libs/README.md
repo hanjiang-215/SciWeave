@@ -69,3 +69,17 @@ runtime 先合并目录中的 `*.yaml` 和 `*.yml`，再进行引用校验。**�
 `type` 必须是 `Router`、`Orchestrator`、`Parallel` 或 `Agents as Tools`。`entry_agent`、`sub_agents`、`summarizer` 和 `final_writer` 都必须引用已声明 Agent；`final_writer` 是唯一允许执行最终写入的角色。Agent 的 `tools` 字段可声明 Agents as Tools 子 Agent，引用图不能形成循环。
 
 配置文件只描述工作流，不执行 Python 代码；模型、地址和凭据通过环境变量提供。
+
+## SciPal 模板
+
+本目录提供三个可直接选择的 SciPal 工作流：
+
+| 工作流 | 适用任务 | 主要产物 |
+| --- | --- | --- |
+| `sciencepal-execution` | 通用科研步骤委派 | run 状态、输入/输出清单、sha256 证据 |
+| `sciencepal-data-quality` | T1 数据快照、结构和规则检查 | 逐条质检结果与证据完整性结论 |
+| `sciencepal-analysis-review` | T2 参数冻结后的分析执行与审计 | 方法/参数/指标/产物审计结果 |
+
+三个模板都遵循同一边界：执行器只调用 `sciencepal`，最终写作者只调用 `draft-buffer`；SciPal 不直接写正式 Research Mapping，也不执行 candidate submit 或 formalize。`sciencepal_report` 当前未列入标准 card，因此模板不依赖它。
+
+运行前需要在任务交接文本中明确传入 `execution_id`、输入文件、SciencePal Agent 选择（或允许自动选择）、验收条件以及稳定的 `idempotency_key`。输入文件路径必须位于 `SCIENCEPAL_WORKSPACE` 下。人工接管点至少包括：分析参数冻结、结果接纳和路线变更审批。
