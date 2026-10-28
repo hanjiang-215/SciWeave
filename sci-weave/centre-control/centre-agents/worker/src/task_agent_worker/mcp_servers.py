@@ -91,7 +91,7 @@ def load_cards(libs: str | Path) -> dict[str, MCPCard]:
                 "card_name_mismatch", name, f"{path} is in {path.parent.name}/ but declares {name!r}"
             )
         if name in cards:
-            raise MCPServerConfigError("card_duplicate", name, f"declared by more than one card")
+            raise MCPServerConfigError("card_duplicate", name, "declared by more than one card")
         raw_tools = document.get("tools") or []
         tools = tuple(
             str(tool["name"])

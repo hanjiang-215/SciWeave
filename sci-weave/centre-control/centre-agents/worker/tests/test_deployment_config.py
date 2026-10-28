@@ -13,7 +13,6 @@ tokens belong to the deployment's own review.
 from __future__ import annotations
 
 import unittest
-from pathlib import Path
 
 import yaml
 

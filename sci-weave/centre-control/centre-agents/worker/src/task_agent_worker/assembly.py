@@ -126,7 +126,7 @@ class CentreConfig:
 
 
 def centre_root() -> Path:
-    """``centre-agents/``: four levels above ``worker/src/task_agent_worker``."""
+    """``centre-agents/``, i.e. ``parents[3]`` of ``worker/src/<package>/assembly.py``."""
     return Path(__file__).resolve().parents[3]
 
 
@@ -138,7 +138,7 @@ def _root(variable: str, *, environ: Mapping[str, str], default: Path) -> Path:
         raise CentreConfigError(
             variable,
             str(path),
-            "does not exist; the shipped directory lives next to .env in centre-agents/,",
+            "does not exist; unset the variable to use the directory shipped next to this package",
         )
     return path
 
