@@ -19,8 +19,10 @@ agent. Only two things differ, and both are documented in
 
 Loading is strict on purpose. A missing directory, a non-``1.x`` version, an
 undeclared MCP resource, or a ``sequence`` naming an unknown agent all raise
-instead of falling back: a Centre Agent that starts and silently ignores its
-own definition is the exact failure this module was written for.
+instead of falling back. ``assembly`` makes the same choice one level up and
+repeats this paragraph there on purpose: the two are read by different people,
+and a reader who only opens one of them should still learn why nothing has a
+default.
 """
 
 from __future__ import annotations

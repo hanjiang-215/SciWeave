@@ -49,12 +49,18 @@ class MCPServerConfigError(ValueError):
 
 @dataclass(frozen=True)
 class MCPCard:
-    """One card as read from disk: name, transport, and the tool names it declares."""
+    """One card as read from disk: name, transport, the tool names, and the raw JSON.
+
+    The card's ``environment`` list is deliberately *not* lifted onto this object.
+    It names the variables a server needs, but the renderer emits only ``transport``
+    and ``url``, so nothing here reads it and a field nobody reads is a field that
+    drifts. The token half of that list is the live issue in ``ai4-sue2``; whatever
+    consumes it will read ``document["environment"]`` and lift it then.
+    """
 
     name: str
     transport: str
     tools: tuple[str, ...]
-    environment: tuple[str, ...]
     document: Mapping[str, Any]
 
 
@@ -98,14 +104,10 @@ def load_cards(libs: str | Path) -> dict[str, MCPCard]:
             for tool in raw_tools
             if isinstance(tool, Mapping) and isinstance(tool.get("name"), str)
         )
-        environment = tuple(
-            str(item) for item in (document.get("environment") or []) if isinstance(item, str)
-        )
         cards[name] = MCPCard(
             name=name,
             transport=str(document.get("transport", "streamable-http")),
             tools=tools,
-            environment=environment,
             document=document,
         )
     if not cards:
