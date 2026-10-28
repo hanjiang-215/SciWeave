@@ -2,7 +2,7 @@
 id: ai4-eka6
 status: open
 deps: []
-links: [ai4-44fk, ai4-he04]
+links: [ai4-44fk, ai4-he04, ai4-3sq5]
 created: 2026-10-28T08:16:16Z
 type: bug
 priority: 1
