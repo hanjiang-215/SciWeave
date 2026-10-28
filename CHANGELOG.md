@@ -144,6 +144,7 @@
 - *(events)* Publish wiki governance events without blocking on the broker
 - *(coordinator)* Keep polling when the broker is briefly unreachable
 - *(demo)* Read collected artifacts from disk and assert the real T1 key
+- *(demo-evidence)* Tolerate transient SciencePal polling errors
 
 ### 📚 Documentation
 
@@ -492,6 +493,11 @@
 - *(tickets)* Record the ready-to-run SciencePal package on ai4-aaff
 - *(demo)* Note the ready-to-run SciencePal package in the demo prerequisites
 - *(changelog)* Regenerate for the conflict resolution commit
+- *(changelog)* Record uv_build backend switch for buffer and runtime
+- *(tickets)* Split the toolkit preset plan into four tickets
+- *(tickets)* 复核 deploy-task-agent 四张票并补一致性收口票
+- *(tickets)* Record uv_build fix and PR 54 green round-back on ai4-0vnn/ai4-aaff
+- *(competition)* Record real SciencePal T1/T2 execution evidence
 
 ### 🚜 Refactor
 
