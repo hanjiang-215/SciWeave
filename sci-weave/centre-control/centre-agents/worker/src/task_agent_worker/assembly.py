@@ -63,6 +63,13 @@ class CentreConfigError(RuntimeError):
     Always names the variable and the path: the failure an operator actually
     hits is "I pointed it at the wrong directory", and a bare ``[invalid_shape]``
     does not say which of three roots is meant.
+
+    This is the only exception that leaves the package. ``DefinitionError`` and
+    ``MCPServerConfigError`` are the two lower modules' own dialects, distinguishable
+    there because each knows only its own kind of input; both are re-raised here as
+    this one type, with the variable that selected the offending directory folded
+    in. So there are three classes but not three answers to "what went wrong" — the
+    callers in ``gateway/`` catch exactly one of them.
     """
 
     def __init__(self, variable: str, path: str, detail: str) -> None:
