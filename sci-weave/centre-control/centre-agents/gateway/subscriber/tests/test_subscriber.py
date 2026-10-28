@@ -428,3 +428,85 @@ class CancelGuardTests(unittest.TestCase):
         with self.store.transaction() as connection:
             leases = connection.execute("SELECT COUNT(*) FROM worker_leases").fetchone()[0]
         self.assertEqual(leases, 0)
+
+class _RecordingCompletionPublisher:
+    def __init__(self) -> None:
+        self.published: list[dict[str, Any]] = []
+        self.fail = False
+
+    def publish(self, *, execution: dict[str, Any]) -> None:
+        if self.fail:
+            raise RuntimeError("broker down")
+        self.published.append(dict(execution))
+
+
+class CompletionPublisherTests(unittest.TestCase):
+    """B6: a completed execution must publish task_completed for downstream release."""
+
+    def setUp(self) -> None:
+        self.temp = tempfile.TemporaryDirectory()
+        self.store = ExecutionStore(str(Path(self.temp.name) / "centre.sqlite3"))
+        self.service = SubscriberService(self.store, agent_id="agent-1")
+        self.queue = FakeQueueClient()
+        self.queue.subscribe(["sciweave.task-handoff.agent-1"])
+
+    def tearDown(self) -> None:
+        self.store.close()
+        self.temp.cleanup()
+
+    def _enqueue(self) -> dict[str, Any]:
+        message = task_handoff("node-1", "event-1", formal_revision_id="rev-9", target_version_ref="node-v7")
+        queue_message = self.queue.publish("sciweave.task-handoff.agent-1", "event-1", message)
+        return self.service.handle_message(queue_message)
+
+    def test_completed_execution_publishes_task_completed(self) -> None:
+        self._enqueue()
+        publisher = _RecordingCompletionPublisher()
+        runner = SubscriberWorkerRunner(
+            self.store, self.service, DeterministicRuntime(), completion_publisher=publisher
+        )
+        outcome = runner.run_once("node-1")
+        self.assertEqual(outcome["status"], "completed")
+        self.assertEqual(len(publisher.published), 1)
+        published = publisher.published[0]
+        self.assertEqual(published["mapping_domain_id"], "iris")
+        self.assertEqual(published["task_node_id"], "node-1")
+
+    def test_failed_execution_does_not_publish_task_completed(self) -> None:
+        self._enqueue()
+        publisher = _RecordingCompletionPublisher()
+        runner = SubscriberWorkerRunner(
+            self.store, self.service, DeterministicRuntime(outcome="failed"),
+            completion_publisher=publisher,
+        )
+        runner.run_once("node-1")
+        self.assertEqual(publisher.published, [])
+
+
+class KafkaCompletionEnvelopeTests(unittest.TestCase):
+    """The published envelope matches the coordinator's task_completed router keys."""
+
+    def test_build_envelope_carries_router_fields(self) -> None:
+        from gateway_subscriber.completion_publisher import KafkaCompletionPublisher
+
+        publisher = KafkaCompletionPublisher("127.0.0.1:1")
+        execution = {
+            "execution_id": "exec-1",
+            "task_node_id": "node-1",
+            "mapping_domain_id": "iris",
+            "business_key": "node-1:node-v7:rev-9",
+            "draft_id": "draft-1",
+            "finished_at": "2026-10-29T00:00:00+00:00",
+        }
+        body, key = publisher.build_envelope(execution)
+        envelope = json.loads(body)
+        self.assertEqual(envelope["event_type"], "task_completed")
+        self.assertEqual(envelope["mapping_domain_id"], "iris")
+        payload = envelope["payload"]
+        self.assertEqual(payload["mapping_domain_id"], "iris")
+        self.assertEqual(payload["task_node_id"], "node-1")
+        # the coordinator router reads node_version_ref OR completed_version_ref
+        self.assertEqual(payload["node_version_ref"], "node-v7")
+        self.assertEqual(payload["completed_version_ref"], "node-v7")
+        self.assertEqual(payload["formal_revision_id"], "rev-9")
+        self.assertEqual(key, "node-1:node-v7")

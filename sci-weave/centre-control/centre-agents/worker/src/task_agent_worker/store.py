@@ -156,6 +156,16 @@ class ExecutionStore:
             );
             """
         )
+        # B6: the subscriber must publish task_completed, which the coordinator
+        # routes by mapping_domain_id. The domain is not otherwise derivable from
+        # execution_records, so persist it. Added via ALTER for existing DBs.
+        columns = {
+            row[1] for row in self.connection.execute("PRAGMA table_info(execution_records)")
+        }
+        if "mapping_domain_id" not in columns:
+            self.connection.execute(
+                "ALTER TABLE execution_records ADD COLUMN mapping_domain_id TEXT"
+            )
         self.connection.commit()
 
     @contextmanager

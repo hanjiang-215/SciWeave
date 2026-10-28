@@ -22,6 +22,7 @@ from task_agent_worker.runtime import FastAgentDeepSeekRuntime, FastAgentPassthr
 from task_agent_worker.store import ExecutionStore
 
 from .dashboard_source import build_queue_fragment, create_queue_dashboard_server
+from .completion_publisher import KafkaCompletionPublisher
 from .draft_writer import BufferMCPDraftWriter
 from .queue import FakeQueueClient, KafkaQueueClient, QueueClient
 from .service import SubscriberService
@@ -130,6 +131,19 @@ def build_draft_writer():
     )
 
 
+def build_completion_publisher():
+    """Publish ``task_completed`` to the governance topic when configured (B6).
+
+    Opt-in: without ``SCIWEAVE_GOVERNANCE_KAFKA_BOOTSTRAP`` the subscriber runs
+    exactly as before (no producer), so deployments that do not run a
+    coordinator are unchanged.
+    """
+    bootstrap = os.environ.get("SCIWEAVE_GOVERNANCE_KAFKA_BOOTSTRAP", "").strip()
+    if not bootstrap:
+        return None
+    return KafkaCompletionPublisher(bootstrap)
+
+
 def start_dashboard_server(
     store: ExecutionStore,
     topics: list[str],
@@ -178,7 +192,10 @@ def main() -> None:
     queue_kind = "kafka" if isinstance(queue, KafkaQueueClient) else "fake"
     queue.subscribe(topics)
     service = SubscriberService(store, agent_id)
-    runner = SubscriberWorkerRunner(store, service, build_runtime(settings), build_draft_writer())
+    completion_publisher = build_completion_publisher()
+    runner = SubscriberWorkerRunner(
+        store, service, build_runtime(settings), build_draft_writer(), completion_publisher
+    )
     dashboard = start_dashboard_server(
         store,
         topics,
@@ -191,6 +208,8 @@ def main() -> None:
         if dashboard is not None:
             dashboard.shutdown()
             dashboard.server_close()
+        if completion_publisher is not None:
+            completion_publisher.close()
         queue.close()
         store.close()
 
