@@ -1,0 +1,137 @@
+{
+  "name": "email-service",
+  "version": "1.0.0",
+  "description": "Submit the two notifications the Centre Agent owns — prereview_completed and agent_unavailable — and read their delivery status.",
+  "transport": "streamable-http",
+  "endpoint": {
+    "url_env": "EMAIL_MCP_URL"
+  },
+  "environment": [
+    "EMAIL_MCP_URL",
+    "EMAIL_MCP_TOKEN"
+  ],
+  "notes": [
+    "notification_kind must be one of the service's configured kinds. The two that belong to this actor are prereview_completed and agent_unavailable; the rest of CONFIGURED_NOTIFICATION_KINDS are other actors' business and sending them from here would make one mailbox speak for two workflows.",
+    "recipients are resolved by principal_id through the registry; an unbound recipient comes back as recipient_resolver_unavailable and the service writes nothing.",
+    "notification_id and dedupe_key are separate. dedupe_key is the business identity (one prereview of one candidate head), notification_id is the transport identity; reusing one with the other's content returns idempotency_conflict."
+  ],
+  "tools": [
+    {
+      "name": "send_notification",
+      "description": "Accept one human_notification_intent for later delivery.",
+      "input": {
+        "type": "object",
+        "required": [
+          "notification_id",
+          "dedupe_key",
+          "notification_kind",
+          "recipients",
+          "subject",
+          "body",
+          "related",
+          "schema_version"
+        ],
+        "properties": {
+          "notification_id": {
+            "type": "string"
+          },
+          "dedupe_key": {
+            "type": "string"
+          },
+          "notification_kind": {
+            "type": "string",
+            "enum": [
+              "prereview_completed",
+              "agent_unavailable"
+            ]
+          },
+          "recipients": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "principal_id": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "subject": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string"
+          },
+          "related": {
+            "type": "object"
+          },
+          "schema_version": {
+            "type": "string",
+            "enum": [
+              "1"
+            ]
+          }
+        }
+      },
+      "output": {
+        "notification_id": "string",
+        "delivery_status": "string"
+      },
+      "allowed": [
+        "telling the Project Owner a prereview round finished",
+        "telling the Project Owner an agent the mapping needs is offline"
+      ],
+      "failures": [
+        "idempotency_conflict",
+        "recipient_resolver_unavailable",
+        "content_invalid",
+        "storage_unavailable"
+      ]
+    },
+    {
+      "name": "get_notification_status",
+      "description": "Read delivery status. Ordinary callers only see their own notifications.",
+      "input": {
+        "type": "object",
+        "required": [
+          "notification_id"
+        ],
+        "properties": {
+          "notification_id": {
+            "type": "string"
+          }
+        }
+      },
+      "output": {
+        "notification_id": "string",
+        "delivery_status": "string",
+        "attempt_count": "integer"
+      },
+      "allowed": [
+        "checking whether the owner was actually told"
+      ],
+      "failures": [
+        "denied",
+        "not_found"
+      ]
+    },
+    {
+      "name": "health",
+      "description": "Return authenticated component status for delivery, audit, and mailbox.",
+      "input": {
+        "type": "object",
+        "required": [],
+        "properties": {}
+      },
+      "output": {
+        "status": "string"
+      },
+      "allowed": [
+        "separating a dead mailbox from a rejected notification"
+      ],
+      "failures": [
+        "storage_unavailable"
+      ]
+    }
+  ]
+}

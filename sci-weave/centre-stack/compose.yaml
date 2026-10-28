@@ -68,6 +68,10 @@ services:
       # 看板来源与其管理 MCP 是同一个可执行文件的两个进程，端口必须分开。
       SCIWEAVE_MAPPING_MCP_HOST: 0.0.0.0
       SCIWEAVE_MAPPING_MCP_PORT: "8710"
+      # 预审判据集。中央 Agent 的 writer 把 rule_set_version 记进报告，领域侧据此
+      # 解析出 checks；两边必须指向同一份文件，否则「报告写着 1.0.0、领域侧报
+      # rule_set_missing」，而单看任何一侧都像是对方的错（ai4-349h）。
+      SCIWEAVE_MAPPING_PREREVIEW_RULES_DIR: /app/centre-agents/rules
       SCIWEAVE_MAPPING_DASHBOARD_HOST: 0.0.0.0
       SCIWEAVE_MAPPING_DASHBOARD_PORT: "8711"
       SCIWEAVE_MAPPING_DASHBOARD_TOKEN: ${CENTRE_TOKEN_DASHBOARD_SOURCE:?set CENTRE_TOKEN_DASHBOARD_SOURCE in .env}
@@ -90,6 +94,8 @@ services:
       SCIWEAVE_WIKI_AUDIT_SQLITE_PATH: /data/audit/wiki.sqlite3
       SCIWEAVE_WIKI_MCP_HOST: 0.0.0.0
       SCIWEAVE_WIKI_MCP_PORT: "8720"
+      # 与 mapping 同一份判决集：两个领域各自解析，但版本必须能对上中央侧记录。
+      SCIWEAVE_WIKI_PREREVIEW_RULES_DIR: /app/centre-agents/rules
       SCIWEAVE_WIKI_DASHBOARD_HOST: 0.0.0.0
       SCIWEAVE_WIKI_DASHBOARD_PORT: "8721"
       SCIWEAVE_WIKI_DASHBOARD_TOKEN: ${CENTRE_TOKEN_DASHBOARD_SOURCE:?set CENTRE_TOKEN_DASHBOARD_SOURCE in .env}
@@ -193,6 +199,26 @@ services:
       SCIWEAVE_WORKER_MODEL: ${SCIWEAVE_WORKER_MODEL:-deepseek-chat}
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
       DEEPSEEK_BASE_URL: ${DEEPSEEK_BASE_URL:-https://api.deepseek.com}
+      # 定义层读的三处：definitions/ 决定跑哪个 workflow 与每一步的指令，
+      # libs/mcp-libs/ 决定每一步能连哪几个 MCP，rules/ 决定报告的判据版本。
+      # 不给默认值也能跑（按源码位置推导到 /app/centre-agents），这里显式写出
+      # 是因为「文件在仓库里、镜像里没有」是这副配置真实发生过的失败形态。
+      CENTRE_DEFINITIONS_PATH: /app/centre-agents/definitions
+      CENTRE_MCP_LIBS_PATH: /app/centre-agents/libs/mcp-libs
+      CENTRE_RULES_DIR: /app/centre-agents/rules
+      # 卡片里 endpoint.url_env 指向的变量。只列当前 workflow 真的会连的三个：
+      # 渲染器只写被声明过的服务器，多写的变量不会生效。
+      # 地址是容器内的回环端口，与上面各领域的 *_MCP_PORT 是同一个数。写成可覆盖
+      # 的形式，是因为把某个 MCP 拆到别的容器时应该只改 .env，不动这份文件。
+      RESEARCH_MAPPING_MCP_URL: ${RESEARCH_MAPPING_MCP_URL:-http://127.0.0.1:8710/mcp}
+      LLM_WIKI_MCP_URL: ${LLM_WIKI_MCP_URL:-http://127.0.0.1:8720/mcp}
+      EMAIL_MCP_URL: ${EMAIL_MCP_URL:-http://127.0.0.1:8750/mcp}
+      # 卡片同时列了 *_MCP_TOKEN，但当前的渲染器只写 transport 与 url，
+      # 令牌不会变成 Authorization 头——领域 MCP 校验 Bearer，所以「配了变量」
+      # 现在不等于「带了鉴权」。真机联调前必须单独处理（ai4-349h 的遗留风险）。
+      RESEARCH_MAPPING_MCP_TOKEN: ${CENTRE_TOKEN_CENTRE_AGENT:?set CENTRE_TOKEN_CENTRE_AGENT in .env}
+      LLM_WIKI_MCP_TOKEN: ${CENTRE_TOKEN_CENTRE_AGENT:?set CENTRE_TOKEN_CENTRE_AGENT in .env}
+      EMAIL_MCP_TOKEN: ${CENTRE_TOKEN_EMAIL_WORKFLOW:?set CENTRE_TOKEN_EMAIL_WORKFLOW in .env}
 
       # ------------------------------------------------------------ 看板 API
       SCIWEAVE_DASHBOARD_HOST: 0.0.0.0

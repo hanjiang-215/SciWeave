@@ -1,0 +1,70 @@
+{
+  "name": "research-wiki",
+  "version": "1.0.0",
+  "description": "Read the formal LLM-Wiki document and submit a wiki candidate as a researcher. Reviewing, merging and formalizing need Owner-or-Centre capabilities and are not on this card.",
+  "transport": "streamable-http",
+  "endpoint": {
+    "url_env": "LLM_WIKI_MCP_URL"
+  },
+  "environment": [
+    "LLM_WIKI_MCP_URL",
+    "LLM_WIKI_MCP_TOKEN"
+  ],
+  "notes": [
+    "list_wiki_candidates takes a wiki_domain_id and returns that domain's candidate submissions; it is the read a researcher needs before drafting a change. list_reviewable_wiki_candidates is the Centre Agent's queue and is deliberately absent."
+  ],
+  "tools": [
+    {
+      "name": "get_formal_wiki",
+      "description": "Read the current formal Wiki revision for a domain. Requires the read or centre capability.",
+      "input": {
+        "type": "object",
+        "required": [
+          "wiki_domain_id"
+        ],
+        "properties": {
+          "wiki_domain_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "list_wiki_candidates",
+      "description": "Read candidate submissions for a Wiki domain. Requires the read or centre capability.",
+      "input": {
+        "type": "object",
+        "required": [
+          "wiki_domain_id"
+        ],
+        "properties": {
+          "wiki_domain_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "submit_wiki_candidate",
+      "description": "Submit a Wiki document change with its full reference set against the exact formal base. Requires candidate_submit or centre capability.",
+      "input": {
+        "type": "object",
+        "required": [
+          "document_change",
+          "idempotency_key"
+        ],
+        "properties": {
+          "document_change": {
+            "type": "object"
+          },
+          "idempotency_key": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  ]
+}

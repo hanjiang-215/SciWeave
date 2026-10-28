@@ -1,0 +1,149 @@
+{
+  "name": "registry",
+  "version": "1.0.0",
+  "description": "Register this researcher's own Task Agent and its running instance in the central registry, and check the service's health.",
+  "transport": "streamable-http",
+  "endpoint": {
+    "url_env": "SCIWEAVE_REGISTRY_URL"
+  },
+  "environment": [
+    "SCIWEAVE_REGISTRY_URL",
+    "SCIWEAVE_REGISTRY_TOKEN"
+  ],
+  "notes": [
+    "The registry authorizes by caller_type, not by the domain capability tiers, so this card claims no capabilities. Its token identity must be caller_type=researcher holding this researcher's principal_id; registration of an instance then passes only for an agent whose principal_id is that researcher, and register_workflow_agent passes only for kind=endpoint.",
+    "get_agent_registration and get_principal_contact are absent because the service refuses them to a researcher (project_owner, or a service token with role centre/email). Listing them would advertise calls that always fail.",
+    "The registry does not decide whether a TaskNode may execute; the formal mapping's executor_refs does."
+  ],
+  "tools": [
+    {
+      "name": "register_workflow_agent",
+      "description": "Register or update a workflow agent owned by the caller or Project Owner.",
+      "input": {
+        "type": "object",
+        "required": [
+          "agent_id",
+          "workflow_id",
+          "kind",
+          "workflow_kind",
+          "idempotency_key"
+        ],
+        "properties": {
+          "agent_id": {
+            "type": "string"
+          },
+          "workflow_id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "endpoint",
+              "centre"
+            ]
+          },
+          "workflow_kind": {
+            "type": "string"
+          },
+          "idempotency_key": {
+            "type": "string"
+          },
+          "principal_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "created_by": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "type": "string"
+          }
+        }
+      },
+      "output": {
+        "agent_id": "string",
+        "status": "string",
+        "principal_id": "string|null"
+      },
+      "allowed": [
+        "declaring this researcher's Task Agent before its first handoff"
+      ],
+      "failures": [
+        "denied",
+        "invalid_agent_kind",
+        "invalid_status",
+        "registry_unavailable"
+      ]
+    },
+    {
+      "name": "register_agent_instance",
+      "description": "Register or refresh one runtime instance of a workflow agent.",
+      "input": {
+        "type": "object",
+        "required": [
+          "agent_id",
+          "agent_instance_id",
+          "idempotency_key"
+        ],
+        "properties": {
+          "agent_id": {
+            "type": "string"
+          },
+          "agent_instance_id": {
+            "type": "string"
+          },
+          "idempotency_key": {
+            "type": "string"
+          },
+          "runtime_status": {
+            "type": "string"
+          },
+          "last_seen_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "output": {
+        "agent_id": "string",
+        "agent_instance_id": "string",
+        "runtime_status": "string"
+      },
+      "allowed": [
+        "marking the local subscriber online so the coordinator may deliver to it"
+      ],
+      "failures": [
+        "agent_not_found",
+        "denied",
+        "invalid_status",
+        "registry_unavailable"
+      ]
+    },
+    {
+      "name": "health",
+      "description": "Return authenticated Registry service and storage health.",
+      "input": {
+        "type": "object",
+        "required": [],
+        "properties": {}
+      },
+      "output": {
+        "status": "string"
+      },
+      "allowed": [
+        "checking the registry before blaming a delivery failure on the queue"
+      ],
+      "failures": [
+        "registry_unavailable",
+        "unauthorized"
+      ]
+    }
+  ]
+}

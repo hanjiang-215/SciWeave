@@ -1,7 +1,13 @@
+# Parallel example. Agent names carry a file-level prefix because the loader merges
+# every YAML file in the directory into one namespace: an unprefixed `writer` here
+# collides with the `writer` in the other three examples and the whole directory
+# fails to load with [duplicate_definition].
+version: 1.0.0
+name: parallel-workflows
 agents:
-  coordinator: {identity: parallel coordinator, instruction: combine results, model: configure-locally, allowed_mcp_resources: [], resources: []}
-  literature: {identity: literature researcher, instruction: review literature, model: configure-locally, allowed_mcp_resources: [research-wiki], resources: []}
-  mapping: {identity: mapping researcher, instruction: inspect the map, model: configure-locally, allowed_mcp_resources: [research-mapping], resources: []}
-  writer: {identity: final writer, instruction: write one draft, model: configure-locally, allowed_mcp_resources: [draft-buffer], resources: []}
+  parallel: {identity: parallel coordinator, instruction: combine results, model: configure-locally, allowed_mcp_resources: [], resources: []}
+  parallel-literature: {identity: literature researcher, instruction: review literature, model: configure-locally, allowed_mcp_resources: [research-wiki], resources: []}
+  parallel-mapping: {identity: mapping researcher, instruction: inspect the map, model: configure-locally, allowed_mcp_resources: [research-mapping], resources: []}
+  parallel-writer: {identity: final writer, instruction: write one draft, model: configure-locally, allowed_mcp_resources: [draft-buffer], resources: []}
 workflows:
-  parallel-example: {type: Parallel, entry_agent: coordinator, sub_agents: [literature, mapping], summarizer: coordinator, final_writer: writer}
+  parallel-example: {type: Parallel, entry_agent: parallel, sub_agents: [parallel-literature, parallel-mapping], summarizer: parallel, final_writer: parallel-writer}

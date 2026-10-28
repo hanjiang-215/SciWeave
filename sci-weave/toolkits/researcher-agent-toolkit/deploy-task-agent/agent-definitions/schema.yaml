@@ -1,25 +1,59 @@
 # Agent 与 Workflow YAML schema v1
 
-Agent 定义至少包含：
+## 顶层结构
+
+一个 Workflow 文件包含 `version: 1.x` 与 `agents` 段；`workflows` 段可选（只有单 agent 时不需要）。`agents` 段必填——**扁平的单 agent 文件是无效的**，解析出来是零个定义，runtime 报 `[no_definitions]`：
+
+```yaml
+version: 1.0.0
+agents:
+  <agent-name>: { ... }
+workflows:
+  <workflow-name>: { ... }
+```
+
+同一目录下所有 `*.yaml` / `*.yml` 会被合并成一个命名空间，因此 **agent 名与工作流名在整个目录内必须唯一**，重名报 `[duplicate_definition]`。示例文件因此使用文件级前缀（`router-writer`、`orchestrator-writer` 等）。
+
+## Agent 定义
+
+`agents.<name>` 至少包含：
 
 ```yaml
 name: string
-identity: string
+identity: string        # 必填，空字符串会被拒
 instruction: string
 model: string
 allowed_mcp_resources: [string]
 resources: [string]
-tools: [string] # Agents as Tools 可选
+references: [string]    # 可选
+tools: [string]         # Agents as Tools 可选，也可写别名 children
 ```
 
-Workflow 文件包含 `version: 1.x`、`agents` 和 `workflows`。每个工作流必须包含：
+别名：`allowed_domain_mcps` 等同 `allowed_mcp_resources`，`children` 等同 `tools`。
+
+## Workflow 定义
+
+`workflows.<name>` 必须包含：
 
 ```yaml
 type: Router | Orchestrator | Parallel | Agents as Tools
 entry_agent: string
-sub_agents: [string]
-summarizer: string
+sub_agents: [string]    # 至少一个
+summarizer: string      # 四种类型都必填
 final_writer: string
 ```
 
 所有 Agent 引用必须指向同一文件或目录中声明的 Agent；Agent `tools` 引用图不能形成循环。`final_writer` 是最终写入角色，权限由 runtime 和 MCP 服务端共同执行。
+
+## 键白名单
+
+`load_config` 对顶层、`agents.<name>`、`workflows.<name>` 三处做键白名单校验：多出来的键报 `[unknown_field]` 并列出键名，不再静默丢弃。上表列出的键就是白名单，加上两个别名。
+
+## `version` 的强制范围
+
+| 入口 | 是否校验 `version` |
+| --- | --- |
+| `load_workflow_yaml(file \| dir)`、`load_workflow_libs()` | 强制，非 `1.x` 报 `[unsupported_config_version]` |
+| `load_config(mapping)` | 不校验 |
+
+`load_config` 是纯 mapping 校验层，不关心文档版本；`version` 只属于文件/目录加载路径。因此所有出厂 YAML 都必须显式写 `version: 1.0.0`，而直接构造 mapping 的调用方不需要。

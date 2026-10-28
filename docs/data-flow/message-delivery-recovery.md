@@ -26,7 +26,7 @@ sciweave.governance-events
 
 `task-workflow` 表示目标 TaskNode 的科研执行 Workflow。只有正式节点、正式边、版本引用、所需输出、激活条件和 `executor_refs` 均满足时，才发布 `task_handoff_ready`。
 
-消息至少携带：
+消息至少携带（**目标格式，尚未落地**；三个生产者的实际形状与迁移顺序见 [信封格式三分叉](../../.tickets/ai4-derq.md)）：
 
 ```text
 message_id
@@ -34,13 +34,14 @@ message_type = task_handoff_ready
 schema_version
 dedupe_key
 routing.target_agent_id
-routing.partition_key = target_node_id
-payload.target_node_id
+routing.partition_key = task_node_id
+payload.task_node_id
 payload.target_node_version_ref
 payload.mapping_domain_id
 payload.pending_handoff_id
 payload.trigger_revision_id
 payload.upstream_source_refs
+payload.dependency_edge_version_refs
 payload.executor_ref_snapshot
 ```
 

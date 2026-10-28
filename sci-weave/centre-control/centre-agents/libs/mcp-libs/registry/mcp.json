@@ -1,0 +1,68 @@
+{
+  "name": "registry",
+  "version": "1.0.0",
+  "description": "Read one workflow agent's registration and every runtime instance it reports, plus service health. The Centre Agent needs this to answer 'is the agent I am about to notify actually online'.",
+  "transport": "streamable-http",
+  "endpoint": {
+    "url_env": "SCIWEAVE_CENTRE_REGISTRY_URL"
+  },
+  "environment": [
+    "SCIWEAVE_CENTRE_REGISTRY_URL",
+    "SCIWEAVE_CENTRE_REGISTRY_TOKEN"
+  ],
+  "notes": [
+    "get_agent_registration is opened to caller_type=project_owner or a service token with service_role=centre. The Centre Agent's token must therefore carry service_role=centre; a researcher token gets denied.",
+    "There is no register_* on this card: the Centre Agent does not create agents. Its own registration is made by the Project Owner with kind=centre, because register_workflow_agent(kind=centre) requires project_owner.",
+    "An unknown agent is not an unavailable agent. get_agent_registration answering agent_not_found means the mapping names something that was never registered; a transport failure means nothing at all."
+  ],
+  "tools": [
+    {
+      "name": "get_agent_registration",
+      "description": "Read one workflow agent registration and its runtime instances.",
+      "input": {
+        "type": "object",
+        "required": [
+          "agent_id"
+        ],
+        "properties": {
+          "agent_id": {
+            "type": "string"
+          }
+        }
+      },
+      "output": {
+        "agent": "agent row",
+        "instances": "array of instance rows",
+        "status_history": "array",
+        "instance_status_history": "object"
+      },
+      "allowed": [
+        "telling an owner their mapping points at an offline agent instead of a broken queue"
+      ],
+      "failures": [
+        "denied",
+        "agent_not_found",
+        "registry_unavailable"
+      ]
+    },
+    {
+      "name": "health",
+      "description": "Return authenticated Registry service and storage health.",
+      "input": {
+        "type": "object",
+        "required": [],
+        "properties": {}
+      },
+      "output": {
+        "status": "string"
+      },
+      "allowed": [
+        "deciding whether a delivery failure is the registry"
+      ],
+      "failures": [
+        "registry_unavailable",
+        "unauthorized"
+      ]
+    }
+  ]
+}

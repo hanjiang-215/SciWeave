@@ -1,0 +1,19 @@
+#!/usr/bin/env sh
+# Entry point referenced by systemd/sciweave-task-agent-mcp.service.
+#
+# Same shape as bin/start-subscriber: resolve the kit, run inside the runtime
+# project's environment. The disposition MCP fails fast on its own when
+# DATABASE_PATH or DISPOSITION_MCP_TOKEN is missing, so this script does not
+# duplicate that check.
+set -eu
+
+KIT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+cd "$KIT"
+
+if [ ! -f "$KIT/.env" ]; then
+  echo "missing $KIT/.env; copy .env.example and fill it in" >&2
+  exit 78
+fi
+
+exec uv run --project "$KIT/runtime" --env-file "$KIT/.env" \
+  python "$KIT/service-template/gateway/mcp/src/main.py"

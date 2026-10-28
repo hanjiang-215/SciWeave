@@ -93,6 +93,105 @@ class InboxStateTests(unittest.TestCase):
             inbox.bind("task-node:handoff-1")
 
 
+class TaskTextTests(unittest.TestCase):
+    """ai4-1e9e: the handoff's instruction is stored, not dropped."""
+
+    def setUp(self) -> None:
+        self.dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.dir.cleanup)
+        self.db = str(Path(self.dir.name) / "inbox.sqlite")
+
+    def test_a_task_text_round_trips_through_the_inbox(self) -> None:
+        inbox = InboxStore(self.db)
+        self.addCleanup(inbox.close)
+        runtime = WorkAgentRuntime(inbox=inbox)
+        runtime.handle_inbound("node-1", "evt-1", task_text="Summarise the graph papers.")
+        self.assertEqual(inbox.get("node-1:evt-1")["command_text"], "Summarise the graph papers.")
+
+    def test_an_empty_task_text_is_recorded_as_empty_not_as_the_node_id(self) -> None:
+        """Empty is a fact the worker has to see; overwriting it hides the defect."""
+        inbox = InboxStore(self.db)
+        self.addCleanup(inbox.close)
+        WorkAgentRuntime(inbox=inbox).handle_inbound("node-1", "evt-1")
+        self.assertEqual(inbox.get("node-1:evt-1")["command_text"], "")
+
+    def test_the_task_text_survives_a_restart(self) -> None:
+        first = InboxStore(self.db)
+        first.enqueue("node-1:evt-1", "node-1", "evt-1", binding_present=True, command_text="do the thing")
+        first.close()
+        second = InboxStore(self.db)
+        self.addCleanup(second.close)
+        self.assertEqual(second.get("node-1:evt-1")["command_text"], "do the thing")
+
+    def test_bind_and_drain_carry_the_task_text_instead_of_losing_it(self) -> None:
+        """The booking path re-reads the row; the text must come back with it."""
+        inbox = InboxStore(self.db)
+        self.addCleanup(inbox.close)
+        runtime = WorkAgentRuntime(inbox=inbox, binding_resolver=lambda _target: False)
+        runtime.handle_inbound("node-1", "evt-1", task_text="bind then run")
+        runtime.bind("node-1:evt-1")
+        self.assertEqual(inbox.get("node-1:evt-1")["command_text"], "bind then run")
+
+
+class InboxMigrationTests(unittest.TestCase):
+    """An installed kit already has a database; the new column must appear."""
+
+    def setUp(self) -> None:
+        self.dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.dir.cleanup)
+        self.db = str(Path(self.dir.name) / "old.sqlite")
+
+    def _make_old_database(self) -> None:
+        """The schema exactly as it shipped before ai4-1e9e, with a row in it."""
+        import sqlite3
+
+        connection = sqlite3.connect(self.db)
+        connection.executescript(
+            """
+            CREATE TABLE inbox_messages (
+                dedupe_key TEXT PRIMARY KEY,
+                target_id TEXT NOT NULL,
+                event_id TEXT NOT NULL,
+                agent_definition TEXT NOT NULL DEFAULT '',
+                status TEXT NOT NULL CHECK(status IN ('awaiting_workflow_binding', 'queued', 'processed')),
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            """
+        )
+        connection.execute(
+            "INSERT INTO inbox_messages VALUES ('node-1:evt-1', 'node-1', 'evt-1', '', 'queued', "
+            "'2026-10-27T00:00:00+00:00', '2026-10-27T00:00:00+00:00')"
+        )
+        connection.commit()
+        connection.close()
+
+    def test_an_old_database_gains_the_column_and_keeps_its_rows(self) -> None:
+        self._make_old_database()
+        inbox = InboxStore(self.db)
+        self.addCleanup(inbox.close)
+        row = inbox.get("node-1:evt-1")
+        self.assertIsNotNone(row, "the migration must not drop rows")
+        self.assertEqual(row["command_text"], "", "old rows have no task text, not a guess")
+        self.assertEqual(row["status"], "queued")
+
+    def test_the_migration_is_repeatable(self) -> None:
+        """Every start runs it; a second run must not fail or duplicate a column."""
+        self._make_old_database()
+        InboxStore(self.db).close()
+        inbox = InboxStore(self.db)
+        self.addCleanup(inbox.close)
+        self.assertEqual(inbox.get("node-1:evt-1")["command_text"], "")
+
+    def test_a_new_column_can_be_written_after_a_migration(self) -> None:
+        self._make_old_database()
+        inbox = InboxStore(self.db)
+        self.addCleanup(inbox.close)
+        inbox.mark_processed("node-1:evt-1")
+        inbox.enqueue("node-2:evt-2", "node-2", "evt-2", binding_present=True, command_text="new text")
+        self.assertEqual(inbox.get("node-2:evt-2")["command_text"], "new text")
+
+
 class InboxCompatTests(unittest.TestCase):
     def test_inbox_defaults_keep_in_memory_path(self) -> None:
         runtime = WorkAgentRuntime()

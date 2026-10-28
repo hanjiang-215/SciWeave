@@ -96,6 +96,82 @@ class RuntimeBoundaryTests(DurableStoreTestCase):
         self.assertEqual(self.store.get(record.execution_id).status, "completed")
 
 
+class DraftIdSourceTests(DurableStoreTestCase):
+    """Where a `draft_id` came from is part of the record (ai4-x0ay).
+
+    The agent writes its own draft now, so the id it reports is a claim this
+    process cannot check. Storing the provenance is what stops "the agent said
+    it wrote one" from reading as "the runtime verified one".
+    """
+
+    def test_a_runtime_written_draft_is_marked_runtime(self) -> None:
+        store = self.store
+        execution = store.enqueue("node-1", "event-1")
+        store.start(execution)
+        record = store.complete(execution, "draft-abc", "runtime")
+        self.assertEqual(record.draft_id_source, "runtime")
+
+    def test_an_agent_reported_draft_is_marked_that_way(self) -> None:
+        store = self.store
+        execution = store.enqueue("node-1", "event-1")
+        store.start(execution)
+        record = store.complete(execution, "3f12df3e-1111-4222-8333-444455556666", "agent_reported")
+        self.assertEqual(record.draft_id_source, "agent_reported")
+
+    def test_the_mark_survives_a_reopen(self) -> None:
+        store = self.store
+        execution = store.enqueue("node-1", "event-1")
+        store.start(execution)
+        store.complete(execution, "draft-abc", "agent_reported")
+        store.close()
+
+        reopened = SqliteExecutionStore(self.path)
+        self.addCleanup(reopened.close)
+        self.assertEqual(reopened.get(execution.execution_id).draft_id_source, "agent_reported")
+
+    def test_an_old_database_gains_the_column_without_losing_rows(self) -> None:
+        """The kit ships an installed database; a new column must not break it."""
+        import sqlite3
+
+        old = os.path.join(self._tmp.name, "old.sqlite3")
+        connection = sqlite3.connect(old)
+        connection.executescript(
+            """
+            CREATE TABLE execution (
+                execution_id TEXT PRIMARY KEY,
+                event_id TEXT NOT NULL UNIQUE,
+                target_id TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'queued',
+                draft_id TEXT,
+                error_code TEXT,
+                failed_agent TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            INSERT INTO execution (execution_id, event_id, target_id, status, created_at, updated_at)
+            VALUES ('old-1', 'event-old', 'node-old', 'completed', 'now', 'now');
+            """
+        )
+        connection.commit()
+        connection.close()
+
+        migrated = SqliteExecutionStore(old)
+        self.addCleanup(migrated.close)
+        record = migrated.get("old-1")
+        self.assertIsNotNone(record, "the existing row must still be readable")
+        self.assertIsNone(record.draft_id_source, "an old row has no provenance to report")
+
+    def test_migrating_twice_is_not_an_error(self) -> None:
+        """`install.sh` re-runs over the same database; a repeated ALTER is fatal."""
+        self.store.close()
+        for _ in range(3):
+            store = SqliteExecutionStore(self.path)
+            store.close()
+        reopened = SqliteExecutionStore(self.path)
+        self.addCleanup(reopened.close)
+        self.assertIsNotNone(reopened)
+
+
 class DispositionTests(DurableStoreTestCase):
     def test_pending_lists_only_unfinished_work(self) -> None:
         queued = self._queued("event-1")

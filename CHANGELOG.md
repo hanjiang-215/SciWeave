@@ -91,8 +91,28 @@
 - *(demo-stack)* Compose the dashboard chain with one command
 - *(sciencepal)* Make bridge harness-agnostic with CLI and HTTP MCP
 - *(sciencepal-bridge)* Write execution reports into the draft buffer
+- *(toolkit)* Add the install path the systemd units already assumed
+- *(toolkit)* Add the literature-search MCP over arXiv and Crossref
+- *(toolkit)* Cut the domain cards down to the task-agent capability surface
+- *(toolkit)* Load the researcher's configuration into the worker
+- *(toolkit)* Dispatch handoffs to a worker subprocess
+- *(toolkit)* Carry the handoff's instruction to the model
+- *(toolkit)* Carry the workflow's planning mode through the loader
+- *(toolkit)* Give the agent the MCP servers its definition names
+- *(toolkit)* Run the configured workflow instead of a single agent
+- *(toolkit)* Record where a draft id came from
+- *(toolkit)* Take the draft id from the agent that wrote the draft
+- *(toolkit)* Give the notification the fields only the runtime knows
+- *(toolkit)* Keep the draft when the notification fails
+- *(mapping)* Add create_merge_request so a preview can reach a decision
+- *(toolkit)* Validate suite manifests with suitecheck
+- *(toolkit)* Ship the researcher suite as an installable unit
+- *(toolkit)* Ship the centre suite with its two daemons and a sweeper
+- *(toolkit)* Ship the project owner suite
 - *(centre-stack)* Run every central service in one container
 - *(demo)* Add the SciencePal T1/T2 run package for the hard-gate evidence
+- *(centre-agents)* Load the workflow from a definition layer
+- *(centre-stack)* Point the container at the shipped definitions and rules
 
 ### 🐛 Bug Fixes
 
@@ -137,6 +157,16 @@
 - *(gateway)* Project dashboard events and use the vocabulary web-ui validates
 - *(email-service)* Reject CR/LF in notification subjects
 - *(email-service)* Parse Registry error codes from plain-text tail
+- *(worker)* Reject drive-letter and backslash session_dir escapes
+- *(toolkit)* Make the shipped config actually load as one directory
+- *(toolkit)* Close three drifts between the kit and its own spec
+- *(toolkit)* Make `cp .env.example .env` enough to start the subscriber
+- *(toolkit)* Treat an empty local workflow dir as "no overrides"
+- *(tickets)* File the gap where the subscriber never calls a model
+- *(tickets)* File the two remaining breaks in the task-agent chain
+- *(tickets)* Retract the ai4-u9gj conclusion and file the envelope split
+- *(toolkit)* Read the envelope the producer actually sends
+- *(task-agent)* Load the declared skills and send the draft field the buffer takes
 - *(ci)* Count failing stages correctly and stop cache-dependent compileall
 - *(buffer)* Stop the demo switch from reporting readiness
 - *(scripts)* Print a stop hint that works without pwsh
@@ -145,6 +175,8 @@
 - *(coordinator)* Keep polling when the broker is briefly unreachable
 - *(demo)* Read collected artifacts from disk and assert the real T1 key
 - *(demo-evidence)* Tolerate transient SciencePal polling errors
+- *(mapping)* Create_merge_request kept the 'or centre' wording ai4-k81j removed
+- *(centre-stack)* Make the card URLs overridable instead of hardcoding loopback ports
 
 ### 📚 Documentation
 
@@ -468,12 +500,23 @@
 - *(tickets)* Hand the centre-control email tickets to hanjiang
 - *(tickets)* Ask hanjiang to reconcile the three closed audit-trail tickets
 - *(tickets)* Record the four toolkit ship-blockers
+- *(tickets)* Split the toolkit preset plan into four tickets
+- *(tickets)* 复核 deploy-task-agent 四张票并补一致性收口票
 - *(tickets)* Close ai4-9687 after subject CRLF fix
 - *(tickets)* Close ai4-dp9t after Registry error code fix
 - *(tickets)* Close ai4-ceqq after acceptance check-off
 - *(tickets)* Close ai4-bp6v after ledger review check-off
 - *(tickets)* Record ai4-roow write-back progress
 - *(tickets)* Note ledger review confirmation on PR #53
+- *(tickets)* Record that ai4-dp9t is closed in ai4-x0ay
+- *(toolkit)* Document the preset, the workflow switch and who owns the draft
+- *(competition)* Correct the toolkit's test count
+- *(toolkit)* Flip the workflow row and keep the two gaps visible
+- *(toolkit)* Say what happens when the notification fails
+- *(data-flow)* Mark the envelope section as not-yet-landed
+- *(data-flow)* Count the divergent field tables, not the producers
+- *(centre-agents)* The disposition surface stopped answering unimplemented
+- *(agent)* Spec 中央 Agent 运行时按 Task Agent 模板补齐
 - *(review)* Add 2026-10-27 project review snapshot
 - *(specs)* Mark the mapping-wiki formalization delivery as implemented
 - *(centre-control)* List coordinator, email-service and message-envelope
@@ -494,13 +537,24 @@
 - *(demo)* Note the ready-to-run SciencePal package in the demo prerequisites
 - *(changelog)* Regenerate for the conflict resolution commit
 - *(changelog)* Record uv_build backend switch for buffer and runtime
-- *(tickets)* Split the toolkit preset plan into four tickets
-- *(tickets)* 复核 deploy-task-agent 四张票并补一致性收口票
 - *(tickets)* Record uv_build fix and PR 54 green round-back on ai4-0vnn/ai4-aaff
 - *(competition)* Record real SciencePal T1/T2 execution evidence
 - *(changelog)* Record the SciencePal execution evidence round
+- *(competition)* Reconcile the merged summary with the fixes this branch carries
 - *(competition)* Time the demo segments on the live platform
 - *(tickets)* Record the Linux uv_build validation on ai4-0vnn
+- *(changelog)* Record the live-platform timing and Linux validation round
+- *(centre-agents)* Describe the centre agent as a service, not a suite
+- *(tickets)* Spec and ticket for the centre definition layer
+- *(centre-agents)* Declare the definition-layer variables in the env examples
+- *(toolkit)* Stop describing cards the centre suite no longer holds
+- *(spec)* Record what the implementation had to decide
+- *(tickets)* Record ai4-349h delivery and file the three leftovers
+- *(tickets)* Record the pyyaml dependency and the review follow-ups
+- *(tickets)* Correct the commit count in the delivery note
+- *(centre-agents)* Say why the three derived workflow fields stay
+- *(centre-agents)* Say why there are three error types and one exit
+- *(tickets)* Final commit list for ai4-349h
 
 ### 🚜 Refactor
 
@@ -516,6 +570,10 @@
 - *(task-agent)* Make libs configuration-only
 - *(buffer)* Collapse process entry to draft_buffer.main
 - *(sciencpal-onboarding)* Drop the duplicated T1/T2 script copies
+- *(toolkits)* Retire the centre suite's MCP cards
+- *(centre-agents)* Drop unused test imports and correct the loader docstring
+- *(centre-agents)* Expose the card directory and name the mapped constant
+- *(centre-agents)* Drop the card field nothing reads
 
 ### 🎨 Styling
 
@@ -537,7 +595,12 @@
 - *(coordinator)* Real TerminusDB integration for snapshot adapter + ref parsing fix
 - *(coordinator)* Real Redpanda+TerminusDB end-to-end handoff chain
 - *(audit-trail)* Cover time-range before and finish write failure
+- *(toolkit)* Cover the preset, the workflow wiring and the whole handoff
+- *(toolkit)* Run the whole handoff through the real factory, still keyless
+- *(toolkit)* Pin the seam where a draft id becomes a stored record
 - *(wiki)* Run the assertions a duplicate test name was shadowing
+- *(centre-agents)* Assert the rendered config against fast-agent's own settings loader
+- *(centre-agents)* Assert the card URLs actually resolve
 
 ### ⚙️ Miscellaneous Tasks
 
@@ -574,12 +637,22 @@
 - *(tickets)* Close dashboard launcher, queue source and CI tickets
 - *(sciencepal)* Mark shell wrapper executable
 - *(ignore)* Exclude DSH skill copies under .dsh/
+- *(tickets)* Close ai4-4r0h, ai4-grlc and ai4-4zjz with evidence
+- *(tickets)* Close ai4-8aa0 after building the install path
+- *(tickets)* Close ai4-cxnm with two acceptance corrections
+- *(tickets)* Close ai4-tj83 with the two findings from doing it
+- *(tickets)* Close ai4-x0ay with the implementation record
+- *(tickets)* Arbitrate the envelope format in ai4-derq
+- *(tickets)* Close ai4-derq with the arbitration recorded
+- *(tickets)* File ai4-lwma for the missing task_completed producer
 - *(tickets)* File and close the four 2026-10-27 review fixes
 - *(tickets)* Close ai4-e1jk after the container run verification
 - *(tickets)* Link the deployment PR into the four tickets
 - *(tickets)* File the Linux cross-platform verification evidence linked to ai4-grlc
 - *(tickets)* Adopt the develop version of ai4-grlc after its scope narrowing
 - *(tickets)* Adopt the five develop-side agent tickets and index their meta
+- *(tickets)* Restore ai4-8dgd, which is hanjiang's to edit
+- *(tickets)* Close the two tickets ai4-349h absorbed
 
 ### 💼 Other
 

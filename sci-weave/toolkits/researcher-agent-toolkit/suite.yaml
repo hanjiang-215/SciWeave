@@ -1,0 +1,103 @@
+suite: researcher-agent-toolkit
+role: machine
+actor: researcher
+title: 研究员的 Agent套件
+version: 0.1.0
+summary: >
+  研究员机器上的一套东西：教个人 Agent 部署并配置自己的 Task Agent，
+  以研究员身份读正式地图与 Wiki、往草稿箱起草、提交候选，以及在被退回后
+  推自己的 Task Agent 返修。装在两处——个人 Agent 的 harness 和本机
+  Task Agent 的运行目录——但两处都以 researcher 身份调 MCP。
+boundary:
+  may_modify:
+    - 本机 ~/.sciweave/task-agent 下的 Agent 定义、.env、libs 与服务工作目录
+    - 自己提交的草稿与候选（起草、修订、提交、标记已转候选）
+    - 本机两个 user 服务的启停（sciweave-task-agent-mcp、sciweave-task-agent-subscriber）
+    - 注册表里属于自己的 endpoint Agent 与其实例
+  must_not:
+    - 审批候选、写正式版本（formalize / reconcile_formalization）——那是 Project Owner 的动作
+    - 预审候选、追加预审日志、生成混合候选——那是 Centre Agent 的动作
+    - 派发根任务、发起执行、代替 Project Owner 下命令
+    - 编辑其他人提交的草稿或候选
+    - 改造中央服务器上的 Centre Agent 或领域 MCP 服务
+requires:
+  env:
+    - SCIWEAVE_AGENT_ID
+    - SCIWEAVE_SUBSCRIBER_TOPICS
+    - DRAFT_BUFFER_MCP_URL
+    - DRAFT_BUFFER_MCP_TOKEN
+    - RESEARCH_MAPPING_MCP_URL
+    - RESEARCH_MAPPING_MCP_TOKEN
+    - LLM_WIKI_MCP_URL
+    - LLM_WIKI_MCP_TOKEN
+    - EMAIL_MCP_URL
+    - EMAIL_MCP_TOKEN
+    - SCIWEAVE_REGISTRY_TOKENS_JSON
+    - DISPOSITION_MCP_URL
+    - DISPOSITION_MCP_TOKEN
+  services:
+    - sciweave-task-agent-mcp.service
+    - sciweave-task-agent-subscriber.service
+skills:
+  - name: install-suite
+    path: install-suite
+  - name: upgrade-suite
+    path: upgrade-suite
+  - name: register-instance
+    path: register-instance
+  - name: audit-buffer
+    path: audit-buffer
+  - name: use-research-map
+    path: use-research-map
+  - name: use-research-wiki
+    path: use-research-wiki
+  - name: promote-draft
+    path: promote-draft
+  - name: push-task-agent-to-rework
+    path: push-task-agent-to-rework
+  # The deployment skills teach this machine's personal Agent how to build and
+  # verify a Task Agent for itself. They stay inside deploy-task-agent/ because
+  # they belong to the kit they describe, and because the worker's own model
+  # loop must NOT load them: a worker that can redeploy itself is a worker that
+  # can escape its own definition (see runtime/src/work_agent_runtime/skills.py).
+  - name: deploy-task-agent-create-agent
+    path: deploy-task-agent/deploy-task-agent-skills/create-agent
+  - name: deploy-task-agent-compose-workflow
+    path: deploy-task-agent/deploy-task-agent-skills/compose-workflow
+  - name: deploy-task-agent-configure-mcp
+    path: deploy-task-agent/deploy-task-agent-skills/configure-mcp
+  - name: deploy-task-agent-verify-task-agent
+    path: deploy-task-agent/deploy-task-agent-skills/verify-task-agent
+  - name: deploy-task-agent-troubleshoot
+    path: deploy-task-agent/deploy-task-agent-skills/troubleshoot
+  - name: deploy-task-agent-sciencepal-research
+    path: deploy-task-agent/deploy-task-agent-skills/sciencepal-research
+mcp:
+  - name: draft-buffer
+    card: mcp/draft-buffer/mcp.json
+    capabilities: [read, candidate_submit]
+  - name: research-mapping
+    card: mcp/research-mapping/mcp.json
+    capabilities: [read, candidate_submit]
+  - name: research-wiki
+    card: mcp/research-wiki/mcp.json
+    capabilities: [read, candidate_submit]
+  - name: email-service
+    card: mcp/email-service/mcp.json
+    capabilities: [read]
+  - name: registry
+    card: mcp/registry/mcp.json
+    capabilities: [read]
+  - name: disposition
+    card: mcp/disposition/mcp.json
+    capabilities: [read]
+  - name: literature-search
+    card: mcp/literature-search/mcp.json
+    capabilities: [read]
+hooks:
+  - name: check-services
+    path: deploy-task-agent/hooks/check-services.sh
+    event: harness-open
+cron: []
+install: [./install.sh]
+check: [./check.sh]

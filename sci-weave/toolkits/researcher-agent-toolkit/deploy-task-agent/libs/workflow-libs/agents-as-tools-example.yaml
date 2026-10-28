@@ -1,6 +1,12 @@
+# Agents as Tools example. Agent names carry a file-level prefix because the loader
+# merges every YAML file in the directory into one namespace: an unprefixed `writer`
+# here collides with the `writer` in the other three examples and the whole
+# directory fails to load with [duplicate_definition].
+version: 1.0.0
+name: agents-as-tools-workflows
 agents:
-  main: {identity: main agent, instruction: call declared specialists, model: configure-locally, allowed_mcp_resources: [], resources: [], tools: [specialist]}
-  specialist: {identity: specialist, instruction: return intermediate evidence, model: configure-locally, allowed_mcp_resources: [research-wiki], resources: []}
-  writer: {identity: final writer, instruction: write one draft, model: configure-locally, allowed_mcp_resources: [draft-buffer], resources: []}
+  a2t-main: {identity: main agent, instruction: call declared specialists, model: configure-locally, allowed_mcp_resources: [], resources: [], tools: [a2t-specialist]}
+  a2t-specialist: {identity: specialist, instruction: return intermediate evidence, model: configure-locally, allowed_mcp_resources: [research-wiki], resources: []}
+  a2t-writer: {identity: final writer, instruction: write one draft, model: configure-locally, allowed_mcp_resources: [draft-buffer], resources: []}
 workflows:
-  agents-as-tools-example: {type: Agents as Tools, entry_agent: main, sub_agents: [specialist], summarizer: main, final_writer: writer}
+  agents-as-tools-example: {type: Agents as Tools, entry_agent: a2t-main, sub_agents: [a2t-specialist], summarizer: a2t-main, final_writer: a2t-writer}

@@ -21,17 +21,17 @@ EXPECTED = {
     # drifted to 7 and 8 entries because they were updated together with the
     # cards instead of from the services (ai4-b4zb): adding a tool there means
     # adding it here and to libs/mcp-libs/<domain>/mcp.json.
+    #
+    # The two domain cards deliberately list FEWER tools than the services
+    # define (ai4-tj83): `libs/mcp-libs/` is the task-agent capability surface,
+    # not a mirror of the management MCP. Submitting, reviewing and formalizing
+    # require the Owner-side capabilities and must not be advertised to a
+    # researcher's Work Agent. Only the read/centre tools stay.
     "research-mapping": {
         "get_formal_mapping", "get_formal_mapping_at_revision", "list_candidates",
-        "list_reviewable_candidates", "submit_candidate", "preview_candidate",
-        "record_review", "formalize_candidate", "reconcile_formalization",
-        "append_prereview_log", "create_merged_candidate",
     },
     "research-wiki": {
-        "get_formal_wiki", "list_wiki_candidates", "list_reviewable_wiki_candidates",
-        "submit_wiki_candidate", "preview_wiki_review", "create_wiki_merge_request",
-        "decide_wiki_review", "formalize_wiki", "reconcile_wiki_formalization",
-        "append_prereview_log", "create_merged_candidate",
+        "get_formal_wiki", "list_wiki_candidates",
     },
 }
 

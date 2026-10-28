@@ -1,0 +1,235 @@
+{
+  "name": "draft-buffer",
+  "version": "1.0.0",
+  "description": "The researcher's own draft box: create, revise, submit, read, review as the namespace reviewer, and mark a draft promoted to a domain candidate.",
+  "transport": "streamable-http",
+  "endpoint": {
+    "url_env": "DRAFT_BUFFER_MCP_URL"
+  },
+  "environment": [
+    "DRAFT_BUFFER_MCP_URL",
+    "DRAFT_BUFFER_MCP_TOKEN"
+  ],
+  "notes": [
+    "Only the submitter may update or submit a draft; only a configured namespace reviewer may accept or reject one. review_draft and mark_promoted are here because a researcher is the first-stage reviewer of their own namespace, not because the kit assumes they are the Project Owner: the second stage (candidate_review/formalize) is not reachable from this card at all."
+  ],
+  "tools": [
+    {
+      "name": "create_draft",
+      "description": "Create a Mapping or Wiki draft under a stable idempotency key. Trusted host must inject the authenticated actor identity; actor_id is not a client argument.",
+      "input": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "namespace",
+          "kind",
+          "title",
+          "payload",
+          "submitted_by",
+          "idempotency_key"
+        ],
+        "properties": {
+          "namespace": {
+            "type": "string",
+            "enum": [
+              "mapping",
+              "wiki"
+            ]
+          },
+          "kind": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "payload": {},
+          "submitted_by": {
+            "type": "string"
+          },
+          "base_formal_revision_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "source_task_node_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "source_execution_record_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "idempotency_key": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "update_draft",
+      "description": "Update a draft owned by the authenticated submitter while it is editable. Trusted host must inject the authenticated actor identity; actor_id is not a client argument.",
+      "input": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "draft_id",
+          "idempotency_key"
+        ],
+        "properties": {
+          "draft_id": {
+            "type": "string"
+          },
+          "idempotency_key": {
+            "type": "string"
+          },
+          "title": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "payload": {}
+        }
+      }
+    },
+    {
+      "name": "submit_draft",
+      "description": "Freeze the exact TerminusDB commit for human review. Trusted host must inject the authenticated actor identity; actor_id is not a client argument.",
+      "input": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "draft_id",
+          "idempotency_key"
+        ],
+        "properties": {
+          "draft_id": {
+            "type": "string"
+          },
+          "idempotency_key": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "list_drafts",
+      "description": "List drafts visible in the caller's authorized namespace. Trusted host must inject the authenticated actor identity; actor_id is not a client argument.",
+      "input": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "namespace"
+        ],
+        "properties": {
+          "namespace": {
+            "type": "string",
+            "enum": [
+              "mapping",
+              "wiki"
+            ]
+          },
+          "status": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "submitted_by": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "read_draft",
+      "description": "Read draft metadata and current or submitted-commit content. Trusted host must inject the authenticated actor identity; actor_id is not a client argument.",
+      "input": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "draft_id"
+        ],
+        "properties": {
+          "draft_id": {
+            "type": "string"
+          },
+          "submitted_commit": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "review_draft",
+      "description": "Accept or reject a submitted draft as its configured namespace reviewer. Trusted host must inject the authenticated actor identity; actor_id is not a client argument.",
+      "input": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "draft_id",
+          "decision",
+          "reason",
+          "idempotency_key"
+        ],
+        "properties": {
+          "draft_id": {
+            "type": "string"
+          },
+          "decision": {
+            "type": "string",
+            "enum": [
+              "accept",
+              "reject"
+            ]
+          },
+          "reason": {
+            "type": "string"
+          },
+          "idempotency_key": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "mark_promoted",
+      "description": "Record the exact candidate ID and commit created by a domain MCP caller. Trusted host must inject the authenticated actor identity; actor_id is not a client argument.",
+      "input": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "draft_id",
+          "candidate_id",
+          "candidate_commit",
+          "idempotency_key"
+        ],
+        "properties": {
+          "draft_id": {
+            "type": "string"
+          },
+          "candidate_id": {
+            "type": "string"
+          },
+          "candidate_commit": {
+            "type": "string"
+          },
+          "idempotency_key": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  ]
+}

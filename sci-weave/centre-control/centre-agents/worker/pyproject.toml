@@ -5,10 +5,13 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "sciweave-task-agent-worker"
 version = "0.1.0"
-description = "SciWeave Task Agent fast-agent-mcp worker role"
+description = "SciWeave Centre Agent worker role: definition loading and one fast-agent chain per execution"
 requires-python = ">=3.12,<3.16"
 dependencies = [
     "fast-agent-mcp>=0.10.46,<0.11",
+    # Read directly by `task_agent_worker.definitions`, not only through
+    # fast-agent: the agent and workflow definitions are YAML (ai4-349h).
+    "pyyaml>=6.0,<7",
 ]
 
 [project.scripts]

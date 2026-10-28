@@ -1,6 +1,0 @@
-agents:
-  orchestrator: {identity: task orchestrator, instruction: decompose and synthesize, model: configure-locally, allowed_mcp_resources: [], resources: []}
-  researcher: {identity: evidence researcher, instruction: collect evidence, model: configure-locally, allowed_mcp_resources: [research-mapping, research-wiki], resources: []}
-  writer: {identity: final writer, instruction: write one draft, model: configure-locally, allowed_mcp_resources: [draft-buffer], resources: []}
-workflows:
-  orchestrator-example: {type: Orchestrator, entry_agent: orchestrator, sub_agents: [researcher], summarizer: orchestrator, final_writer: writer}

@@ -1,0 +1,70 @@
+suite: project-owner-agent-toolkit
+role: human
+actor: project_owner
+title: 项目负责人的 Agent套件
+version: 0.1.0
+summary: >
+  装在负责人自己的 harness 里、以 project_owner 身份工作的一套东西：读正式路线与候选，
+  预览候选的改动与影响范围，记录批准/退回/驳回，把批准的候选正式化，并在路线需要继续时
+  派发根任务、登记新的人和 Agent。它做最终裁决，所以它不做预审。
+boundary:
+  may_modify:
+    - 候选的审核决定（record_review / decide_wiki_review：approved / returned / rejected）
+    - 正式版本（formalize_candidate / formalize_wiki，以及 reconcile_formalization 的重试）
+    - 正式路线（提交新 TaskNode / DependencyEdge 候选，让自己写的下一步进入预审）
+    - 根任务的首次派发（dispatch_root_task）
+    - 注册表里的人、Agent 与实例（含 kind=centre 的中央 Agent）
+    - 发给研究员的候选结论通知
+  must_not:
+    - 预审候选、追加预审日志、生成混合候选——那是 Centre Agent 的动作，读全量候选会绕过它
+    - 一审草稿（草稿由命名空间配置的审核人一审，不是负责人）
+    - 改候选分支、改别人提交的内容、改写历史审核事件
+    - 替研究员部署或重启 Task Agent
+    - 用新建 operation_id 重试正式化（那是第二次正式化，不是重试）
+    - 派发非根节点、或用派发接口绕开依赖边
+requires:
+  env:
+    - RESEARCH_MAPPING_MCP_URL
+    - RESEARCH_MAPPING_MCP_TOKEN
+    - LLM_WIKI_MCP_URL
+    - LLM_WIKI_MCP_TOKEN
+    - SCIWEAVE_COORDINATOR_MCP_URL
+    - SCIWEAVE_COORDINATOR_MCP_TOKEN
+    - SCIWEAVE_REGISTRY_URL
+    - SCIWEAVE_REGISTRY_TOKEN
+    - EMAIL_MCP_URL
+    - EMAIL_MCP_TOKEN
+  services: []
+skills:
+  - name: decide-candidate
+    path: decide-candidate
+  - name: request-revision
+    path: request-revision
+  - name: dispatch-root-task
+    path: dispatch-root-task
+  - name: handle-merge-candidate
+    path: handle-merge-candidate
+  - name: impact-preview
+    path: impact-preview
+  - name: notification-status
+    path: notification-status
+mcp:
+  - name: research-mapping
+    card: mcp/research-mapping/mcp.json
+    capabilities: [read, candidate_submit, candidate_review, formalize]
+  - name: research-wiki
+    card: mcp/research-wiki/mcp.json
+    capabilities: [read, candidate_submit, candidate_review, formalize]
+  - name: coordinator
+    card: mcp/coordinator/mcp.json
+    capabilities: []
+  - name: registry
+    card: mcp/registry/mcp.json
+    capabilities: []
+  - name: email-service
+    card: mcp/email-service/mcp.json
+    capabilities: [read]
+hooks: []
+cron: []
+install: [./install.sh]
+check: [./check.sh]

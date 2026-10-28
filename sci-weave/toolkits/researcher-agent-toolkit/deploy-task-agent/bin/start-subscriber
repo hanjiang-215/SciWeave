@@ -1,0 +1,19 @@
+#!/usr/bin/env sh
+# Entry point referenced by systemd/sciweave-task-agent-subscriber.service.
+#
+# Resolves the kit from its own location, so the unit does not have to know
+# where the kit was unpacked beyond this one path. Runs inside the runtime
+# project's environment, which is the only place `work_agent_runtime` is
+# installed (there is no second copy in the service templates).
+set -eu
+
+KIT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+cd "$KIT"
+
+if [ ! -f "$KIT/.env" ]; then
+  echo "missing $KIT/.env; copy .env.example and fill it in" >&2
+  exit 78
+fi
+
+exec uv run --project "$KIT/runtime" --env-file "$KIT/.env" \
+  python "$KIT/service-template/gateway/subscriber/src/main.py"

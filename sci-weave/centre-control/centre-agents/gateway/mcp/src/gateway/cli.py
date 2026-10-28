@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import os
 
+from task_agent_worker.assembly import CentreConfigError
 from task_agent_worker.config import WorkerSettings
 
 from .app import create_app, serve
@@ -39,7 +40,16 @@ def main() -> None:
         app.mark_runtime_misconfigured(f"worker_settings_invalid: {error}")
     else:
         if settings.api_key:
-            app.enable_fast_agent_deepseek_runtime(settings)
+            try:
+                app.enable_fast_agent_deepseek_runtime(settings)
+            except CentreConfigError as error:
+                # ai4-349h: definitions, MCP cards and the rule set are read at
+                # startup. A broken one used to surface as
+                # `fast_agent_runtime_error` on the first execution, which named
+                # nothing; here it is a configuration finding on the disposition
+                # surface before any candidate is touched.
+                logger.error("centre agent configuration is unusable: %s", error)
+                app.mark_runtime_misconfigured(f"centre_config_invalid: {error}")
         elif os.environ.get(PASSTHROUGH_SWITCH) == "1":
             logger.warning(
                 "fast-agent passthrough runtime enabled: executions write a stub "

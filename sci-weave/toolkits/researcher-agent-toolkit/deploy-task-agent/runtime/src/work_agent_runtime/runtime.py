@@ -16,6 +16,10 @@ class ExecutionRecord:
     draft_id: str | None = None
     error_code: str | None = None
     failed_agent: str | None = None
+    #: Where `draft_id` came from: ``runtime`` when this process read it off the
+    #: draft box, ``agent_reported`` when the agent told us what it wrote
+    #: (ai4-x0ay). The difference matters: the second is an unverified claim.
+    draft_id_source: str | None = None
 
 
 # Short compatibility name for callers that used the initial runtime prototype.
@@ -51,9 +55,9 @@ class ExecutionStore:
             self._replace(updated)
             return True
 
-    def complete(self, execution: ExecutionRecord, draft_id: str) -> ExecutionRecord:
+    def complete(self, execution: ExecutionRecord, draft_id: str, draft_id_source: str | None = None) -> ExecutionRecord:
         with self._lock:
-            updated = ExecutionRecord(execution.execution_id, execution.target_id, "completed", draft_id)
+            updated = ExecutionRecord(execution.execution_id, execution.target_id, "completed", draft_id, draft_id_source=draft_id_source)
             self._replace(updated)
             return updated
 
@@ -82,23 +86,9 @@ class ExecutionStore:
         self._by_target[updated.target_id] = updated
 
 
-class WorkerLease:
-    """Process-local lease that serializes work for one target."""
-
-    def __init__(self) -> None:
-        self._lock = threading.Lock()
-        self._targets: set[str] = set()
-
-    def acquire(self, target_id: str) -> bool:
-        with self._lock:
-            if target_id in self._targets:
-                return False
-            self._targets.add(target_id)
-            return True
-
-    def release(self, target_id: str) -> None:
-        with self._lock:
-            self._targets.discard(target_id)
+# `WorkerLease` moved to `lease.py` when it gained a SQLite backing store
+# (ai4-0fwc). Re-exported here so the many existing imports keep working.
+from .lease import LeaseHeldError, WorkerLease  # noqa: E402  (after the dataclasses)
 
 
 class DraftBox(Protocol):
@@ -132,29 +122,51 @@ class WorkAgentRuntime:
         drafts: DraftBox | None = None,
         inbox: object | None = None,
         binding_resolver: Callable[[str], bool] | None = None,
+        dispatcher: Callable[[str], object] | None = None,
     ) -> None:
         self.store = ExecutionStore()
         self.lease = WorkerLease()
         self.drafts: DraftBox = drafts or FakeDraftBox()
         self.inbox = inbox
         self.binding_resolver = binding_resolver
+        # A callable that runs the handoff *somewhere else* and returns an
+        # object with a ``status``. The subscriber passes one that spawns a
+        # worker subprocess (ai4-0fwc); without it the runtime runs inline.
+        self.dispatcher = dispatcher
 
     def handle_message(self, target_id: str, event_id: str, agent_definition: str = "") -> ExecutionRecord:
         return run_one(self.store, self.lease, self.drafts, target_id, event_id, agent_definition)
 
-    def handle_inbound(self, target_id: str, event_id: str, agent_definition: str = "") -> ExecutionRecord:
+    def handle_inbound(
+        self,
+        target_id: str,
+        event_id: str,
+        agent_definition: str = "",
+        *,
+        task_text: str = "",
+    ) -> ExecutionRecord:
         """Durable inbox-first path; falls back to ``handle_message`` without an inbox.
 
         Returns an ``ExecutionRecord`` whose ``status`` is
         ``awaiting_workflow_binding`` when the workflow binding is missing, or
         the completed/completed-or-duplicate execution otherwise.
+
+        ``task_text`` is this handoff's instruction, recorded so the worker can
+        hand it to the model (ai4-1e9e). It is stored even when empty: an empty
+        value says "the producer sent no task text", which the worker turns into
+        an explicit instruction instead of letting a node id pass for one.
         """
         if self.inbox is None:
             return self.handle_message(target_id, event_id, agent_definition)
         dedupe_key = f"{target_id}:{event_id}"
         bound = self.binding_resolver(target_id) if self.binding_resolver is not None else True
         status, _created = self.inbox.enqueue(
-            dedupe_key, target_id, event_id, agent_definition, binding_present=bound
+            dedupe_key,
+            target_id,
+            event_id,
+            agent_definition,
+            binding_present=bound,
+            command_text=task_text,
         )
         if status == "awaiting_workflow_binding":
             return ExecutionRecord(dedupe_key, target_id, "awaiting_workflow_binding")
@@ -164,6 +176,8 @@ class WorkAgentRuntime:
         if status == "processed":
             # Duplicate delivery after a restart: never re-run a processed row.
             return ExecutionRecord(dedupe_key, target_id, "processed")
+        if self.dispatcher is not None:
+            return self._dispatch(dedupe_key, target_id, event_id)
         try:
             record = run_one(self.store, self.lease, self.drafts, target_id, event_id, agent_definition)
         except Exception:
@@ -174,6 +188,45 @@ class WorkAgentRuntime:
         self.inbox.mark_processed(dedupe_key)
         return record
 
+    def _dispatch(self, dedupe_key: str, target_id: str, event_id: str) -> ExecutionRecord:
+        """Hand the claimed row to a worker process and report what it did.
+
+        The lease is taken **here**, in the resident process, and held across
+        the subprocess' whole lifetime. That ordering is what makes the lease
+        meaningful: the worker cannot take it (a different owner would be
+        refused), and a second delivery for the same target is refused while
+        the first is still running.
+
+        The row is deliberately left for the worker to mark ``processed``. If
+        this process died right now, the row would still be ``queued`` and
+        `drain_queued()` would re-drive it — the same failure rule as the
+        inline path, only with a wider window.
+        """
+        execution = self.store.enqueue(target_id, event_id)
+        if getattr(self.dispatcher, "deferred", False):
+            # Dispatch is switched off in this process (`SCIWEAVE_WORKER_DISPATCH=0`):
+            # the two roles run as separate services, so the row is left alone
+            # for the standalone worker. Nothing is started and nothing is
+            # marked, which is what "separate services" has to mean.
+            return execution
+        if not self.lease.acquire(target_id):
+            # Another live owner: leave the row queued for whoever holds it.
+            return execution
+        try:
+            if not self.store.start(execution):
+                return execution
+            outcome = self.dispatcher(dedupe_key)
+            status = str(getattr(outcome, "status", "failed"))
+            current = self.store.get(execution.execution_id) or execution
+            if status == "completed":
+                return self.store.complete(current, str(getattr(outcome, "draft_id", "") or ""))
+            return self.store.fail(
+                current,
+                str(getattr(outcome, "status", "worker_failed")),
+            )
+        finally:
+            self.lease.release(target_id)
+
     def bind(self, dedupe_key: str) -> ExecutionRecord | None:
         """Establish a workflow binding: ``awaiting_workflow_binding`` -> ``queued`` and run."""
         if self.inbox is None:
@@ -182,7 +235,12 @@ class WorkAgentRuntime:
         if row is None:
             return None
         self.inbox.bind(dedupe_key)
-        return self.handle_inbound(row["target_id"], row["event_id"], row["agent_definition"])
+        return self.handle_inbound(
+            row["target_id"],
+            row["event_id"],
+            row["agent_definition"],
+            task_text=row.get("command_text", ""),
+        )
 
     def drain_queued(self) -> list[ExecutionRecord]:
         """Re-drive persisted ``queued`` rows (restart recovery) and return executions."""
@@ -190,7 +248,14 @@ class WorkAgentRuntime:
             return []
         results: list[ExecutionRecord] = []
         for row in self.inbox.list_status("queued"):
-            results.append(self.handle_inbound(row["target_id"], row["event_id"], row["agent_definition"]))
+            results.append(
+                self.handle_inbound(
+                    row["target_id"],
+                    row["event_id"],
+                    row["agent_definition"],
+                    task_text=row.get("command_text", ""),
+                )
+            )
         return results
 
     def run_workflow(self, target_id: str, event_id: str, config: object, agent: Callable[..., str], workflow_name: str, prompt: str) -> ExecutionRecord:
@@ -206,7 +271,9 @@ class WorkAgentRuntime:
             result = WorkflowExecutor(config, agent, self.drafts).run(workflow_name, prompt, target_id=target_id)
             current = self.store.get(execution.execution_id) or execution
             if result.status == "completed":
-                return self.store.complete(current, result.draft_id or "")
+                return self.store.complete(
+                    current, result.draft_id or "", getattr(result, "draft_id_source", None)
+                )
             return self.store.fail(current, result.error_code or "workflow_failed", result.failed_agent)
         finally:
             self.lease.release(target_id)

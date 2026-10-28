@@ -93,6 +93,10 @@ def _dispatch(store: SqliteExecutionStore, name: str, arguments: dict) -> dict:
             "target_id": record.target_id,
             "status": record.status,
             "draft_id": record.draft_id,
+            # `agent_reported` means the id came from the agent's own answer, not
+            # from a draft this process wrote (ai4-x0ay). A reviewer who sees it
+            # should know the runtime cannot vouch for the draft behind it.
+            "draft_id_source": record.draft_id_source,
             "error_code": record.error_code,
             "failed_agent": record.failed_agent,
             "reviews": store.reviews(record.execution_id),
