@@ -84,3 +84,16 @@ relative/subdir (合法相对)   → reject=False (accepted)
 
 补充：runtime 构建后端已切到 uv_build（与 ai4-grlc 的 session_dir 缺陷无关，属构建层修复）。Windows 沙箱下 setuptools editable 重建 egg-info 持续「拒绝访问」，runtime 与 buffer 均切 uv 原生 uv_build 后端（module-name 显式声明 src 包）并加 `-p no:cacheprovider`（pytest 9.2 在 .pytest_cache 写入被拒时 mkdtemp 无限重试挂起）；全量 CI 21/21 阶段、874 用例通过（runtime 106 passed、buffer 30 passed），PR #54 mergeable:true。Linux 侧首次真跑仍待 Gitee Go 接入后在 ci.sh 矩阵确认（脚本已带 no:cacheprovider，与 Windows 行为一致），本票第四条维持等待 grlc 修复。
 
+**2026-10-28T04:20:00Z**
+
+**uv_build 已在 Linux 真实容器验证（跨平台风险关闭）**
+
+用 Docker 在 `python:3.12-slim` 内跑 `uv sync --locked` + pytest，两个切了 uv_build 的项目均能正常构建可编辑安装并跑测试：
+
+| 项目 | Linux 结果 |
+| --- | --- |
+| runtime（挂载整个 `deploy-task-agent` 后） | `1 failed, 105 passed, 9 subtests` ——唯一失败是 `test_a_session_dir_cannot_escape_the_home`，即 ai4-grlc 第一条缺陷（POSIX 上盘符/反斜杠不判绝对路径），与本轮构建改动无关，本票原有结论不变 |
+| buffer | `30 passed, 3 skipped` |
+
+即 setuptools→uv_build 的迁移在两个平台都成立，Windows 的 egg-info 拒绝访问不再是构建阻塞项；Linux 上 runtime 仍是「Windows 绿、Linux 红 1 条」，待 Frank Qi 修 grlc 后复测。另记：只挂 `runtime/` 目录会额外出现 `test_standard_mcp_cards`、`test_subscriber_loop` 失败（缺 `libs/mcp-libs` 与兄弟目录），挂整个套件后消失——与本票 2026-10-27 记录的挂载假象一致。
+
