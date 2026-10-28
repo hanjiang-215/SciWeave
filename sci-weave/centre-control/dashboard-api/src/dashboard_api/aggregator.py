@@ -127,8 +127,16 @@ def _sanitize_mapping(value: Mapping[str, object]) -> dict[str, object]:
     return sanitized
 
 
+_SENSITIVE_PATTERN = re.compile(
+    r"(?i)"
+    r"\b(?:authorization|bearer|token|secret|password|passwd|api[-_]?key|access[-_]?key|private[-_]?key)\b"
+    r"|(?:[A-Za-z]:\\|\\\\[^\s\\]+\\[^\s]+)"  # Windows drive or UNC absolute paths
+    r"|(?:\b[a-z][a-z0-9+.-]*://[^\s/@]+:[^\s/@]+@)"  # URLs carrying inline credentials
+)
+
+
 def _safe_message(value: str) -> str:
-    if re.search(r"(?i)\b(?:authorization|bearer|token|secret|password|api[-_]?key)\b|(?:[A-Za-z]:\\|/)(?:[^\s]+)", value):
+    if _SENSITIVE_PATTERN.search(value):
         return "来源错误详情包含敏感信息，已隐藏"
     return " ".join(value.splitlines())[:500]
 
