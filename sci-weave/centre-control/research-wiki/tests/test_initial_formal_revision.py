@@ -75,3 +75,36 @@ class InitialFormalRevisionTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class DomainConsistencyTests(unittest.TestCase):
+    """B12: a store whose pointers live under another domain is a mismatch."""
+
+    def test_list_known_domains_reports_pointer_domains(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = SqliteStore(str(Path(directory) / "wiki.db"))
+            store.initialize()
+            store.ensure_initial_formal_revision(
+                formal_revision_id="rev", result_id="result", wiki_domain_id="wiki-diabetes",
+                terminus_store_id="store", formal_branch_id="main", formal_commit_hash="commit",
+            )
+            self.assertEqual(store.list_known_domains(), ["wiki-diabetes"])
+
+    def test_domain_mismatch_is_detected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = SqliteStore(str(Path(directory) / "wiki.db"))
+            store.initialize()
+            store.ensure_initial_formal_revision(
+                formal_revision_id="rev", result_id="result", wiki_domain_id="wiki-diabetes",
+                terminus_store_id="store", formal_branch_id="main", formal_commit_hash="commit",
+            )
+            import importlib.util, sys
+            from pathlib import Path as _P
+            main_path = _P(__file__).resolve().parents[1] / "src" / "main.py"
+            spec = importlib.util.spec_from_file_location("wiki_entry_main", main_path)
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            # configured domain differs from the data domain -> mismatch surfaced
+            self.assertTrue(module._warn_if_domain_mismatch(store, "sciweave-wiki"))
+            # configured domain matches -> no mismatch
+            self.assertFalse(module._warn_if_domain_mismatch(store, "wiki-diabetes"))
