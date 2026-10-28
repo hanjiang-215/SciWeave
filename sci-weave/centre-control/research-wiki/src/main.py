@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import sys
@@ -33,6 +34,19 @@ def main(argv: list[str] | None = None) -> int:
         username=config.terminusdb_username,
         password=config.terminusdb_password,
     )
+    if sqlite_store.get_current_formal_revision_id(config.domain_id) is None:
+        domain_key = hashlib.sha256(config.domain_id.encode("utf-8")).hexdigest()
+        initial = terminus_store.ensure_default_formal_snapshot(config.domain_id)
+        if initial.status != "confirmed":
+            raise RuntimeError(f"wiki default formal snapshot initialization failed: {initial.reason_code}")
+        sqlite_store.ensure_initial_formal_revision(
+            formal_revision_id="wiki-default-" + domain_key,
+            result_id="wiki-default-result-" + domain_key,
+            wiki_domain_id=config.domain_id,
+            terminus_store_id=initial.store_id,
+            formal_branch_id=initial.branch_id,
+            formal_commit_hash=initial.commit_hash,
+        )
     service = ResourceReviewService(
         sqlite_store=sqlite_store,
         terminus_store=terminus_store,

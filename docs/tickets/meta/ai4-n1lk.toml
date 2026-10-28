@@ -1,0 +1,2 @@
+module = "governance"
+summary = "在 Mapping 与 Wiki 启动时幂等创建默认正式版本"
