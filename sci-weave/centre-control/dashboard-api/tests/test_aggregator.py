@@ -67,6 +67,17 @@ class DashboardAggregatorTests(unittest.TestCase):
         self.assertEqual(result["projects"], [{key: value for key, value in project.items() if key != "accessToken"}])
         self.assertNotIn("do-not-forward", str(result))
 
+    def test_keeps_non_sensitive_diagnostics_with_slashes_and_urls(self) -> None:
+        service = {"id": "g1", "name": "Gateway", "role": "task-agent", "status": "unavailable", "error": "upstream https://gateway.internal/api/dashboard/snapshot returned status/503"}
+        def fetch(source: SourceSpec) -> dict[str, object]:
+            return {"observedAt": "2026-10-22T09:00:00Z", "services": [service]}
+
+        result = DashboardAggregator(SOURCES, fetch).get_snapshot()
+        serialized = str(result)
+        self.assertIn("https://gateway.internal/api/dashboard/snapshot", serialized)
+        self.assertIn("status/503", serialized)
+        self.assertNotIn("已隐藏", serialized)
+
     def test_redacts_sensitive_diagnostic_strings(self) -> None:
         service = {"id": "g1", "name": "Gateway", "role": "task-agent", "status": "unavailable", "error": "Authorization: Bearer super-secret at C:\\private\\data"}
         def fetch(source: SourceSpec) -> dict[str, object]:
