@@ -44,6 +44,14 @@ uv run --env-file .env python src/main.py
 
 该服务不实现用户身份系统。默认只绑定内部地址；对外部署必须放在受信任网络或具备认证的 HTTPS 反向代理之后。CORS 不是访问控制。浏览器端不应持有领域服务令牌或来源凭据；推荐同源部署，让反向代理承担用户认证与 TLS。
 
+### 跨源部署（前端与 API 不同源）
+
+浏览器将看板前端与 API 部署在不同源（不同主机、端口或协议）时，浏览器会先发 CORS 预检；此时必须把前端的确切 origin（例如 `https://dashboard.example.com`，只填 scheme://host[:port]，不带路径）配置到 `SCIWEAVE_DASHBOARD_CORS_ORIGIN`，否则预检不通过、请求被浏览器拦截，前端表现为持续报"数据服务暂时无法连接"。
+
+- 该变量只接受**单一** origin，且只有请求 `Origin` 与之完全一致时才下发 `Access-Control-Allow-Origin`；未配置时不下发任何 CORS 头。
+- 前端还需把 `VITE_DASHBOARD_API_URL` 指向 API 的可达基地址。
+- 同源部署（通过反向代理把前端与 `/api` 放在同一源下）无需配置 CORS，是更推荐的方式。
+
 ## 来源片段契约
 
 每个已配置来源通过 `GET <configured-url>` 返回一个 JSON 对象。`observedAt` 是来源采集时刻，采用包含时区的 ISO 8601 时间；`sourceStatus` 可为 `fresh`、`stale`、`partial` 或 `unavailable`；`freshUntil` 可选。聚合响应还包含 `mode: "live"`，用于防止前端把实时来源误认成本地演示数据。来源只填充自己负责的数组字段：
