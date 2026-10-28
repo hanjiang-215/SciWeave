@@ -1,0 +1,123 @@
+{
+  "name": "disposition",
+  "version": "0.1.0",
+  "description": "The Centre Agent's own disposition surface: observe the pre-review executions it runs, answer a worker's question, record an append-only decision, and read health.",
+  "transport": "streamable-http",
+  "endpoint": {
+    "url_env": "DISPOSITION_MCP_URL"
+  },
+  "environment": [
+    "DISPOSITION_MCP_URL",
+    "DISPOSITION_MCP_TOKEN"
+  ],
+  "notes": [
+    "Signature differences from the researcher side are intentional (docs/data-flow/work-agent.md): here answer_question takes an idempotency_key and queues a resume_of record; review_execution takes idempotency_key and offers request_revision / reject / request_human_takeover. The researcher-side surface has neither, because the replay semantics of a personal machine are a different problem (ai4-58d0).",
+    "Still no submit_owner_command and no tool that creates an execution from nothing. Centre work is triggered by candidate events, not by a command surface.",
+    "review_execution here disposes a pre-review *execution*, not a candidate. It moves the execution to needs_revision / rejected / human_takeover; it cannot formalize anything."
+  ],
+  "tools": [
+    {
+      "name": "health",
+      "description": "Read authenticated Centre Agent health.",
+      "input": {
+        "type": "object",
+        "required": [],
+        "properties": {}
+      }
+    },
+    {
+      "name": "query_execution",
+      "description": "Query one Centre Agent execution.",
+      "input": {
+        "type": "object",
+        "required": [
+          "execution_id"
+        ],
+        "properties": {
+          "execution_id": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "list_pending",
+      "description": "List Centre Agent executions.",
+      "input": {
+        "type": "object",
+        "required": [],
+        "properties": {}
+      }
+    },
+    {
+      "name": "cancel_execution",
+      "description": "Request cancellation of an execution.",
+      "input": {
+        "type": "object",
+        "required": [
+          "execution_id"
+        ],
+        "properties": {
+          "execution_id": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "answer_question",
+      "description": "Answer a Worker question; queues a resumed execution that points at the original.",
+      "input": {
+        "type": "object",
+        "required": [
+          "execution_id",
+          "answer",
+          "idempotency_key"
+        ],
+        "properties": {
+          "execution_id": {
+            "type": "string"
+          },
+          "answer": {
+            "type": "string"
+          },
+          "idempotency_key": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "review_execution",
+      "description": "Dispose a finished execution: request_revision, reject or request_human_takeover.",
+      "input": {
+        "type": "object",
+        "required": [
+          "execution_id",
+          "decision",
+          "reason",
+          "idempotency_key"
+        ],
+        "properties": {
+          "execution_id": {
+            "type": "string"
+          },
+          "decision": {
+            "type": "string",
+            "enum": [
+              "request_revision",
+              "reject",
+              "request_human_takeover"
+            ]
+          },
+          "reason": {
+            "type": "string"
+          },
+          "idempotency_key": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+[Unit]
+Description=SciWeave Centre Agent disposition MCP (query/list/cancel/answer/review)
+After=network-online.target
+Wants=network-online.target
+# Shares the SQLite execution store with ingest, so both must live on the same
+# host and see the same file.
+After=sciweave-centre-agent-ingest.service
+
+[Service]
+Type=simple
+WorkingDirectory=%h/.sciweave/centre
+EnvironmentFile=%h/.sciweave/centre/.env
+ExecStart=%h/.sciweave/centre/bin/start-mcp
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=default.target
