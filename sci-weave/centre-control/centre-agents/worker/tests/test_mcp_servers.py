@@ -172,6 +172,28 @@ class RenderTests(unittest.TestCase):
         document = yaml.safe_load(body)
         self.assertEqual(document["mcp"]["servers"]["svc"]["url"], "https://host.invalid/mcp#fragment")
 
+    def test_the_real_settings_loader_accepts_the_rendered_file(self) -> None:
+        # "Valid YAML" is not the requirement — fast-agent reads this file through
+        # pydantic settings, and `transport: http` only works because that is the
+        # literal fast-agent names its streamable-HTTP client. Asserting against
+        # yaml.safe_load alone would pass with a transport it cannot start.
+        from fast_agent.config import get_settings
+
+        body = render_fast_agent_config(
+            {
+                "research-mapping": {"transport": "http", "url": "https://m.invalid/mcp"},
+                "email-service": {"transport": "http", "url": "https://e.invalid/mcp"},
+            }
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "fast-agent.yaml"
+            path.write_text(body, encoding="utf-8")
+            settings = get_settings(config_path=str(path))
+        self.assertEqual(sorted(settings.mcp.servers), ["email-service", "research-mapping"])
+        self.assertEqual(settings.mcp.servers["research-mapping"].transport, "http")
+        self.assertEqual(settings.mcp.servers["research-mapping"].url, "https://m.invalid/mcp")
+        self.assertFalse(settings.compaction.auto)
+
 
 if __name__ == "__main__":
     unittest.main()
