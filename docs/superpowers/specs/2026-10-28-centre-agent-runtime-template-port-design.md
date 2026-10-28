@@ -4,7 +4,7 @@
 - 关联工单：`ai4-yidf`（本规格的父票）
 - 上游决策：[`ai4-fv1r`](../../../.tickets/ai4-fv1r.md)（中央 Agent 只做候选预审）、[`ai4-he04`](../../../.tickets/ai4-he04.md)（入口只走领域管理 MCP 只读候选工具）、[`ai4-a2ba`](../../../.tickets/ai4-a2ba.md)（事件触发与去抖）、[`ai4-z3z4`](../../../.tickets/ai4-z3z4.md)（最小 Work Agent 实现规格）
 - 约束：[ADR-0002](../../adr/0002-work-agent-two-codebases.md)（两份源码，不抽共享库）、[ADR-0001](../../adr/0001-task-dispatch-via-message-queue.md)（下发只走队列，MCP 只承担处置与观察）
-- 状态：施工前规格，供拆票使用
+- 状态：施工前规格，供拆票使用。其中「卡片与套件清单留在 `toolkits/centre-agent-toolkit`」一条已被 [`2026-10-28-centre-agent-definition-layer-alignment-design.md`](2026-10-28-centre-agent-definition-layer-alignment-design.md) 取代（卡片迁入 `centre-agents/libs/mcp-libs/`），套件目录本身也已随 `ai4-0wg0` 删除；其余决策继续有效。
 
 ## Problem Statement
 

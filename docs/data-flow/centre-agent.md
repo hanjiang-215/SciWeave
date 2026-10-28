@@ -98,8 +98,8 @@
 ## 需要的组成
 
 中央 Agent 是中央服务器上的一个**服务**，不是发给研究员的套件。它的能力描述（定义、
-卡片、判据）跟着源码走，`toolkits/centre-agent-toolkit/` 只保留「怎么把它装起来、
-怎么定期体检」。
+卡片、判据）跟着源码走，部署单元是 `sci-weave/centre-stack/`（ADR-0006），判据正文见
+[`centre-agent-prereview.md`](centre-agent-prereview.md)。
 
 | 组成 | 内容 | 现状 |
 | --- | --- | --- |
@@ -113,22 +113,23 @@
 | 触发订阅 | 消费领域 MCP 发出的候选事件与正式版本发布事件，短窗口去抖后拉全量快照 | 已实现，见 `centre-agents/gateway/subscriber`；消息语义见 `ai4-te1v` |
 | 草稿箱 | 中央 Agent 不进草稿箱；一审由人在 `centre-control/buffer` 完成 | 已实现，见 `sci-weave/centre-control/buffer/`；契约见 `draft-buffer.md` |
 | 留痕工具 | 接口层调用账本：中央各 MCP 的对外工具调用统一记录 | 规格见 `ai4-tg3v`，代码落地见 `ai4-gvan` |
-| 技能 | 预审判据、冲突矩阵、混合候选生成、失效判定、候选分支核查 | 已实现，见 `toolkits/centre-agent-toolkit/`（5 个技能）；目的是人读的说明，运行时的指令在定义层 |
-| 定时体检 | 预审停滞与队列可达性检查；唯一无法发现自己缺席的组件就是消费者本身 | 已实现，`toolkits/centre-agent-toolkit/cron/prereview-sweep.sh`，只读，按 `*/10 * * * *` 建议调度 |
+| 判据文本（人读） | 四项检查、冲突矩阵、失效判定、混合候选的判定口径与边界 | 已实现，见 [`centre-agent-prereview.md`](centre-agent-prereview.md)；运行时的指令在定义层 |
+| 定时体检 | 预审停滞与队列可达性检查；唯一无法发现自己缺席的组件就是消费者本身 | 已实现，`centre-agents/ops/prereview-sweep.sh`，只读，按 `*/10 * * * *` 建议调度 |
 
-套件侧仍是可安装的形态（`suite.yaml` + 技能 + 安装/自检脚本 + 常驻单元），静态校验用
-`suitecheck`：
+判据与运行时指令分处两地，是有意为之：`skills=[]` 让模型只看到定义层，而定义层只写
+「这一步做什么、能调什么、绝不能做什么」；判据本身（四项检查各查什么）在人读的
+`docs/` 里，从来不是第二份运行时真相。
 
-```bash
-cd sci-weave/toolkits/suitecheck
-uv run python -m suitecheck.cli check ../centre-agent-toolkit
-```
+中央 Agent 不再是一个可安装套件。原先 `toolkits/centre-agent-toolkit/` 里的两样东西
+已按 `ai4-0wg0` 迁移：判据文本并入 `centre-agent-prereview.md`，停滞体检脚本搬到
+`centre-agents/ops/`；systemd 用户级单元与 `bin/start-*` 随套件一起退场，部署只走
+`centre-stack` 单容器。
 
-套件只发布**配置**，不发布中央源码，也不发布 MCP 卡片（ADR-0002 保持两侧 work-agent
-代码库分开）：`bin/start-*` 读 `SCIWEAVE_CENTRE_AGENTS_HOME` 后在那里跑。卡片与定义在
-`centre-agents/` 里，两者与被描述的服务同源，不会再出现「套件指向已移动的卡片」。
+判据版本仍由 `centre-agents/rules/<version>.json` 承载，两份领域 MCP 的
+`SCIWEAVE_*_PREREVIEW_RULES_DIR` 必须指向同一目录。报告里只记版本号与 `checks` 名称，
+不复制判据正文——正文搬一份进报告就会变成第二份真相。
 
-这套件里不该出现的：直接写正式图的工具、代替 Project Owner 批准的工具、发起执行或调度 Worker 的工具、一次调用同时改 Mapping 和 Wiki 的工具、部署 Task Agent 的工具、判断「下一步该谁动」的工具。
+中央侧不该出现的：直接写正式图的工具、代替 Project Owner 批准的工具、发起执行或调度 Worker 的工具、一次调用同时改 Mapping 和 Wiki 的工具、部署 Task Agent 的工具、判断「下一步该谁动」的工具。
 
 ## 对应工单
 

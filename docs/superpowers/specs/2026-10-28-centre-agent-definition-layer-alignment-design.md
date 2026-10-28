@@ -4,7 +4,7 @@
 - 关联工单：`ai4-yidf`（父票）；本规格取代 [`2026-10-28-centre-agent-runtime-template-port-design.md`](2026-10-28-centre-agent-runtime-template-port-design.md) 中「卡片留在套件、中央侧不复制」的落地位置决策，其余决策继续有效
 - 上游决策：[`ai4-fv1r`](../../../.tickets/ai4-fv1r.md)（中央 Agent 只做候选预审）、[`ai4-he04`](../../../.tickets/ai4-he04.md)（入口只走领域管理 MCP 只读候选工具）、[`ai4-a2ba`](../../../.tickets/ai4-a2ba.md)（事件触发与去抖）
 - 约束：[ADR-0002](../../adr/0002-work-agent-two-codebases.md)（两份源码，不抽共享库）、[ADR-0006](../../adr/0006-centre-single-container.md)（中央侧单容器多进程）
-- 状态：施工前规格，供拆票使用
+- 状态：已施工。后续修订（`ai4-0wg0`）把「套件侧退场」推进到底：`toolkits/centre-agent-toolkit/` 整个目录已删除，判据文本并入 [`centre-agent-prereview.md`](../../data-flow/centre-agent-prereview.md)，停滞体检脚本搬到 `centre-agents/ops/`。本规格里「套件保留 skills / cron / bin / suite.yaml / install.sh / check.sh」那句因此作废，其余决策不变。
 
 ## Problem Statement
 
