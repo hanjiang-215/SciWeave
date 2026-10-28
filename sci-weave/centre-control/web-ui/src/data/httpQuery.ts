@@ -95,10 +95,14 @@ function isWikiCandidate(value: unknown): boolean {
     && ['candidate', 'review_pending', 'approved_pending_formalization', 'rejected', 'revoked', 'formalized'].includes(String(value.state))
     && isString(value.updatedAt) && Array.isArray(value.references) && value.references.every(isReference)
 }
+function isFailureFact(value: unknown): boolean {
+  return isRecord(value) && isString(value.target) && isString(value.occurredAt) && isString(value.summary)
+}
 function isExecution(value: unknown): boolean {
   return isRecord(value) && isString(value.id) && isString(value.taskId)
     && ['queued', 'running', 'waiting', 'succeeded', 'cancelled', 'failed', 'result_unknown', 'completed', 'needs_revision', 'rejected', 'human_takeover'].includes(String(value.status))
     && ['queue', 'operator'].includes(String(value.trigger)) && isString(value.updatedAt)
+    && (value.failure === undefined || value.failure === null || isFailureFact(value.failure))
 }
 function isService(value: unknown): boolean {
   return isRecord(value) && isString(value.id) && isString(value.name)
