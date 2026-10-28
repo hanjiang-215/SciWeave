@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import Protocol
 
 from .mcp_servers import MCPServerConfigError, fast_agent_servers, render_fast_agent_config
+from .skills import SkillsConfig, SkillsConfigError, load_skills
 
 _DRIVE_PREFIX = re.compile(r"^[A-Za-z]:")
 
@@ -108,6 +109,12 @@ class FastAgentDeepSeekRuntime:
         # says nothing about the missing variable. This way the worker refuses
         # to start, like it does for every other configuration defect.
         self._mcp_servers()
+        # Same reasoning for skills: resolve the directories here so a wrong
+        # `SCIWEAVE_SKILLS_PATH` fails at startup. `fast_agent` would otherwise
+        # fall back to scanning the home directory, and a worker that silently
+        # ran with no skills (or with a stranger's) looks identical to a healthy
+        # one until the model improvises (ai4-4r0h follow-up).
+        self.skills = load_skills(self.environ)
 
     def run(self, request: AgentRequest) -> AgentOutcome:
         return self._execute(request, resumed=False)
@@ -159,6 +166,13 @@ class FastAgentDeepSeekRuntime:
                 # resource gets an agent with no MCP tools, rather than one
                 # inheriting whatever happens to be configured elsewhere.
                 servers=list(self._servers()),
+                # Likewise for skills: a path list, or ``None`` for "no skills".
+                # ``None`` is deliberate rather than omitting the argument —
+                # the default is fast-agent's ``SKILLS_DEFAULT`` sentinel, which
+                # resolves to whatever is in the home directory. An unattended
+                # worker must run exactly the skills its suite shipped
+                # (ai4-4r0h follow-up; see `skills.py`).
+                skills=list(self.skills.directories) if self.skills else None,
                 use_history=True,
             )
             async def worker_loop() -> None:

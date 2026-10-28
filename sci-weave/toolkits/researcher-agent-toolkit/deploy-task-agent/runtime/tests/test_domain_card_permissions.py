@@ -53,6 +53,7 @@ PRE_REVIEW_EXCEPTIONS = {"list_reviewable_candidates", "list_reviewable_wiki_can
 OWNER_SIDE = {
     "research-mapping": {
         "list_reviewable_candidates", "submit_candidate", "preview_candidate",
+        "create_merge_request",
         "record_review", "formalize_candidate", "reconcile_formalization",
         "append_prereview_log", "create_merged_candidate",
     },

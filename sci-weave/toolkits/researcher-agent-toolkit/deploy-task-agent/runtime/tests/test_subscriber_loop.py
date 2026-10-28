@@ -114,7 +114,7 @@ class SubscriberRunLoopTests(unittest.TestCase):
         `message.key` is `"{task_node_id}:{target_node_version_ref}"`. Falling
         back to it made `target_id` a compound string: two versions of one node
         took separate Worker Leases and ran concurrently, and the draft told the
-        central buffer that `source_target_node_id` was `node-1:cv-1`.
+        central buffer that `source_task_node_id` was `node-1:cv-1`.
         """
         envelope, key = producer_handoff(task_node_id="node-1", version_ref="cv-1")
         queue = FakeQueue()

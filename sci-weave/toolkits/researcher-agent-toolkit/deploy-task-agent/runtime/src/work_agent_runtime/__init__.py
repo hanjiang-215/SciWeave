@@ -21,6 +21,7 @@ from .inbox import InboxError, InboxStore
 from .lease import DEFAULT_LEASE_SECONDS, LeaseHeldError
 from .mcp_servers import MCPServerConfigError, ServerSpec, fast_agent_servers, render_fast_agent_config, server_spec
 from .notifications import NotificationIntent, build_intent, notification_problem
+from .skills import LOCAL_VARIABLE as LOCAL_SKILLS_VARIABLE, SHIPPED_VARIABLE as SHIPPED_SKILLS_VARIABLE, SkillsConfig, SkillsConfigError, load_skills
 from .worker_dispatch import WorkerDispatchError, WorkerRun, WorkerSubprocess
 from .workflow_agent import WorkflowAgent, WorkflowPlan, plan_for
 from .runtime import (
@@ -64,6 +65,11 @@ __all__ = [
     "NotificationIntent",
     "build_intent",
     "notification_problem",
+    "SkillsConfig",
+    "SkillsConfigError",
+    "load_skills",
+    "LOCAL_SKILLS_VARIABLE",
+    "SHIPPED_SKILLS_VARIABLE",
     "WorkerDispatchError",
     "WorkerRun",
     "WorkerSubprocess",

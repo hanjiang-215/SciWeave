@@ -23,7 +23,7 @@ that exists today omits ``target``, ``event_id`` and ``schema_version``
 entirely. Reading only one layout meant ``target_id`` fell back to the Kafka
 key, which is ``"{task_node_id}:{target_node_version_ref}"`` — a compound string
 that defeated the Worker Lease and leaked into the draft box as
-``source_target_node_id``.
+``source_task_node_id``.
 """
 
 from __future__ import annotations
