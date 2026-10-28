@@ -1,0 +1,3 @@
+# ai4-0wg0 的索引归属与简介（人工维护）
+module = ["agent", "infra"]
+summary = "中央 Agent 套件退场：体检脚本迁入 centre-agents，删除 toolkits/centre-agent-toolkit"

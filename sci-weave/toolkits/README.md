@@ -5,39 +5,39 @@
 
 目标，上传一个套件zip给Agent，他能自动安装使用
 
-## 三个套件
+## 两个套件
 
 | 套件 | 装在哪 | 以谁的身份调用 | 能做 | 不能做 |
 | --- | --- | --- | --- | --- |
 | `researcher-agent-toolkit/` | 研究员自己的机器（个人 Agent + 自己部署的 Task Agent） | `researcher` | 提交候选、审自己的稿、起草、部署 Task Agent | 审批成正式版本、预审、合并候选 |
-| `centre-agent-toolkit/` | 中央服务器（中央 Agent 本身跑在 `centre-stack` 里，套件只装它的配置与体检） | `centre` | 预审候选、冲突矩阵、合并候选、失效标记 | 进草稿箱、formalize、派发任务 |
 | `project-owner-agent-toolkit/` | 负责人自己的机器（自己的 harness） | `project_owner` | formalize / 退回 / 拒绝候选、派发根任务 | 预审、合并候选 |
 
 `task-agent-toolkit/` 已移除：Task Agent 由研究员在 `researcher-agent-toolkit/deploy-task-agent/`
 里部署，它的运行时、服务模板、libs 和技能都在那里，不再单独成套件。
 
-三个套件当前的内容：
+`centre-agent-toolkit/` 也已移除（`ai4-0wg0`）：中央 Agent 是中央服务器上的一个**服务**，
+由 `sci-weave/centre-stack/` 单容器部署，不是一个发给谁去安装的套件。它的定义
+（`centre-agents/definitions/`）、卡片（`centre-agents/libs/mcp-libs/`）、判据
+（`centre-agents/rules/` 与 `docs/data-flow/centre-agent-prereview.md`）、停滞体检脚本
+（`centre-agents/ops/prereview-sweep.sh`）全部与被描述的服务同源。原先套件里的 systemd
+用户级单元与 `bin/start-*` 与 ADR-0006 的部署形态相冲突，一并退场。
+
+两个套件当前的内容：
 
 | 套件 | 技能 | MCP 卡片 | hook | cron | 安装后跑什么 |
 | --- | --- | --- | --- | --- | --- |
 | `researcher-agent-toolkit` | 8（+ `deploy-task-agent` 侧 6） | 7 | 1（`harness-open`） | — | 个人 Agent 的会话；Task Agent 另行部署 |
-| `centre-agent-toolkit` | 5 | 0（见下） | — | 1（`prereview-sweep`） | 两个常驻单元：`ingest` 与 `mcp` |
 | `project-owner-agent-toolkit` | 6 | 5 | — | — | 负责人自己的 harness，无常驻进程 |
 
-`centre-agent-toolkit` 是唯一声明 0 张卡片的套件：中央 Agent 是服务器上的一个**服务**，
-它连哪些 MCP、每一步说什么，写在 `centre-agents/definitions/` 与
-`centre-agents/libs/mcp-libs/` 里，与被描述的服务同源（`ai4-349h`）。套件这边只说
-「怎么把它装起来、怎么定期体检」，所以没有卡片可指。
-
 套件的差别不在「工具多少」，而在**谁能把什么变成正式事实**：研究员能提交不能批准，
-中央 Agent 能预审不能正式化，负责人能正式化不能预审。任何一套里出现越界的工具，
-先看 `suite.yaml` 的 `actor` 是不是写错了。
+负责人能正式化不能预审。任何一套里出现越界的工具，先看 `suite.yaml` 的 `actor`
+是不是写错了。
 
 ## 套件长什么样
 
 每个套件目录一份 `suite.yaml`，其余都是它声明的载荷。技能就是套件根下的
-`<技能名>/SKILL.md`，MCP 卡片在 `mcp/<服务名>/mcp.json`（套件声明 0 张卡片时整段写
-`mcp: []`）——和已有的空目录一致，不再另起一层 `skills/`：
+`<技能名>/SKILL.md`，MCP 卡片在 `mcp/<服务名>/mcp.json`——和已有的空目录一致，
+不再另起一层 `skills/`：
 
 ```yaml
 suite: researcher-agent-toolkit   # 目录名；技能名以它为前缀
@@ -84,12 +84,17 @@ check: [./check.sh]
 这张表就是四个角色之间那条线：负责人手里没有 `centre`（否则他能一次读到所有域的全部候选），
 中央 Agent 手里没有 `formalize`（否则预审和裁决合成一个人），研究员手里两者都没有。
 
+`centre` 这一档保留在能力表里，因为领域的令牌与能力配置（`centre-stack/compose.yaml` 的
+`*_CALLER_CAPABILITIES_JSON`）仍然按它发放；它现在没有对应的套件，中央 Agent 的调用方身份
+由容器环境直接配置。同理，`suitecheck` 允许「只声明技能、不声明卡片」的套件形状
+（`suite_empty` 只在两者都为空时报错）——当前两个套件都有卡片，这条规则留作通用约束。
+
 ## 校验
 
 ```bash
 cd sci-weave/toolkits/suitecheck
 uv run python -m suitecheck.cli check ../
-uv run python -m suitecheck.cli run check ../centre-agent-toolkit
+uv run python -m suitecheck.cli run check ../project-owner-agent-toolkit
 ```
 
 `check` 只做静态校验：manifest 字段、技能 `SKILL.md` 的 frontmatter、MCP 卡片的

@@ -1,8 +1,8 @@
 ---
 id: ai4-8d9j
-status: open
-deps: []
-links: [ai4-tesq, ai4-349h, ai4-k2le, ai4-8dgd]
+status: closed
+deps: [ai4-0wg0]
+links: [ai4-tesq, ai4-349h, ai4-k2le, ai4-8dgd, ai4-0wg0, ai4-fm4a, ai4-japd]
 created: 2026-10-28T01:06:41Z
 type: bug
 priority: 2
@@ -32,3 +32,21 @@ for item in bin cron systemd README.md; do
 - [ ] 有测试断言安装脚本的拷贝清单包含这两项（先例：套件的 `test_installation.py`）
 - [ ] `suitecheck` 仍能对三个套件一起通过
 
+
+## Notes
+
+**2026-10-28T06:46:39Z**
+
+2026-10-28：本票作废（obsolete），不按原验收执行。
+
+`ai4-0wg0` 退场了 `sci-weave/toolkits/centre-agent-toolkit`：中央 Agent 是中央服务器上的服务，由 `centre-stack` 单容器部署（ADR-0006），不再有需要安装的套件目录，因此也不存在「install.sh 漏拷 mcp/ 与 suite.yaml」这件事。
+
+本票原本要保的失败形态（文件在仓库里、装完就没有）仍然成立，只是防线换了位置：
+- 卡片目录改由 `centre-stack/Dockerfile` 的 `COPY centre-control/centre-agents/` 进入镜像，`worker/tests/test_deployment_config.py` 与 `test_assembly.py` 的 ShippedTreeTests 读真实目录并钉住变量；
+- 套件侧只剩 researcher 与 project-owner 两个，`suitecheck check ../` 对两者 0 finding。
+
+依赖关系保留（`deps: [ai4-0wg0]`）以便索引能显示它被哪张票取代。关闭原因记为「被 ai4-0wg0 取代」，不是「已完成」。
+
+**2026-10-28T06:46:53Z**
+
+关闭：被 ai4-0wg0 取代。套件目录已不存在，票面要求的 install.sh / check.sh 改动没有对象可改。

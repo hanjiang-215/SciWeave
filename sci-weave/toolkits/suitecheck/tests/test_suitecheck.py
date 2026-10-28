@@ -292,9 +292,10 @@ class PayloadTests(SuiteFixture):
         self.assertIn("suite_empty", codes)
 
     def test_a_suite_may_declare_skills_and_no_cards(self) -> None:
-        # `centre-agent-toolkit` (ai4-349h): the service it configures talks to
-        # MCP servers whose cards belong to the service source, not to the suite
-        # tree. Declaring no cards is a real shape; declaring nothing is not.
+        # ai4-349h / ai4-0wg0: a suite that only installs configuration for a
+        # service talks to MCP servers whose cards belong to that service's
+        # source, not to the suite tree. Declaring no cards is a real shape;
+        # declaring nothing is not.
         root = self.build()
         text = (root / "suite.yaml").read_text(encoding="utf-8")
         start = text.index("mcp:")
