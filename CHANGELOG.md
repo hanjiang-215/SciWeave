@@ -498,6 +498,9 @@
 - *(tickets)* 复核 deploy-task-agent 四张票并补一致性收口票
 - *(tickets)* Record uv_build fix and PR 54 green round-back on ai4-0vnn/ai4-aaff
 - *(competition)* Record real SciencePal T1/T2 execution evidence
+- *(changelog)* Record the SciencePal execution evidence round
+- *(competition)* Time the demo segments on the live platform
+- *(tickets)* Record the Linux uv_build validation on ai4-0vnn
 
 ### 🚜 Refactor
 
