@@ -161,3 +161,7 @@ tags: [wayfinder:prototype, product, sciencepal, ai4science]
 **2026-10-28T01:45:00Z**
 
 T1/T2 执行包已固化并本地验证：`humans/competition/demo-evidence/sciencepal-runs/run_t1_t2_on_sciencepal.py` 把 `check_iris_input.py` + `run_iris_baseline.py` + 锁定快照交给 SciencePal 沙箱执行，轮询终态、下载产物、核对后落盘 `sciencepal_t1_t2_evidence.json`。用假 SciencePal 服务完整验证（staging→run→collect→核对→证据，exit 0），期间修掉两处实现偏差（collect 返回无 content 字段需读落盘文件；T1 输出键为 `snapshot_sha256` 而非 `input_snapshot_sha256`）。当前 sciencepal.ai 网络不通（仅该域超时），平台恢复即实跑补齐「SciencePal 实际承载核心任务」硬门槛；证据卡与 project-summary 已同步标注执行入口。
+
+**2026-10-28T02:55:00Z**
+
+PR #54（centre-stack 部署 + 治理接线 + 本票 SciencePal 执行包）已更新并通过全量回归：Windows CI 21/21 阶段、874 用例通过，`mergeable:true`（Gitee 已重算）。本轮附带修复 runtime/buffer 构建后端（setuptools→uv_build，Windows 沙箱 egg-info 写入限制）并加 pytest `-p no:cacheprovider`，不影响本票演示路径——SciencePal 执行包与 T1/T2 脚本仍是独立交付物。本票剩余未勾选验收（计时演示脚本、SciencePal 实际承载执行、5 页定稿）仍全部依赖 sciencepal.ai 平台可达，网络恢复即跑 `run_t1_t2_on_sciencepal.py` 实链取证。

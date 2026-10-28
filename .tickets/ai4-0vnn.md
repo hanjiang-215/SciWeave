@@ -80,3 +80,7 @@ relative/subdir (合法相对)   → reject=False (accepted)
 
 前三条 AC 已勾（复现命令、与 grlc 第一条核对一致、挂载假象澄清），本票保持 open：第四条「结论进入 ai4-grlc 处置路径」等待 Frank Qi 修复或转交后闭合。
 
+**2026-10-28T02:50:00Z**
+
+补充：runtime 构建后端已切到 uv_build（与 ai4-grlc 的 session_dir 缺陷无关，属构建层修复）。Windows 沙箱下 setuptools editable 重建 egg-info 持续「拒绝访问」，runtime 与 buffer 均切 uv 原生 uv_build 后端（module-name 显式声明 src 包）并加 `-p no:cacheprovider`（pytest 9.2 在 .pytest_cache 写入被拒时 mkdtemp 无限重试挂起）；全量 CI 21/21 阶段、874 用例通过（runtime 106 passed、buffer 30 passed），PR #54 mergeable:true。Linux 侧首次真跑仍待 Gitee Go 接入后在 ci.sh 矩阵确认（脚本已带 no:cacheprovider，与 Windows 行为一致），本票第四条维持等待 grlc 修复。
+
