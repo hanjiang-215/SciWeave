@@ -90,3 +90,10 @@ uv run python -m suitecheck.cli check ../
 遗留风险：`researcher-agent-toolkit/deploy-task-agent/runtime/src/work_agent_runtime/skills.py`
 是这次新增的技能加载器，其 12 个用例覆盖了一层深度、缺失 frontmatter 与重名，但没有覆盖
 「技能目录里塞了子目录」这种畸形树。
+
+## Notes
+
+- 2026-10-28：三轮完成，PR https://gitee.com/qi-yueran/ai4science/pulls/56 。8 条验收标准全绿，`suitecheck check` 对三个套件 0 finding。
+- `suitecheck` 的能力上限从文档搬进了静态校验：`actor` 决定允许声明哪些 `capabilities`，越界即报错。这条是「套件凭什么不一样」那张表唯一有强制力的地方。
+- `centre-agent-toolkit` 后续把 MCP 卡片移交给服务侧（`ai4-349h`）：卡片描述的是服务的能力，跟着服务源码走，套件只剩「怎么装起来、怎么体检」。`suite.yaml` 的 `mcp:` 因此变成空列表，`suitecheck` 的 `suite_empty` 相应放宽到「skills 与 mcp 都空才算空」。
+- 遗留：`ai4-sue2`（卡片令牌不进请求头）、`ai4-japd`（ingest 不在 supervisord 里）、`ai4-22mr`（PO 读不到预审报告）三张票记的是这套东西真机联调前必须处理的缺口。
