@@ -206,11 +206,13 @@ services:
       CENTRE_DEFINITIONS_PATH: /app/centre-agents/definitions
       CENTRE_MCP_LIBS_PATH: /app/centre-agents/libs/mcp-libs
       CENTRE_RULES_DIR: /app/centre-agents/rules
-      # 卡片里 endpoint.url_env 指向的变量。只列出当前 workflow 真的会连的三个：
+      # 卡片里 endpoint.url_env 指向的变量。只列当前 workflow 真的会连的三个：
       # 渲染器只写被声明过的服务器，多写的变量不会生效。
-      RESEARCH_MAPPING_MCP_URL: http://127.0.0.1:8710/mcp
-      LLM_WIKI_MCP_URL: http://127.0.0.1:8720/mcp
-      EMAIL_MCP_URL: http://127.0.0.1:8750/mcp
+      # 地址是容器内的回环端口，与上面各领域的 *_MCP_PORT 是同一个数。写成可覆盖
+      # 的形式，是因为把某个 MCP 拆到别的容器时应该只改 .env，不动这份文件。
+      RESEARCH_MAPPING_MCP_URL: ${RESEARCH_MAPPING_MCP_URL:-http://127.0.0.1:8710/mcp}
+      LLM_WIKI_MCP_URL: ${LLM_WIKI_MCP_URL:-http://127.0.0.1:8720/mcp}
+      EMAIL_MCP_URL: ${EMAIL_MCP_URL:-http://127.0.0.1:8750/mcp}
       # 卡片同时列了 *_MCP_TOKEN，但当前的渲染器只写 transport 与 url，
       # 令牌不会变成 Authorization 头——领域 MCP 校验 Bearer，所以「配了变量」
       # 现在不等于「带了鉴权」。真机联调前必须单独处理（ai4-349h 的遗留风险）。
