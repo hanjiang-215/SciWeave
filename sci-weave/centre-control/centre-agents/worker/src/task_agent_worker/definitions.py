@@ -84,6 +84,13 @@ class WorkflowDefinition:
     Agent template's schema and are derived here rather than written by hand.
     Making an author fill in three fields that the sequence already determines is
     how the two get out of step.
+
+    Nothing in this worker reads the three: fast-agent's ``@fast.chain`` takes the
+    sequence and infers the rest, and a Centre Agent has exactly one workflow, so
+    "which one is the entry" is not a question anything asks. They stay because
+    ``schema.yaml`` publishes them as part of the v1 vocabulary — a second workflow
+    type, or a consumer that speaks the template, would need them, and an author
+    who reads the schema should find the derived values documented truthfully.
     """
 
     name: str
