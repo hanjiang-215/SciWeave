@@ -1,0 +1,63 @@
+{
+  "name": "coordinator",
+  "version": "1.0.0",
+  "description": "Start a task graph: dispatch one root TaskNode of a mapping domain. This is the only way a route begins, because root nodes are never auto-dispatched.",
+  "transport": "streamable-http",
+  "endpoint": {
+    "url_env": "SCIWEAVE_COORDINATOR_MCP_URL"
+  },
+  "environment": [
+    "SCIWEAVE_COORDINATOR_MCP_URL",
+    "SCIWEAVE_COORDINATOR_MCP_TOKEN"
+  ],
+  "notes": [
+    "Exactly one tool. Everything else the coordinator does is driven by Kafka events, and a read surface would duplicate the domain MCPs.",
+    "Root nodes are never dispatched by a formal_revision_published event. Publishing a route does not start it — this call starts it. That is deliberate: a graph that begins work the moment someone saves it cannot be reviewed before it spends money.",
+    "The node must exist in the latest formal snapshot and have no inbound edges. Both are re-checked server-side; a stale task_node_id or a node with an inbound edge is refused, not silently started.",
+    "Idempotent through the handoff dedupe key, so a double click does not start the same root twice.",
+    "There is no tool here to dispatch a non-root node: downstream nodes start when their upstream handoff lands. Reaching for this to unblock a stuck successor will not work and would bypass the dependency edges."
+  ],
+  "tools": [
+    {
+      "name": "dispatch_root_task",
+      "description": "Explicitly dispatch one root task node of a mapping domain. The node must exist in the latest formal snapshot and have no inbound edges; the call is idempotent through the handoff dedupe key.",
+      "input": {
+        "type": "object",
+        "required": [
+          "mapping_domain_id",
+          "task_node_id",
+          "target_node_version_ref",
+          "trigger_revision_id"
+        ],
+        "properties": {
+          "mapping_domain_id": {
+            "type": "string"
+          },
+          "task_node_id": {
+            "type": "string"
+          },
+          "target_node_version_ref": {
+            "type": "string"
+          },
+          "trigger_revision_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "output": {
+        "status": "dispatched | not_dispatched",
+        "reason_code": "string|null",
+        "accepted": "boolean"
+      },
+      "allowed": [
+        "starting a route the formal mapping already publishes"
+      ],
+      "failures": [
+        "dispatch_not_accepted",
+        "dispatch_failed",
+        "unauthorized"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,178 @@
+{
+  "name": "registry",
+  "version": "1.0.0",
+  "description": "The Project Owner's registry surface: register people, register workflow agents (endpoint and centre), register their instances, read contacts and registrations, and check health.",
+  "transport": "streamable-http",
+  "endpoint": {
+    "url_env": "SCIWEAVE_REGISTRY_URL"
+  },
+  "environment": [
+    "SCIWEAVE_REGISTRY_URL",
+    "SCIWEAVE_REGISTRY_TOKEN"
+  ],
+  "notes": [
+    "The registry authorizes by caller_type, not by the domain capability tiers, so this card claims no capabilities. Its token must be caller_type=project_owner; that is what opens register_principal and get_principal_contact at all.",
+    "kind=centre requires project_owner and refuses a non-empty principal_id (centre_principal_must_be_empty). The Centre Agent has no owner, so registering it as somebody's agent would make its deliveries look attributable to a researcher.",
+    "kind=endpoint is the researcher's own agent. The Owner may register it on their behalf, and register_agent_instance then passes through _require_self_or_owner.",
+    "Registering an agent is not the same as it being reachable. Delivery needs status=active AND at least one instance with runtime_status=online (adapter_registry.py); registering without an instance produces an agent nobody can deliver to."
+  ],
+  "tools": [
+    {
+      "name": "register_principal",
+      "description": "Register or update a principal and its notification contact.",
+      "input": {
+        "type": "object",
+        "required": [
+          "principal_id",
+          "role",
+          "idempotency_key"
+        ],
+        "properties": {
+          "principal_id": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "researcher",
+              "project_owner"
+            ]
+          },
+          "idempotency_key": {
+            "type": "string"
+          },
+          "contact_email": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "register_workflow_agent",
+      "description": "Register or update a workflow agent owned by the caller or Project Owner.",
+      "input": {
+        "type": "object",
+        "required": [
+          "agent_id",
+          "workflow_id",
+          "kind",
+          "workflow_kind",
+          "idempotency_key"
+        ],
+        "properties": {
+          "agent_id": {
+            "type": "string"
+          },
+          "workflow_id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "endpoint",
+              "centre"
+            ]
+          },
+          "workflow_kind": {
+            "type": "string"
+          },
+          "idempotency_key": {
+            "type": "string"
+          },
+          "principal_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "created_by": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "register_agent_instance",
+      "description": "Register or refresh one runtime instance of a workflow agent.",
+      "input": {
+        "type": "object",
+        "required": [
+          "agent_id",
+          "agent_instance_id",
+          "idempotency_key"
+        ],
+        "properties": {
+          "agent_id": {
+            "type": "string"
+          },
+          "agent_instance_id": {
+            "type": "string"
+          },
+          "idempotency_key": {
+            "type": "string"
+          },
+          "runtime_status": {
+            "type": "string"
+          },
+          "last_seen_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "get_principal_contact",
+      "description": "Resolve the current active notification contact for a principal.",
+      "input": {
+        "type": "object",
+        "required": [
+          "principal_id"
+        ],
+        "properties": {
+          "principal_id": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "get_agent_registration",
+      "description": "Read one workflow agent registration and its runtime instances.",
+      "input": {
+        "type": "object",
+        "required": [
+          "agent_id"
+        ],
+        "properties": {
+          "agent_id": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "health",
+      "description": "Return authenticated Registry service and storage health.",
+      "input": {
+        "type": "object",
+        "required": [],
+        "properties": {}
+      }
+    }
+  ]
+}

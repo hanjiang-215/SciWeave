@@ -1,0 +1,128 @@
+{
+  "name": "email-service",
+  "version": "1.0.0",
+  "description": "Tell a researcher what happened to their candidate — revision requested or rejected — and check whether it was actually delivered.",
+  "transport": "streamable-http",
+  "endpoint": {
+    "url_env": "EMAIL_MCP_URL"
+  },
+  "environment": [
+    "EMAIL_MCP_URL",
+    "EMAIL_MCP_TOKEN"
+  ],
+  "notes": [
+    "The two kinds that belong to this actor are candidate_revision_requested and candidate_rejected. Sending prereview_completed from here would make one mailbox speak for both the Centre Agent and the Owner.",
+    "Accepted for delivery is not delivered, and neither is a domain fact changing. record_review already committed the decision before this call; if the mail fails, the decision still stands and only the human was not told.",
+    "dedupe_key is the business identity (this decision, on this candidate head). Reusing a dedupe_key with different content returns idempotency_conflict rather than sending a second, contradictory message."
+  ],
+  "tools": [
+    {
+      "name": "send_notification",
+      "description": "Accept one human_notification_intent for later delivery.",
+      "input": {
+        "type": "object",
+        "required": [
+          "notification_id",
+          "dedupe_key",
+          "notification_kind",
+          "recipients",
+          "subject",
+          "body",
+          "related",
+          "schema_version"
+        ],
+        "properties": {
+          "notification_id": {
+            "type": "string"
+          },
+          "dedupe_key": {
+            "type": "string"
+          },
+          "notification_kind": {
+            "type": "string",
+            "enum": [
+              "candidate_revision_requested",
+              "candidate_rejected"
+            ]
+          },
+          "recipients": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "principal_id": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "subject": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string"
+          },
+          "related": {
+            "type": "object"
+          },
+          "schema_version": {
+            "type": "string",
+            "enum": [
+              "1"
+            ]
+          }
+        }
+      },
+      "output": {
+        "notification_id": "string",
+        "delivery_status": "string"
+      },
+      "allowed": [
+        "telling a researcher their candidate needs a new version",
+        "telling a researcher their candidate was rejected"
+      ],
+      "failures": [
+        "idempotency_conflict",
+        "recipient_resolver_unavailable",
+        "content_invalid",
+        "storage_unavailable"
+      ]
+    },
+    {
+      "name": "get_notification_status",
+      "description": "Read delivery status. Ordinary callers only see their own notifications.",
+      "input": {
+        "type": "object",
+        "required": [
+          "notification_id"
+        ],
+        "properties": {
+          "notification_id": {
+            "type": "string"
+          }
+        }
+      },
+      "output": {
+        "notification_id": "string",
+        "delivery_status": "string",
+        "attempt_count": "integer"
+      },
+      "allowed": [
+        "checking whether the researcher was actually told"
+      ],
+      "failures": [
+        "denied",
+        "not_found"
+      ]
+    },
+    {
+      "name": "health",
+      "description": "Return authenticated component status for delivery, audit, and mailbox.",
+      "input": {
+        "type": "object",
+        "required": [],
+        "properties": {}
+      }
+    }
+  ]
+}
