@@ -11,6 +11,7 @@ replays the message and the business key blocks the duplicate.
 
 from __future__ import annotations
 
+import logging
 import os
 import sys
 import threading
@@ -25,6 +26,8 @@ from .draft_writer import BufferMCPDraftWriter
 from .queue import FakeQueueClient, KafkaQueueClient, QueueClient
 from .service import SubscriberService
 from .worker_runner import SubscriberWorkerRunner
+
+_log = logging.getLogger("gateway_subscriber")
 
 
 def required_environment(name: str) -> str:
@@ -91,9 +94,20 @@ def run_loop(
                 break
             continue
         for message in batch:
-            service.handle_message(message)
-            for target in service.queued_targets():
-                runner.run_once(target)
+            # A malformed/poison message must not kill the whole consumer: log
+            # it, skip (commit past) it, and keep serving later messages. Before
+            # this guard a single bad envelope (e.g. a producer using a different
+            # schema) raised ValueError and crashed the subscriber process, so
+            # every subsequent handoff went unprocessed.
+            try:
+                service.handle_message(message)
+                for target in service.queued_targets():
+                    runner.run_once(target)
+            except Exception as exc:  # noqa: BLE001 - poison-pill isolation
+                _log.warning(
+                    "skipping unprocessable queue message topic=%s partition=%s offset=%s: %s",
+                    message.topic, message.partition, message.offset, exc,
+                )
             queue.commit(message)
             processed += 1
     return processed
