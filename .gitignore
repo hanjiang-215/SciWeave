@@ -50,6 +50,8 @@ sci-weave/toolkits/suitecheck/uv.lock
 scripts/.demo-dashboard.json
 sci-weave/centre-control/research-map/data/
 
-# dsh/ 本地一键运行的运行态产物（数据与进程登记，可再生成）
+# dsh/ 本地一键运行的运行态产物（数据、进程登记、日志、真实 .env 含令牌）
 dsh/data/
 dsh/pids/
+dsh/logs/
+dsh/.env
