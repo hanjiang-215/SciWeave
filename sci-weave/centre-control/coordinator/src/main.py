@@ -72,7 +72,10 @@ def build(config: CoordinatorConfig) -> "CoordinatorRuntime":
         if email_endpoint and email_token
         else _NoopNotificationPublisher()
     )
-    connection = sqlite3.connect(config.sqlite_path)
+    # check_same_thread=False: the single connection is shared between the dispatch
+    # poller thread and the threaded management MCP; CoordinatorStore serializes
+    # every access through an internal lock (see _LockedConnection).
+    connection = sqlite3.connect(config.sqlite_path, check_same_thread=False)
     store = CoordinatorStore(connection)
     governance_group = os.environ.get("SCIWEAVE_COORDINATOR_KAFKA_GROUP_ID", "coordinator").strip()
     events = KafkaGovernanceEventConsumer(
