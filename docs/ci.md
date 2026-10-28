@@ -36,7 +36,9 @@ scripts/ci.sh --filter research-
 
 子项目位置**不写死**：脚本用 `git ls-files '*tests/test_*.py'` 反推，所以新增子项目自动纳入，未跟踪的本地残留目录不会被误当成 CI 目标。
 
-当前矩阵：16 个测试位置、785 项用例通过、22 项默认跳过（需要真实 TerminusDB / Kafka 的集成用例）。
+当前矩阵：17 个测试位置、863 项用例通过、22 项默认跳过（需要真实 TerminusDB / Kafka 的集成用例）。这个数字随用例增减变化，以脚本汇总行为准；本行最后一次核对是 2026-10-27。
+
+字节码统一写到 `var/pycache-ci`（脚本设置 `PYTHONPYCACHEPREFIX`、每次运行前清空）：`src/` 里不落 `__pycache__`，也不会出现「上一次留下的 pyc 还在，compileall 空跑也报 PASS」的假绿。干净机器上的首跑必须同样能通过。
 
 ## 关于「已跳过」
 

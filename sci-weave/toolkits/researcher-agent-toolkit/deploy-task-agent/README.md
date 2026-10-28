@@ -25,6 +25,27 @@ uv run python -m unittest discover -s tests -v
 Agent、MCP、Workflow libs 是纯配置资源，不单独执行 `uv sync`；由 runtime 通过 `AGENT_LIBS_PATH`、`MCP_LIBS_PATH`、`WORKFLOW_LIBS_PATH` 或显式路径加载。
 测试使用内存状态、假上游交接和假草稿箱，不连接真实队列、真实草稿箱或真实模型。真实地址、令牌和本地扩展路径只通过环境变量配置；仓库只提交 `.env.example`。
 
+## 启动三个角色
+
+`service-template/` 下的三个角色**不各自维护 `pyproject.toml`**：它们与 `runtime/` 同处一个 uv 项目，靠 `--project runtime` 借用 runtime 的已安装 `work_agent_runtime` 与依赖，因此只需 `runtime/` 里执行过一次 `uv sync`。
+
+```bash
+cd runtime
+uv run --env-file .env python ../service-template/gateway/subscriber/src/main.py
+uv run --env-file .env python ../service-template/gateway/mcp/src/main.py
+uv run --env-file .env python ../service-template/worker/src/main.py
+```
+
+三个角色缺配置时**启动即失败**并指名缺哪一项，不会退化成一个空转进程：
+
+| 角色 | 缺配置时的报错 |
+| --- | --- |
+| `gateway/subscriber` | `SCIWEAVE_AGENT_ID must be configured through the environment` |
+| `gateway/mcp` | `DATABASE_PATH must be configured through the environment` |
+| `worker` | `DATABASE_PATH must be configured through the environment`（配好数据库后还需要模型凭据） |
+
+`service-template` 是研究员可见的模板：Personal Agent 只能改 Agent 定义、工作流声明与资源配置，不能改这三个角色与 `runtime/`。
+
 ## 队列消费启动（subscriber）
 
 `service-template/gateway/subscriber` 是常驻消费者：出站连接中央 Redpanda 队列，

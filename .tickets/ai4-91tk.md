@@ -2,7 +2,7 @@
 id: ai4-91tk
 status: closed
 deps: [ai4-7xtf, ai4-vczt]
-links: []
+links: [ai4-u2rd]
 created: 2026-10-20T08:32:17Z
 type: feature
 priority: 1

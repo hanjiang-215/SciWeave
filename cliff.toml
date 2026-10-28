@@ -72,6 +72,9 @@ commit_parsers = [
     { message = "^chore\\(deps.*\\)", skip = true },
     { message = "^chore\\(pr\\)", skip = true },
     { message = "^chore\\(pull\\)", skip = true },
+    # 分支合并提交（例如 `merge: bring origin/develop into the registry branch`）
+    # 是集成操作，不是变更日志条目；按主题开头识别并跳过。
+    { message = "^merge:", skip = true },
     { message = "^chore|^ci", group = "<!-- 7 -->⚙️ Miscellaneous Tasks" },
     { body = ".*security", group = "<!-- 8 -->🛡️ Security" },
     { message = "^revert", group = "<!-- 9 -->◀️ Revert" },

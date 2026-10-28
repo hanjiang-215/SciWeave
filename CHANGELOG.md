@@ -56,19 +56,19 @@
 - *(email-service)* 补齐健康分项、运维查询与调用方约束
 - *(governance)* Tighten centre capability and add merged candidate writes (ai4-5auy)
 - *(mapping)* Add formal mapping snapshot read at revision for handoff coordinator (ai4-2982)
-- *(coordinator)* Deliver handoff coordinator core with pending/dispatch state and recovery
 - *(task-agent)* 端侧接入 email-service MCP 并登记标准卡片（ai4-iebi）
+- *(coordinator)* Deliver handoff coordinator core with pending/dispatch state and recovery
+- *(email-service)* Resolve recipients through registry MCP
+- *(shared)* Add the message envelope protocol package
+- *(coordinator)* Widen ports and payloads with no behaviour change
 - *(centre-agents)* Add queue subscriber component and shared execution store
 - *(centre-agents)* Expose read-only /sources endpoint for dashboard gateway source
 - *(toolkits)* Wire deploy-task-agent runtime and subscriber template to real queue
-- *(email-service)* Resolve recipients through registry MCP
 - *(research-map)* Publish governance events on candidate submit and formal revision
 - *(research-map,research-wiki)* Expose owner-visible prereview gate state
 - *(coordinator)* Wire real central adapters for snapshot, handoff, registry and email
 - *(coordinator)* Consume formal_revision_published and trigger recompute
 - *(research-wiki)* Publish governance events on candidate submit and formal revision
-- *(shared)* Add the message envelope protocol package
-- *(coordinator)* Widen ports and payloads with no behaviour change
 - *(toolkit)* Add durable inbox and draft-box writer for researcher task agent
 - *(shared)* Type the payload of each message type
 - *(research-map)* Expose the approver on both formal read entry points
@@ -79,6 +79,20 @@
 - *(coordinator)* Expose root task dispatch over MCP
 - *(task-agent)* Keep execution state in SQLite
 - *(task-agent)* Serve the researcher disposition tools
+- *(task-agent)* Add the real fast-agent runtime for the researcher worker
+- *(task-agent)* Export the fast-agent runtime
+- *(task-agent)* Depend on fast-agent-mcp for the researcher worker
+- *(task-agent)* Run queued handoffs through the real runtime
+- *(gateway)* Implement the centre disposition tools
+- *(dashboard)* Add one-command launcher for real snapshot data
+- *(subscriber)* Serve the queue dashboard source
+- *(sciencepal)* Add execution bridge and collaborator kit
+- *(email-service)* Send over real SMTP with an explicit security mode
+- *(demo-stack)* Compose the dashboard chain with one command
+- *(sciencepal)* Make bridge harness-agnostic with CLI and HTTP MCP
+- *(sciencepal-bridge)* Write execution reports into the draft buffer
+- *(centre-stack)* Run every central service in one container
+- *(demo)* Add the SciencePal T1/T2 run package for the hard-gate evidence
 
 ### 🐛 Bug Fixes
 
@@ -92,12 +106,12 @@
 - *(registry)* Preserve registration facts on the audited MCP server
 - *(email-service)* Track per-recipient delivery progress and guard unclassified send errors
 - *(centre-agents)* Widen gateway/mcp test wait timeout for Windows spawn cold start
-- *(email-service)* Sync retry env vars into test fixtures for Windows re-run
-- *(coordinator)* Resolve ai4-10ja dispatch and executor-selection defects
 - *(shared)* Treat an absent payload key as a format error
 - *(coordinator)* Give edge refs the same shape as source refs
 - *(coordinator)* Keep a falsy-but-present principal directory
 - *(shared)* Make encode refuse what decode would reject
+- *(email-service)* Sync retry env vars into test fixtures for Windows re-run
+- *(coordinator)* Resolve ai4-10ja dispatch and executor-selection defects
 - *(coordinator)* Record unreadable snapshots and stop dropping handoff context
 - *(coordinator)* Let a rejected transition keep its status without stalling the round
 - *(coordinator)* Record why a terminal summary could not be addressed
@@ -113,6 +127,24 @@
 - *(centre-agents)* Make a misconfigured Worker runtime visible
 - *(centre-agents)* Keep a cancel and make list_pending mean pending
 - *(task-agent)* Describe all eleven tools of each domain card
+- *(research-wiki)* Refuse a preview whose base revision has no record
+- *(mcp)* Read the request body before rejecting a request
+- *(email-service)* Deliver notifications over SMTP
+- *(demo-evidence)* Hash the snapshot content, not its line endings
+- *(demo-evidence)* Bind the T2 baseline result to the measured snapshot
+- *(demo-evidence)* Keep every T1 reason code reachable, report bad input
+- *(buffer)* Start against an already initialized database
+- *(gateway)* Project dashboard events and use the vocabulary web-ui validates
+- *(email-service)* Reject CR/LF in notification subjects
+- *(email-service)* Parse Registry error codes from plain-text tail
+- *(ci)* Count failing stages correctly and stop cache-dependent compileall
+- *(buffer)* Stop the demo switch from reporting readiness
+- *(scripts)* Print a stop hint that works without pwsh
+- *(mapping)* Publish governance events when a kafka bootstrap is configured
+- *(events)* Publish wiki governance events without blocking on the broker
+- *(coordinator)* Keep polling when the broker is briefly unreachable
+- *(demo)* Read collected artifacts from disk and assert the real T1 key
+- *(demo-evidence)* Tolerate transient SciencePal polling errors
 
 ### 📚 Documentation
 
@@ -330,28 +362,12 @@
 - *(tickets)* Refresh fv1r map decisions with rlv6 closure and a2ba spec convergence
 - *(tickets)* Close ai4-c2t7 task-agent init mapping query contract after read tools landed
 - *(tickets)* Transfer 10 tickets from Frank Qi to hanjiang
+- *(tickets)* Add registry and email coordination tickets
+- *(task-agent)* Document local workflow library
 - *(tickets)* Close ai4-w4su registry MCP after Windows-friendly storage-failure test fix
 - *(tickets)* Close ai4-cl3t custom MCP registry after adding service-card validation tests
 - *(tickets)* Converge PO MCP, researcher skill-group and dynamic subscription specs
 - *(tickets)* Record ai4-z3z4 readiness assessment
-- *(tickets)* Transfer 9 active tickets from Frank Qi to hanjiang for continued progress
-- *(tickets)* Close ai4-te1v message-queue semantics spec with nine-layer implementation contract
-- *(tickets)* Record email-service test fixture retry-env sync fix
-- *(tickets)* Backfill ai4-3u7x index meta
-- *(tickets)* Register SciencePal execution-side and central-MCP integration plan (ai4-v869)
-- *(tickets)* Close ai4-s2nb after config-resource convergence verified on HEAD
-- *(tickets)* Record ai4-z3z4 subscriber implementation and Redpanda e2e evidence
-- *(tickets)* Close ai4-gt3m after dashboard gateway/queue read-only source contract landed
-- *(toolkits)* Document queue consumption startup and real-broker e2e checklist
-- *(tickets)* Record ai4-za77 toolkit queue-consumption progress with real-broker evidence
-- *(tickets)* Record ai4-z3z4 draft-buffer end-to-end evidence with real TerminusDB
-- *(tickets)* Add registry and email coordination tickets
-- *(task-agent)* Document local workflow library
-- *(tickets)* Record ai4-a2ba event publish and prereview observability evidence
-- *(tickets)* Record coordinator real-adapter landfall in ai4-p5f3
-- *(sciencpal)* Prepare minimal capability-verification onboarding kit (ai4-v869)
-- *(tickets)* Record ai4-v869 minimal-capability-verification materials ready
-- *(coordinator)* Document governance-event consumer and e2e verification
 - *(tickets)* Converge ai4-te1v messaging protocol semantics
 - *(tickets)* Align ai4-p5f3 handoff coordinator with ai4-te1v protocol
 - *(tickets)* Update ai4-za77 toolkit scope and dependency
@@ -368,9 +384,6 @@
 - *(message-queue)* Settle the wire format and the schema version rules
 - *(tickets)* Give the message envelope package an owner
 - *(tickets)* Close the protocol branch and narrow the handoff flow
-- *(tickets)* Settle registry freeze confirmation and close handoff trigger flow
-- *(coordinator)* Sync MAX_ATTEMPTS default to 5 across README and .env.example
-- *(tickets)* Record ai4-10ja coordinator defect fixes for assignee review
 - *(spec)* Spec the envelope package and its payload shapes
 - *(spec)* Slice the coordinator defect fix into six tickets
 - *(tickets)* Close ai4-g5fx with evidence
@@ -382,6 +395,30 @@
 - *(tickets)* Refresh ai4-8pvm verification to the shipped commits
 - *(tickets)* Record the post-review state of ai4-8pvm
 - *(tickets)* Link ai4-8pvm and ai4-g5fx to their pull request
+- *(tickets)* Add ai4-9wji to fill the handoff payload refs
+- *(tickets)* Give the edge version id an owner
+- *(adr)* Record mail sender error classification
+- *(tickets)* Split email-service gaps into three tickets
+- *(tickets)* Take over ai4-1kls and close it on evidence
+- *(tickets)* Transfer 9 active tickets from Frank Qi to hanjiang for continued progress
+- *(tickets)* Close ai4-te1v message-queue semantics spec with nine-layer implementation contract
+- *(tickets)* Record email-service test fixture retry-env sync fix
+- *(tickets)* Backfill ai4-3u7x index meta
+- *(tickets)* Register SciencePal execution-side and central-MCP integration plan (ai4-v869)
+- *(tickets)* Close ai4-s2nb after config-resource convergence verified on HEAD
+- *(tickets)* Record ai4-z3z4 subscriber implementation and Redpanda e2e evidence
+- *(tickets)* Close ai4-gt3m after dashboard gateway/queue read-only source contract landed
+- *(toolkits)* Document queue consumption startup and real-broker e2e checklist
+- *(tickets)* Record ai4-za77 toolkit queue-consumption progress with real-broker evidence
+- *(tickets)* Record ai4-z3z4 draft-buffer end-to-end evidence with real TerminusDB
+- *(tickets)* Record ai4-a2ba event publish and prereview observability evidence
+- *(tickets)* Record coordinator real-adapter landfall in ai4-p5f3
+- *(sciencpal)* Prepare minimal capability-verification onboarding kit (ai4-v869)
+- *(tickets)* Record ai4-v869 minimal-capability-verification materials ready
+- *(coordinator)* Document governance-event consumer and e2e verification
+- *(tickets)* Settle registry freeze confirmation and close handoff trigger flow
+- *(coordinator)* Sync MAX_ATTEMPTS default to 5 across README and .env.example
+- *(tickets)* Record ai4-10ja coordinator defect fixes for assignee review
 - *(tickets)* Close hanjiang-owned work-agent spec, gateway map, agent branch and drift-registration tickets
 - *(tickets)* Transfer Frank Qi's open coordinator tickets to hanjiang
 - *(tickets)* Rescope ai4-t5f8 to local Pi environment
@@ -402,6 +439,65 @@
 - *(tickets)* Close the location-source and root-dispatch tickets
 - *(tickets)* Record the durable store prerequisite
 - *(tickets)* Record the disposition surface
+- *(changelog)* Regenerate the changelog from the full history
+- *(dev)* Record how each subproject is verified
+- *(tickets)* Split the fast-agent runtime into its own ticket
+- *(tickets)* Close the contract-defect ticket
+- *(data-flow)* State the researcher-side disposition contract
+- *(tickets)* Correct the fast-agent dependency acceptance
+- *(tickets)* Record the fast-agent runtime
+- Record the fast-agent dependency and the new test counts
+- *(dev)* Correct the total after the buffer fix
+- *(tickets)* Record the unwired notification adapters
+- *(email-service)* Describe the SMTP sender that now exists
+- *(dev)* Record the centre disposition and the new counts
+- *(tickets)* Record the centre disposition implementation
+- *(tickets)* Record the develop merge outcome for the handoff tickets
+- *(tickets)* Add demo-run tickets for T1/T2 script fixes
+- *(demo)* Re-run the governance chain on the merged HEAD and fix the timings
+- *(demo)* Align the evidence card and onboarding docs with the new behaviour
+- *(demo)* Cut the run sheet to 260s so it fits the 5-minute cap
+- *(tickets)* Close the five demo-run tickets with verification records
+- *(tickets)* Record the buffer restart failure
+- *(tickets)* Record SciencePal kit scaffold in ai4-v869
+- *(tickets)* Trim trailing blank line in ai4-roow
+- *(sciencepal)* Add task packet and execution report examples
+- *(sciencepal)* Note CLI, harness and example paths in kit layout
+- *(tickets)* Close ai4-0uu6 after verified delivery
+- *(tickets)* Close the two handoff tickets superseded by ai4-fu4i
+- *(tickets)* Hand the centre-control email tickets to hanjiang
+- *(tickets)* Ask hanjiang to reconcile the three closed audit-trail tickets
+- *(tickets)* Record the four toolkit ship-blockers
+- *(tickets)* Close ai4-9687 after subject CRLF fix
+- *(tickets)* Close ai4-dp9t after Registry error code fix
+- *(tickets)* Close ai4-ceqq after acceptance check-off
+- *(tickets)* Close ai4-bp6v after ledger review check-off
+- *(tickets)* Record ai4-roow write-back progress
+- *(tickets)* Note ledger review confirmation on PR #53
+- *(review)* Add 2026-10-27 project review snapshot
+- *(specs)* Mark the mapping-wiki formalization delivery as implemented
+- *(centre-control)* List coordinator, email-service and message-envelope
+- *(toolkit)* Document the service-template role launch commands
+- *(message-envelope)* Record that no production code calls the package yet
+- *(review)* Record the evening remediation of the 11 findings
+- *(changelog)* Regenerate for the 2026-10-27 branch state
+- *(deploy)* Record the single-container decision for the central services
+- *(mcp)* Stop claiming the centre capability unlocks write tools
+- *(deploy)* Record the follow-up fixes for wiki events and broker outages
+- *(changelog)* Regenerate for the 2026-10-28 branch state
+- *(competition)* Backfill project summary with the 2026-10-27 verified numbers
+- *(tickets)* Record the verified fix approach for the cross-platform escape
+- *(tickets)* Check the first three acceptance items on ai4-0vnn
+- *(demo)* Point the evidence card at the ready-to-run SciencePal package
+- *(changelog)* Regenerate for the 2026-10-28 review round
+- *(tickets)* Record the ready-to-run SciencePal package on ai4-aaff
+- *(demo)* Note the ready-to-run SciencePal package in the demo prerequisites
+- *(changelog)* Regenerate for the conflict resolution commit
+- *(changelog)* Record uv_build backend switch for buffer and runtime
+- *(tickets)* Split the toolkit preset plan into four tickets
+- *(tickets)* 复核 deploy-task-agent 四张票并补一致性收口票
+- *(tickets)* Record uv_build fix and PR 54 green round-back on ai4-0vnn/ai4-aaff
+- *(competition)* Record real SciencePal T1/T2 execution evidence
 
 ### 🚜 Refactor
 
@@ -416,6 +512,7 @@
 - *(task-agent)* Group local libraries under libs
 - *(task-agent)* Make libs configuration-only
 - *(buffer)* Collapse process entry to draft_buffer.main
+- *(sciencpal-onboarding)* Drop the duplicated T1/T2 script copies
 
 ### 🎨 Styling
 
@@ -427,15 +524,17 @@
 - *(a2a)* Record input recovery validation
 - *(task-agent)* Cover runtime health state
 - *(governance)* Cover centre-denial, tier independence and seven-tier config
-- *(centre-agents)* Cover BufferMCPDraftWriter with HTTP stub and unreachable endpoint
-- *(coordinator)* Real TerminusDB integration for snapshot adapter + ref parsing fix
-- *(coordinator)* Real Redpanda+TerminusDB end-to-end handoff chain
 - *(coordinator)* Cover all three principal directory outcomes
 - *(shared)* Cover the decode-side payload guard directly
 - *(shared)* Pin routing.target_agent_id through a round trip
 - *(shared)* Cover the untrusted-input branches to full coverage
 - *(coordinator)* Pin the ref shapes the annotation actually declares
 - *(shared)* Pin the guards the review found unpinned
+- *(centre-agents)* Cover BufferMCPDraftWriter with HTTP stub and unreachable endpoint
+- *(coordinator)* Real TerminusDB integration for snapshot adapter + ref parsing fix
+- *(coordinator)* Real Redpanda+TerminusDB end-to-end handoff chain
+- *(audit-trail)* Cover time-range before and finish write failure
+- *(wiki)* Run the assertions a duplicate test name was shadowing
 
 ### ⚙️ Miscellaneous Tasks
 
@@ -465,13 +564,24 @@
 - Ignore Python build artifacts; drop duplicate AC block in ai4-xem8
 - Remove stale dirs and fix navigation docs
 - *(shared)* Stop committing the message-envelope lock file
+- *(demo-evidence)* Re-encode the governance timeline as UTF-8
+- *(ignore)* Exclude dashboard runtime artifacts
+- *(git)* Pin line endings for the byte-pinned evidence pack
+- *(ci)* Add portable regression matrix and pipeline definition
+- *(tickets)* Close dashboard launcher, queue source and CI tickets
+- *(sciencepal)* Mark shell wrapper executable
+- *(ignore)* Exclude DSH skill copies under .dsh/
+- *(tickets)* File and close the four 2026-10-27 review fixes
+- *(tickets)* Close ai4-e1jk after the container run verification
+- *(tickets)* Link the deployment PR into the four tickets
+- *(tickets)* File the Linux cross-platform verification evidence linked to ai4-grlc
+- *(tickets)* Adopt the develop version of ai4-grlc after its scope narrowing
+- *(tickets)* Adopt the five develop-side agent tickets and index their meta
 
 ### 💼 Other
 
-- Integrate ticket index automation
 - *(task-agent)* Add fast-agent runtime dependency
-- Integrate mapping and wiki implementation slices into feature/qiyueran
 - *(agent-libs)* Lock package metadata
-- Bring origin/develop into the registry branch
 - *(email-service)* 将邮件实现并入 feature/frank-qi
-- 并入 origin/develop 的候选检查与预审快照
+- *(buffer)* Switch to uv_build backend, disable pytest cache
+- *(runtime)* Switch to uv_build backend, disable pytest cache

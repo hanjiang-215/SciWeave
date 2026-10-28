@@ -484,7 +484,7 @@ TOOL_DEFINITIONS = [
     },
     {
         "name": "submit_candidate",
-        "description": "Submit a Mapping candidate change set against the exact formal base. Requires candidate_submit or centre capability.",
+        "description": "Submit a Mapping candidate change set against the exact formal base. Requires the candidate_submit capability.",
         "inputSchema": {
             "type": "object",
             "required": ["change_set", "idempotency_key"],
@@ -497,7 +497,7 @@ TOOL_DEFINITIONS = [
     },
     {
         "name": "preview_candidate",
-        "description": "Build immutable diff review evidence for a fixed candidate head. Requires candidate_review or centre capability.",
+        "description": "Build immutable diff review evidence for a fixed candidate head. Requires the candidate_review capability.",
         "inputSchema": {
             "type": "object",
             "required": ["proposal_id", "base_formal_revision_id", "candidate_head"],
@@ -511,7 +511,7 @@ TOOL_DEFINITIONS = [
     },
     {
         "name": "record_review",
-        "description": "Record a review decision for a merge-request buffer. Requires candidate_review or centre capability.",
+        "description": "Record a review decision for a merge-request buffer. Requires the candidate_review capability.",
         "inputSchema": {
             "type": "object",
             "required": ["buffer_id", "decision", "reason"],
@@ -525,7 +525,7 @@ TOOL_DEFINITIONS = [
     },
     {
         "name": "formalize_candidate",
-        "description": "Promote an Owner-approved candidate through atomic SQLite activation. Requires formalize or centre capability.",
+        "description": "Promote an Owner-approved candidate through atomic SQLite activation. Requires the formalize capability.",
         "inputSchema": {
             "type": "object",
             "required": ["merge_request_id", "operation_id"],
@@ -538,7 +538,7 @@ TOOL_DEFINITIONS = [
     },
     {
         "name": "reconcile_formalization",
-        "description": "Resume the same formalization operation identity. Requires formalize or centre capability.",
+        "description": "Resume the same formalization operation identity. Requires the formalize capability.",
         "inputSchema": {
             "type": "object",
             "required": ["operation_id"],

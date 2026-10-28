@@ -18,6 +18,12 @@ set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
+# 字节码统一写到 var/ 下，不落在 src/ 的 __pycache__：既不让工作区被生成物污染，
+# 也避免 compileall 因为「上一次留下的 pyc 还在」而空跑成假绿。
+export PYTHONPYCACHEPREFIX="$ROOT/var/pycache-ci"
+rm -rf "$PYTHONPYCACHEPREFIX"
+mkdir -p "$PYTHONPYCACHEPREFIX"
+
 INTEGRATION=0
 SKIP_WEB=0
 FILTER=""
