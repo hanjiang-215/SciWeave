@@ -87,11 +87,11 @@
 
 运行时（2026-10-22 定稿，见 [`work-agent.md`](work-agent.md)）：中央 Agent 是 Work Agent 的中央实例，与 Task Agent 共用同一架构——`gateway/mcp`（处置面）、`gateway/subscriber`（消息监听）、`worker`（一轮 loop 结束即退出）三个组件，加一份本地 SQLite 与 Worker Lease。单实例常驻，不按任务类型复制多份 Agent；能力差异用 MCP 工具区分，不用多个实例区分。
 
-与 Task Agent 的三处差异只有：订阅候选事件与正式版本发布事件而非 `task_node_id`；一轮 loop 做全量候选快照预审；处置面承接候选与报告的处置而非返修。处置面工具名与签名与 Task Agent 一致，但当前不提供功能，返回 `unimplemented`——中央 Agent 的工作里没有返修。
+与 Task Agent 的三处差异只有：订阅候选事件与正式版本发布事件而非 `task_node_id`；一轮 loop 做全量候选快照预审；处置面承接候选与报告的处置而非返修。处置面工具名与签名与 Task Agent 一致，但中央 Agent 的工作里没有返修，`review_execution` 只接受 `accepted` / `rejected`，`answer_question` 用来解开停在 `waiting` 的执行（续跑是一条新执行，见 `centre-agents/gateway/mcp/README.md`）。
 
 > 修订（2026-10-21）：原「复用 `sci-weave/task-agent` 的 Gateway 代码，让同一组件组同时承担 MCP 入口和消息队列消费」作废。Task Agent 的 Gateway 已移到研究员端侧，与中央 Agent 分属不同部署单元、不同项目组。中央 Agent 如需进程骨架与审计写法，按需自建，不复用端侧代码。
 
-需要注意的边界：Centre Agent 的处置面 MCP 与 Task Agent 同名同签名，但当前不提供功能（返回 `unimplemented`）。它不对外暴露任何能创建执行或下发任务的工具。
+需要注意的边界：Centre Agent 的处置面 MCP 与 Task Agent 同名同签名，但只接受 `accepted` / `rejected`，不提供返修。它不对外暴露任何能创建执行或下发任务的工具。
 
 > 修订（2026-10-21，第五轮）：原「不承担消息队列消费」作废。预审由候选事件触发（见 `ai4-a2ba`），因此中央 Agent **必须**消费消息队列：它主动出站连接中央队列订阅候选事件，不对外提供入站可达地址。这仍属「不对外暴露」的范畴——订阅是出站连接，不是新入口。
 
@@ -106,7 +106,19 @@
 | 触发订阅 | 消费领域 MCP 发出的候选事件与正式版本发布事件，短窗口去抖后拉全量快照 | 已实现，见 `centre-agents/gateway/subscriber`；消息语义见 `ai4-te1v` |
 | 草稿箱 | 中央 Agent 不进草稿箱；一审由人在 `centre-control/buffer` 完成 | 已实现，见 `sci-weave/centre-control/buffer/`；契约见 `draft-buffer.md` |
 | 留痕工具 | 接口层调用账本：中央各 MCP 的对外工具调用统一记录 | 规格见 `ai4-tg3v`，代码落地见 `ai4-gvan` |
-| 技能 | 预审判据（受 Git 版本化）、冲突矩阵、混合候选生成 | `toolkits/centre-agent-toolkit` 只有标题 |
+| 技能 | 预审判据（受 Git 版本化）、冲突矩阵、混合候选生成 | 已实现，见 `toolkits/centre-agent-toolkit/`（5 个技能） |
+| 定时体检 | 预审停滞与队列可达性检查；唯一无法发现自己缺席的组件就是消费者本身 | 已实现，`toolkits/centre-agent-toolkit/cron/prereview-sweep.sh`，只读，按 `*/10 * * * *` 建议调度 |
+
+这一套件已落成可安装的形态（`suite.yaml` + 技能 + MCP 卡片 + 安装/自检脚本 + 常驻单元），
+静态校验用 `suitecheck`：
+
+```bash
+cd sci-weave/toolkits/suitecheck
+uv run python -m suitecheck.cli check ../centre-agent-toolkit
+```
+
+套件只发布**配置**，不发布中央源码（ADR-0002 保持两侧 work-agent 代码库分开）：
+`bin/start-*` 读 `SCIWEAVE_CENTRE_AGENTS_HOME` 后在那里跑。
 
 这套件里不该出现的：直接写正式图的工具、代替 Project Owner 批准的工具、发起执行或调度 Worker 的工具、一次调用同时改 Mapping 和 Wiki 的工具、部署 Task Agent 的工具、判断「下一步该谁动」的工具。
 
