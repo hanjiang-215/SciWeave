@@ -694,7 +694,7 @@ class ReviewableCandidatesToolTestCase(unittest.TestCase):
     def test_lists_reviewable_candidates_with_snapshot_content(self):
         self._insert_candidate()
         outcome = self.service.call_tool(
-            "list_reviewable_candidates", {"mapping_domain_id": DOMAIN}, actor_id="reader",
+            "list_reviewable_candidates", {"mapping_domain_id": DOMAIN}, actor_id="centre",
         )
         self.assertEqual(outcome.status, "ok")
         candidates = outcome.result["candidates"]  # type: ignore[index]
@@ -708,7 +708,7 @@ class ReviewableCandidatesToolTestCase(unittest.TestCase):
     def test_merged_candidate_is_excluded_from_reviewable_set(self):
         self._insert_candidate(status="merged")
         outcome = self.service.call_tool(
-            "list_reviewable_candidates", {"mapping_domain_id": DOMAIN}, actor_id="reader",
+            "list_reviewable_candidates", {"mapping_domain_id": DOMAIN}, actor_id="centre",
         )
         self.assertEqual(outcome.result["candidates"], [])  # type: ignore[index]
 
@@ -725,13 +725,17 @@ class ReviewableCandidatesToolTestCase(unittest.TestCase):
         self.assertEqual(by_proposal["proposal-2"]["snapshot_status"], "unavailable")
         self.assertEqual(by_proposal["proposal-2"]["reason_code"], "store_unavailable")
 
-    def test_requires_read_or_centre_capability(self):
+    def test_reviewable_candidates_are_centre_only(self):
         self._insert_candidate()
-        denied = self.service.call_tool(
+        denied_reader = self.service.call_tool(
+            "list_reviewable_candidates", {"mapping_domain_id": DOMAIN}, actor_id="reader",
+        )
+        denied_submitter = self.service.call_tool(
             "list_reviewable_candidates", {"mapping_domain_id": DOMAIN}, actor_id="submitter",
         )
-        self.assertEqual(denied.error_code, "forbidden")
-        self.assertEqual(denied.result, None)
+        self.assertEqual(denied_reader.error_code, "forbidden")
+        self.assertEqual(denied_submitter.error_code, "forbidden")
+        self.assertEqual(denied_reader.result, None)
 
     def test_centre_no_longer_grants_write_tools(self):
         """centre is read-only after ai4-5auy; every injected write tool is forbidden."""
@@ -750,7 +754,7 @@ class ReviewableCandidatesToolTestCase(unittest.TestCase):
                 outcome.error_code, "forbidden",
                 f"{call['tool']} must be forbidden for a centre-only caller",
             )
-        # The six read tools still work under centre.
+        # The regular read tools and the centre-only review queue still work under centre.
         self._insert_candidate()
         for tool, args in [
             ("get_formal_mapping", {"mapping_domain_id": DOMAIN}),
@@ -778,7 +782,7 @@ class ReviewableCandidatesToolTestCase(unittest.TestCase):
         )
         self.assertEqual(appended.status, "ok")
         outcome = self.service.call_tool(
-            "list_reviewable_candidates", {"mapping_domain_id": DOMAIN}, actor_id="reader",
+            "list_reviewable_candidates", {"mapping_domain_id": DOMAIN}, actor_id="centre",
         )
         self.assertEqual(outcome.status, "ok")
         by_submission = {c["submission_id"]: c for c in outcome.result["candidates"]}  # type: ignore[index]
@@ -793,7 +797,7 @@ class ReviewableCandidatesToolTestCase(unittest.TestCase):
         )
         self.assertEqual(invalidated.status, "ok")
         outcome = self.service.call_tool(
-            "list_reviewable_candidates", {"mapping_domain_id": DOMAIN}, actor_id="reader",
+            "list_reviewable_candidates", {"mapping_domain_id": DOMAIN}, actor_id="centre",
         )
         status = outcome.result["candidates"][0]["prereview_status"]  # type: ignore[index]
         self.assertEqual(status["status"], "report_stale")
@@ -805,12 +809,12 @@ class ReviewableCandidatesToolTestCase(unittest.TestCase):
             formal_query=self.service._formal_query,
             candidate_service=self.service._candidate_service,
             candidate_reader=self.service._candidate_reader,
-            caller_capabilities={"reader": frozenset({"read"})},
+            caller_capabilities={"centre": frozenset({"centre"})},
             sqlite_store=self.sqlite,
         )
         self._insert_candidate()
         outcome = service.call_tool(
-            "list_reviewable_candidates", {"mapping_domain_id": DOMAIN}, actor_id="reader",
+            "list_reviewable_candidates", {"mapping_domain_id": DOMAIN}, actor_id="centre",
         )
         candidate = outcome.result["candidates"][0]  # type: ignore[index]
         self.assertNotIn("prereview_status", candidate)

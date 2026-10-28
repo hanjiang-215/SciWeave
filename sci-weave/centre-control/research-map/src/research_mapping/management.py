@@ -29,6 +29,7 @@ from .governance_events import (
 )
 
 _READ_CAPABILITIES = frozenset({"read", "centre"})
+_CENTRE_CAPABILITIES = frozenset({"centre"})
 _CANDIDATE_SUBMIT_CAPABILITIES = frozenset({"candidate_submit"})
 _CANDIDATE_REVIEW_CAPABILITIES = frozenset({"candidate_review"})
 _FORMALIZE_CAPABILITIES = frozenset({"formalize"})
@@ -456,7 +457,7 @@ _TOOL_CAPABILITIES = {
     "get_formal_mapping": _READ_CAPABILITIES,
     "get_formal_mapping_at_revision": _READ_CAPABILITIES,
     "list_candidates": _READ_CAPABILITIES,
-    "list_reviewable_candidates": _READ_CAPABILITIES,
+    "list_reviewable_candidates": _CENTRE_CAPABILITIES,
     "submit_candidate": _CANDIDATE_SUBMIT_CAPABILITIES,
     "preview_candidate": _CANDIDATE_REVIEW_CAPABILITIES,
     "create_merge_request": _CANDIDATE_REVIEW_CAPABILITIES,
@@ -503,7 +504,7 @@ TOOL_DEFINITIONS = [
     },
     {
         "name": "list_reviewable_candidates",
-        "description": "Read the same-time reviewable candidate set (not merged, rejected or abandoned) with exact candidate head, base formal revision and immutable content snapshot. Requires the read or centre capability.",
+        "description": "Read the same-time reviewable candidate set (not merged, rejected or abandoned) with exact candidate head, base formal revision and immutable content snapshot. Requires the centre capability; this is a central pre-review queue, not a researcher read.",
         "inputSchema": {
             "type": "object",
             "required": ["mapping_domain_id"],
