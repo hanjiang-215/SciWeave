@@ -1,0 +1,2 @@
+module = "infra"
+summary = "将所有 uv.lock 包索引源统一为清华镜像"
