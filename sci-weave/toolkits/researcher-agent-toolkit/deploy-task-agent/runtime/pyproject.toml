@@ -1,6 +1,6 @@
 [build-system]
-requires = ["setuptools>=68"]
-build-backend = "setuptools.build_meta"
+requires = ["uv_build>=0.13.6,<0.14"]
+build-backend = "uv_build"
 
 [project]
 name = "sciweave-work-agent-runtime"
@@ -13,5 +13,11 @@ dependencies = [
     "fast-agent-mcp>=0.10.46,<0.11",
 ]
 
-[tool.setuptools.packages.find]
-where = ["src"]
+[tool.uv.build-backend]
+module-name = "work_agent_runtime"
+
+[tool.uv]
+package = true
+
+[tool.pytest.ini_options]
+addopts = "-p no:cacheprovider"
