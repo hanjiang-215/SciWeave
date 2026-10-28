@@ -2,7 +2,7 @@
 id: ai4-fm4a
 status: in_progress
 deps: []
-links: [ai4-jfvy, ai4-nj9r, ai4-8yk5, ai4-0fwc, ai4-x0ay, ai4-a2ba, ai4-he04]
+links: [ai4-jfvy, ai4-nj9r, ai4-8yk5, ai4-0fwc, ai4-x0ay, ai4-a2ba, ai4-he04, ai4-0wg0, ai4-8d9j, ai4-349h, ai4-japd]
 created: 2026-10-28T00:24:02Z
 type: epic
 priority: 1
@@ -97,3 +97,13 @@ uv run python -m suitecheck.cli check ../
 - `suitecheck` 的能力上限从文档搬进了静态校验：`actor` 决定允许声明哪些 `capabilities`，越界即报错。这条是「套件凭什么不一样」那张表唯一有强制力的地方。
 - `centre-agent-toolkit` 后续把 MCP 卡片移交给服务侧（`ai4-349h`）：卡片描述的是服务的能力，跟着服务源码走，套件只剩「怎么装起来、怎么体检」。`suite.yaml` 的 `mcp:` 因此变成空列表，`suitecheck` 的 `suite_empty` 相应放宽到「skills 与 mcp 都空才算空」。
 - 遗留：`ai4-sue2`（卡片令牌不进请求头）、`ai4-japd`（ingest 不在 supervisord 里）、`ai4-22mr`（PO 读不到预审报告）三张票记的是这套东西真机联调前必须处理的缺口。
+
+**2026-10-28T06:46:45Z**
+
+2026-10-28：`ai4-0wg0` 推翻了本票的一条验收与一条已知取舍，按属人规则在此记录，不覆盖原文。
+
+1. **验收「`centre-agent-toolkit` 的常驻单元与只读体检脚本可安装、可执行」作废。** 常驻单元与 `bin/start-*` 属于 ADR-0006 之前的用户级 systemd 部署路径，与「单容器 supervisord」是两套答案；套件目录已删除，体检脚本迁到 `centre-agents/ops/prereview-sweep.sh`，由 `gateway/ingest/tests/test_prereview_sweep.py` 按退出码钉住。其余六条验收不受影响。
+
+2. **Notes 里「三个套件」的说法作废，现为两个。** 套件的判据不变：差别在谁能把什么变成正式事实。中央 Agent 不再是套件，而是 `centre-stack` 里的服务，识别依据是 `docs/data-flow/centre-agent-prereview.md` 与 `centre-agents/definitions/`。
+
+3. **`suite_empty` 的放宽保留，理由改写。** 放宽不再由某个具体套件背书，而是「只发布配置、卡片属于被配置服务的源码」这种通用形状；当前两个套件都有卡片，这条规则留作约束。
