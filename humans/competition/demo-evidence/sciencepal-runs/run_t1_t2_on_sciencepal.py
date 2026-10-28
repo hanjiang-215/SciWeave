@@ -66,6 +66,19 @@ def parse_json_from_text(text: str) -> dict | None:
     return None
 
 
+def relative_manifest_path(collected: dict) -> str | None:
+    """把 manifest_path 收敛成 workspace 内相对路径，避免把本机绝对路径写进证据。"""
+    raw = collected.get("manifest_path")
+    if not raw:
+        return None
+    parts = Path(str(raw)).parts
+    marker = "runs"
+    if marker in parts:
+        index = len(parts) - 1 - parts[::-1].index(marker)
+        return "/".join(parts[index:])
+    return Path(str(raw)).name
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="SciencePal T1/T2 正式执行")
     parser.add_argument("--bridge", required=True,
@@ -76,6 +89,8 @@ def main() -> int:
                         help="每次 run 的最长等待秒数（默认 600）")
     parser.add_argument("--interval", type=float, default=5.0,
                         help="轮询间隔秒数（默认 5）")
+    parser.add_argument("--max-errors", type=int, default=20,
+                        help="轮询中允许的连续瞬时不可达次数（默认 20）")
     args = parser.parse_args()
 
     bridge = Path(args.bridge).resolve()
@@ -187,8 +202,32 @@ def main() -> int:
 
         deadline = time.monotonic() + args.timeout
         final_status = None
+        consecutive_errors = 0
         while time.monotonic() < deadline:
-            state = service.status(run_id)
+            # 平台单次 run 可能执行数分钟，期间偶发连接重置不应中断取证：
+            # sciencepal_unavailable 只在连续 args.max_errors 次失败后才放弃，
+            # 其余错误（鉴权、404、5xx 语义错误）仍然立即暴露。
+            try:
+                state = service.status(run_id)
+            except SciencePalError as error:
+                if error.code != "sciencepal_unavailable":
+                    raise
+                consecutive_errors += 1
+                print(
+                    f"{label} 轮询瞬时不可达（{consecutive_errors}/{args.max_errors}），"
+                    f"继续等待 run {run_id}",
+                    file=sys.stderr,
+                    flush=True,
+                )
+                if consecutive_errors >= args.max_errors:
+                    print(json.dumps({"error": {"stage": label, "run_id": run_id,
+                                                "detail": "sciencepal_unavailable",
+                                                "consecutive_errors": consecutive_errors}},
+                                     ensure_ascii=False), file=sys.stderr)
+                    return 3
+                time.sleep(args.interval)
+                continue
+            consecutive_errors = 0
             print(f"{label} status={state.get('status')}", flush=True)
             if state.get("terminal"):
                 final_status = state
@@ -246,6 +285,10 @@ def main() -> int:
     if problems:
         print(json.dumps({"error": "artifact_check_failed", "problems": problems}, ensure_ascii=False), file=sys.stderr)
         return 3
+
+    for label in ("t1", "t2"):
+        collected = outcomes[label]["collected"]
+        collected["manifest_path"] = relative_manifest_path(collected)
 
     # ---- 落盘证据 ----
     manifest = {
