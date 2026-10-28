@@ -2,7 +2,7 @@
 id: ai4-8d9j
 status: open
 deps: []
-links: [ai4-tesq]
+links: [ai4-tesq, ai4-349h, ai4-k2le, ai4-8dgd]
 created: 2026-10-28T01:06:41Z
 type: bug
 priority: 2

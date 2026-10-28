@@ -1,8 +1,8 @@
 ---
 id: ai4-tesq
 status: open
-deps: [ai4-1aeg, ai4-e959]
-links: [ai4-8d9j]
+deps: [ai4-1aeg, ai4-e959, ai4-349h]
+links: [ai4-8d9j, ai4-349h, ai4-k2le, ai4-8dgd]
 created: 2026-10-28T01:06:30Z
 type: feature
 priority: 1

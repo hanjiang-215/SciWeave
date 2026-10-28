@@ -2,7 +2,7 @@
 id: ai4-k2le
 status: open
 deps: [ai4-tesq]
-links: []
+links: [ai4-349h, ai4-tesq, ai4-8d9j, ai4-8dgd]
 created: 2026-10-28T01:06:37Z
 type: feature
 priority: 2
