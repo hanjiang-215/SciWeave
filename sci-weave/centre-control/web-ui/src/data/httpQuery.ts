@@ -82,7 +82,8 @@ function isProject(value: unknown): boolean {
 function isTask(value: unknown): boolean {
   return isRecord(value) && isString(value.id) && isString(value.projectId) && isString(value.name)
     && ['queued', 'running', 'waiting', 'succeeded', 'revision_required', 'cancelled', 'failed', 'result_unknown', 'unknown'].includes(String(value.status))
-    && isString(value.owner) && isStringArray(value.prerequisiteIds) && isString(value.updatedAt)
+    && isString(value.owner) && isStringArray(value.prerequisiteIds) && Number.isFinite(value.attentionRank)
+    && isString(value.updatedAt)
 }
 function isWikiDocument(value: unknown): boolean {
   return isRecord(value) && isString(value.id) && isString(value.title) && isString(value.domainId)

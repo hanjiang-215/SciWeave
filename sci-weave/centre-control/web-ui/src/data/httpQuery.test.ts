@@ -35,6 +35,15 @@ describe('dashboard HTTP query', () => {
     await expect(query.getSnapshot()).rejects.not.toThrow('private gateway message')
   })
 
+  it('rejects a task missing attentionRank so attention items are not silently dropped', async () => {
+    const task: Record<string, unknown> = { ...fixtureSnapshot.tasks[0] }
+    delete task.attentionRank
+    const payload = { ...fixtureSnapshot, tasks: [task] }
+    const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify(payload), { status: 200 }))
+    const query = createHttpQuery('https://example.invalid', fetcher)
+    await expect(query.getSnapshot()).rejects.toThrow('返回格式不完整')
+  })
+
   it('rejects malformed snapshots instead of showing empty data', async () => {
     const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify({ projects: [], tasks: [] }), { status: 200 }))
     const query = createHttpQuery('https://example.invalid', fetcher)
