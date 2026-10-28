@@ -2,7 +2,7 @@
 id: ai4-qula
 status: open
 deps: [ai4-1aeg, ai4-e959]
-links: []
+links: [ai4-44fk]
 created: 2026-10-28T01:06:50Z
 type: feature
 priority: 1
