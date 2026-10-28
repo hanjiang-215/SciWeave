@@ -16,7 +16,7 @@ Task Agent 那边，`deploy-task-agent/` 是一个能交付的套件：`agent-de
 
 1. **没有定义层。** 预审的指令是 `runtime.py` 里一句硬编码的 `"You are a SciWeave Task Agent Worker. Complete the owner's command concisely."`。这句话既没说预审，也没说不能批准候选。想调口径必须改 Python 并重新构建镜像。
 2. **没有地方表达「一个工作流」。** 中央 Agent 干的是一串有先后的事——取快照、核分支事实、判冲突、写结论、发通知——但代码里只有一个 agent，这一串只能靠 prompt 里的自然语言暗示。`@fast.chain` 能表达它，却没有可加载的载体。
-3. **卡片和源码分居两个仓库目录。** 五张卡片刚被移到 `centre-control/centre-agents/`，但同一套东西在 `toolkits/centre-agent-toolkit/` 里还留着一份 `suite.yaml` 指向 `mcp/<name>/mcp.json`，`suitecheck` 因此报 5 条 `mcp_card_missing`。套件这个概念对中央侧本来就不成立——中央 Agent 是装在服务器上的一个服务，不是发给研究员的一套配置。
+3. **卡片和源码分居两个仓库目录。** 五张卡片在 `toolkits/centre-agent-toolkit/mcp/`，`suite.yaml` 指 `mcp/<name>/mcp.json`；但卡片描述的是服务的能力，跟着套件走就意味着跟着「发给研究员的一套配置」走。中央 Agent 是装在服务器上的一个服务，它的能力描述应当与它同源。
 4. **判据版本没有落地文件。** 报告必须带 `rule_set_version`，领域 MCP 必须能在 `SCIWEAVE_*_PREREVIEW_RULES_DIR` 下解析到 `<version>.json`。仓库里没有任何一份这样的文件，`centre-stack` 也没有配这两个变量。也就是说按现有代码，任何一次 `append_prereview_log` 都会被拒成 `rule_set_missing`。
 
 后果不是「结构不够漂亮」，是这条链在真实部署里跑不通，而且改一次预审口径要动代码。
@@ -130,7 +130,9 @@ centre-agents/
 环境变量 -> load_centre_config() -> CentreConfig -> fast-agent
 ```
 
-`CentreConfig` 至少暴露：选中的工作流、该工作流的 agent 顺序、每个 agent 的定义、MCP 卡片目录、以及把卡片翻成 `mcp.servers` 块的能力。
+`CentreConfig` 至少暴露：选中的工作流、该工作流的 agent 顺序、每个 agent 的定义、**MCP 卡片目录（路径，而不是重新解析 `paths` 里的字符串）**、以及把卡片翻成 `mcp.servers` 块的能力。
+
+三个根目录另外以 `{变量名: 解析到的路径}` 的形式报告一次，用途只有一个：运维问「容器实际读的是哪个 `rules/`」时有个地方可查。它不参与任何判断。
 
 加载是严格的，三条都硬失败而不是回退：
 
@@ -186,11 +188,26 @@ fast-agent 的 `skills` 参数默认是一个哨兵值，含义是「用上下�
 
 `rules/1.0.0.json` 至少含 `version` 与 `checks`（非空字符串列表），`checks` 的取值与四项检查同名。文件进 Git，与代码同一份历史。
 
+**版本号从目录推断，但推断失败就硬失败。** 目录里恰好一份 `*.json` 时它就是要记的版本；多于一份时必须由 `CENTRE_PREREVIEW_RULE_SET_VERSION` 显式选定。不能「取最新的」：报告里只存版本字符串，静默挑一份会让历史报告无法比较，而那正是 `rule_set_missing` 想防的事。显式指定的版本在目录里不存在，同样报错并列出可用的几份。
+
+**`rule_set_version` 由加载层注入指令，不写在 YAML 里。** `writer` 的 `instruction` 里写 `{{rule_set_version}}`，加载时替换成解析结果。理由：版本是部署事实，不是作者知识；写死在 YAML 里意味着重命名判据文件要改两处，而漏改的那一处只在线上表现为「报告写的版本领域侧解析不到」。指令里本来就有 JSON 花括号，因此只做精确 token 替换，不引入模板引擎。
+
 领域 MCP 通过 `SCIWEAVE_MAPPING_PREREVIEW_RULES_DIR` / `SCIWEAVE_WIKI_PREREVIEW_RULES_DIR` 读它，因此 `centre-stack` 的 compose 必须把这两个变量指向 `centre-agents/rules/`。这两个变量属于领域 MCP 的配置，不属于 Agent 的配置——放错层会让「改了 Agent 的判据」和「改了领域认可的判据」看起来是同一件事。
+
+### 两个不显眼但必需的装饰器参数
+
+- **`use_history=False`。** fast-agent 的 `@fast.agent` 默认记事；而在 `cumulative` 的 chain 里，一个带历史的子 agent 会看到上一轮的对话——上一轮的候选、上一轮的结论。预审是「本次快照的一次判决」，跨轮记忆会让它拿旧事实回答新问题。累积由 chain 负责（每步看得见本轮前序输出），不由历史负责。
+- **`default=True`。** 只声明一条 chain 时它是这轮回合的入口；不写 `default` 就得靠调用方按名字取，而在这个进程里没有第二个候选人。
+
+### 版本占位符的识别方式
+
+`model` 的占位符按前缀 `configure-` 识别，不按精确串 `configure-in-your-own-environment`。部署模板的 workflow 示例用的是 `configure-locally`，同一个约定已经有两个写法；按前缀识别让「以后再写一个 configure-xxx」不需要改代码。其余情况一律当具体模型名。
 
 ### 套件侧退场
 
 `toolkits/centre-agent-toolkit/` 保留 skills、`cron/prereview-sweep.sh`、`bin/`、`suite.yaml`、`install.sh`、`check.sh` 这些**面向部署**的内容，但不再持有 MCP 卡片：`suite.yaml` 的 `mcp:` 段整体删除，而不是留五条指向已移动文件的路径。
+
+`suitecheck` 的 `suite_empty` 因此要从「`skills` 与 `mcp` 各查一次」改成「两者都空才算空」。这确实放宽了一条全局检查，所以必须同时保留收紧的那一半：只声明 skills、一张卡都没有的套件是合法形状，什么都不声明的仍然是错误。
 
 这与「central Agent 不是一个套件」的判断一致：中央侧的能力描述（定义、卡片、判据）属于服务本身，跟着源码走；套件那边只剩「怎么把它装起来、怎么定期体检」。
 
@@ -220,7 +237,9 @@ fast-agent 的 `skills` 参数默认是一个哨兵值，含义是「用上下�
 - **Worker 的子进程派发。** 现在订阅器内联跑运行时，改成显式子进程是 `ai4-e959`。
 - **Worker 租约的过期时间。** `ai4-1aeg`。
 - **MCP 令牌注入。** 卡片只列变量名，`*_MCP_TOKEN` 要不要变成请求头、由谁负责，属于鉴权面，见 Further Notes。
-- **把五个技能的内容搬进定义。** 技能文本里有大段判据说明，本规格只把它们的目的分散到五段 `instruction` 里；`toolkits/centre-agent-toolkit/` 下的 `SKILL.md` 保留不动，是否有第二份真相另议。
+- **把五个技能的内容搬进定义。** `toolkits/centre-agent-toolkit/` 下的 `SKILL.md` 保留不动；定义里的五段 `instruction` 只写**这一步要做什么、能做什么、绝对不能做什么**。判据本身（四项检查各查什么）不搬进来，它属于 `rules/<version>.json` 与技能文本。
+
+  需要说清一处：`skills=[]` 意味着这五个 `SKILL.md` 在运行时**不在模型的上下文里**。所以凡是模型不看到就会做错的事（`append_prereview_log` 的参数形状、一次只写一个域、先写日志再发通知），必须写在 `instruction` 里——那是这一段唯一能到达模型的地方。这与「把技能文本复制一份」是两件事：前者是不可省的运行时输入，后者是第二份真相。
 - **`ADR-0002` 的修订。** 本规格按它执行（两份源码、不 path 依赖），只记录债务加重。
 - **真实模型与真实令牌的端到端验证。** 本机没有可用的模型密钥与领域 MCP 令牌，交付物是「接缝接上且被测试钉住」。
 
