@@ -44,8 +44,12 @@ FROM ${PYTHON_IMAGE}
 # uv 只用于构建期同步依赖，装完即删。从 PyPI 装而不是 COPY ghcr 官方镜像：
 # 受限网络下 ghcr 常常拉不动，而 pip 通道本来就要用（supervisord 也走它），
 # 少一个必须可达的镜像源就少一类构建失败。版本与应用侧的 uv 保持一致。
+# pypi 镜像源，默认官方；国内构建时用 --build-arg PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
+ARG PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
+ENV UV_INDEX_URL=${PIP_INDEX_URL}
 ARG UV_VERSION=0.10.7
-RUN pip install --no-cache-dir "uv==${UV_VERSION}"
+ARG UV_VERSION=0.10.7
+RUN pip install --no-cache-dir -i ${PIP_INDEX_URL} "uv==${UV_VERSION}"
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
