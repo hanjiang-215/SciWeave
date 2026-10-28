@@ -51,22 +51,7 @@ skills:
     path: invalidation
   - name: audit-candidate-branches
     path: audit-candidate-branches
-mcp:
-  - name: research-mapping
-    card: mcp/research-mapping/mcp.json
-    capabilities: [read, centre, prereview_log, merged_candidate]
-  - name: research-wiki
-    card: mcp/research-wiki/mcp.json
-    capabilities: [read, centre, prereview_log, merged_candidate]
-  - name: registry
-    card: mcp/registry/mcp.json
-    capabilities: [centre]
-  - name: email-service
-    card: mcp/email-service/mcp.json
-    capabilities: [read]
-  - name: disposition
-    card: mcp/disposition/mcp.json
-    capabilities: [read]
+mcp: []
 hooks: []
 cron:
   - name: prereview-sweep

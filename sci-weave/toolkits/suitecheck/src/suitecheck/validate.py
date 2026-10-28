@@ -229,10 +229,13 @@ def validate_suite(suite_or_path: SuiteManifest | Path | str) -> list[Finding]:
     findings.extend(_hook_findings(suite))
     findings.extend(_cron_findings(suite))
     findings.extend(_command_findings(suite))
-    if not suite.skills:
-        findings.append(_error("suite_empty", suite.suite, "declares no skills"))
-    if not suite.mcp:
-        findings.append(_error("suite_empty", suite.suite, "declares no MCP cards"))
+    if not suite.skills and not suite.mcp:
+        # A suite may legitimately declare no cards. `centre-agent-toolkit`
+        # installs configuration for a service whose MCP clients live in the
+        # service's own source (ai4-349h), so there is no card inside the suite
+        # tree to point at. What stays an error is a manifest that declares no
+        # payload at all — that is the shape this check exists for.
+        findings.append(_error("suite_empty", suite.suite, "declares neither skills nor MCP cards"))
     return findings
 
 

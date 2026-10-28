@@ -291,6 +291,18 @@ class PayloadTests(SuiteFixture):
         codes = {finding.code for finding in errors(validate_suite(root))}
         self.assertIn("suite_empty", codes)
 
+    def test_a_suite_may_declare_skills_and_no_cards(self) -> None:
+        # `centre-agent-toolkit` (ai4-349h): the service it configures talks to
+        # MCP servers whose cards belong to the service source, not to the suite
+        # tree. Declaring no cards is a real shape; declaring nothing is not.
+        root = self.build()
+        text = (root / "suite.yaml").read_text(encoding="utf-8")
+        start = text.index("mcp:")
+        end = text.index("hooks:")
+        (root / "suite.yaml").write_text(text[:start] + text[end:], encoding="utf-8")
+        codes = {finding.code for finding in errors(validate_suite(root))}
+        self.assertEqual(codes, set())
+
 
 class CrossSuiteTests(SuiteFixture):
     def _suite(self, parent: Path, suite: str, skill_name: str) -> SuiteManifest:
