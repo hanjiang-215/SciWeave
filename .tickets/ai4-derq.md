@@ -2,7 +2,7 @@
 id: ai4-derq
 status: closed
 deps: []
-links: [ai4-u9gj, ai4-3zxu]
+links: [ai4-u9gj, ai4-3zxu, ai4-yidf]
 created: 2026-10-27T13:35:41Z
 type: bug
 priority: 2

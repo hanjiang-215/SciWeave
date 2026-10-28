@@ -1,0 +1,3 @@
+# ai4-qula 的索引归属与简介（人工维护）
+module = ["governance", "agent"]
+summary = "治理事件落成执行记录并派发 Worker：recompute_triggered 从计数变成真实触发，标识按快照审"
