@@ -109,6 +109,89 @@ class SqliteStore:
                 )
             )
 
+    def ensure_initial_formal_revision(
+        self,
+        *,
+        mapping_domain_id: str,
+        terminus_store_id: str,
+        formal_branch_id: str,
+        formal_commit_hash: str,
+        graph_snapshot_digest: str,
+        published_at: str,
+        published_by: str = "research-map-bootstrap",
+        formal_revision_id: str | None = None,
+        formalization_operation_id: str | None = None,
+        result_id: str | None = None,
+    ) -> FormalMappingRevision:
+        """Atomically install the domain's first formal revision.
+
+        Existing current pointers are immutable from this bootstrap path. A
+        partially populated domain is an error rather than an invitation to
+        guess which record should be repaired.
+        """
+        import hashlib
+
+        if not mapping_domain_id or not terminus_store_id or not formal_branch_id or not formal_commit_hash:
+            raise ValueError("initial formal revision identity is incomplete")
+        stable = hashlib.sha256(mapping_domain_id.encode("utf-8")).hexdigest()
+        revision_id = formal_revision_id or f"formal-initial-{stable[:32]}"
+        operation_id = formalization_operation_id or f"formal-bootstrap-{stable[:32]}"
+        record_id = result_id or f"formalization-result-{stable[:32]}"
+        revision = FormalMappingRevision(
+            revision_id, mapping_domain_id, terminus_store_id, formal_branch_id,
+            formal_commit_hash, None, None, None, published_by, published_at,
+            graph_snapshot_digest, 0, 0,
+        )
+        with self.connection() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            pointer = connection.execute(
+                "SELECT current_formal_revision_id FROM mapping_current_formal_revision WHERE mapping_domain_id=?",
+                (mapping_domain_id,),
+            ).fetchone()
+            if pointer is not None:
+                existing = connection.execute(
+                    "SELECT * FROM formal_mapping_revision WHERE formal_revision_id=?",
+                    (pointer["current_formal_revision_id"],),
+                ).fetchone()
+                if existing is None or existing["mapping_domain_id"] != mapping_domain_id:
+                    raise RuntimeError("formal_bootstrap_conflict")
+                return _row_to_revision(existing)
+            domain_rows = connection.execute(
+                "SELECT formal_revision_id FROM formal_mapping_revision WHERE mapping_domain_id=?",
+                (mapping_domain_id,),
+            ).fetchall()
+            if domain_rows:
+                raise RuntimeError("formal_bootstrap_partial_state")
+            existing_revision = connection.execute(
+                "SELECT mapping_domain_id FROM formal_mapping_revision WHERE formal_revision_id=?",
+                (revision_id,),
+            ).fetchone()
+            if existing_revision is not None:
+                raise RuntimeError("formal_bootstrap_conflict")
+            connection.execute(
+                """INSERT INTO formal_mapping_revision
+                (formal_revision_id,mapping_domain_id,terminus_store_id,formal_branch_id,formal_commit_hash,
+                 base_formal_revision_id,source_proposal_id,approval_audit_event_id,published_by,published_at,
+                 graph_snapshot_digest,node_count,edge_count) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (revision.formal_revision_id, revision.mapping_domain_id, revision.terminus_store_id,
+                 revision.formal_branch_id, revision.formal_commit_hash, None, None, None,
+                 revision.published_by, revision.published_at, revision.graph_snapshot_digest, 0, 0),
+            )
+            connection.execute(
+                "INSERT INTO mapping_current_formal_revision VALUES (?,?,?)",
+                (mapping_domain_id, revision_id, published_at),
+            )
+            connection.execute(
+                """INSERT INTO mapping_formalization_result
+                (result_id,mapping_domain_id,formalization_operation_id,attempt_number,result_status,
+                 formal_revision_id,terminus_store_id,formal_commit_hash,recorded_at)
+                VALUES (?,?,?,?,?,?,?,?,?)""",
+                (record_id, mapping_domain_id, operation_id, 1, "succeeded", revision_id,
+                 terminus_store_id, formal_commit_hash, published_at),
+            )
+            connection.commit()
+        return revision
+
     def add_formal_revision(self, revision: FormalMappingRevision) -> None:
         with self.connection() as connection:
             connection.execute(

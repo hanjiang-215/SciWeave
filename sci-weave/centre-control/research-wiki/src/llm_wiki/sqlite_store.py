@@ -297,6 +297,57 @@ class SqliteStore:
                 base["reason"] = str(decision["reason"])
             return base
 
+    def ensure_initial_formal_revision(
+        self, *, formal_revision_id: str, result_id: str, wiki_domain_id: str,
+        terminus_store_id: str, formal_branch_id: str, formal_commit_hash: str,
+        content_snapshot_digest: str | None = None,
+    ) -> str:
+        """Atomically activate a bootstrap revision without replacing a current one."""
+        with self.connection() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            current = connection.execute(
+                "SELECT current_formal_revision_id FROM wiki_current_formal_revision WHERE wiki_domain_id=?",
+                (wiki_domain_id,),
+            ).fetchone()
+            revision = connection.execute(
+                "SELECT * FROM formal_wiki_revision WHERE formal_wiki_revision_id=?",
+                (formal_revision_id,),
+            ).fetchone()
+            results = connection.execute(
+                "SELECT * FROM wiki_formalization_result WHERE wiki_domain_id=? AND formal_wiki_revision_id=?",
+                (wiki_domain_id, formal_revision_id),
+            ).fetchall()
+            if current is not None:
+                current_id = current["current_formal_revision_id"]
+                if current_id != formal_revision_id:
+                    connection.commit()
+                    return str(current_id)
+                if revision is None or len(results) != 1:
+                    raise RuntimeError("partial wiki initial formal revision state")
+                result = results[0]
+                expected_revision = (wiki_domain_id, terminus_store_id, formal_branch_id, formal_commit_hash, content_snapshot_digest)
+                actual_revision = tuple(revision[k] for k in ("wiki_domain_id", "terminus_store_id", "formal_branch_id", "formal_commit_hash", "content_snapshot_digest"))
+                if actual_revision != expected_revision or (result["result_status"], result["terminus_store_id"], result["formal_commit_hash"]) != ("succeeded", terminus_store_id, formal_commit_hash):
+                    raise RuntimeError("conflicting wiki initial formal revision state")
+                connection.commit()
+                return formal_revision_id
+            if revision is not None or results:
+                raise RuntimeError("partial or conflicting wiki initial formal revision state")
+            connection.execute(
+                "INSERT INTO formal_wiki_revision (formal_wiki_revision_id,wiki_domain_id,terminus_store_id,formal_branch_id,formal_commit_hash,content_snapshot_digest) VALUES (?,?,?,?,?,?)",
+                (formal_revision_id,wiki_domain_id,terminus_store_id,formal_branch_id,formal_commit_hash,content_snapshot_digest),
+            )
+            connection.execute(
+                "INSERT INTO wiki_formalization_result (result_id,wiki_domain_id,formal_wiki_revision_id,terminus_store_id,formal_commit_hash,result_status) VALUES (?,?,?,?,?,'succeeded')",
+                (result_id,wiki_domain_id,formal_revision_id,terminus_store_id,formal_commit_hash),
+            )
+            connection.execute(
+                "INSERT INTO wiki_current_formal_revision (wiki_domain_id,current_formal_revision_id) VALUES (?,?)",
+                (wiki_domain_id,formal_revision_id),
+            )
+            connection.commit()
+            return formal_revision_id
+
     def add_formal_revision(
         self,
         *,

@@ -257,6 +257,75 @@ class TerminusDBStore:
         return (f"{self.base_url}/api/log/{quote(store_id, safe='')}/{quote(database, safe='')}/"
                 f"{quote(self.remote, safe='')}/branch/{quote(branch, safe='')}")
 
+    def ensure_empty_formal_snapshot(
+        self, domain_id: str, *, branch_id: str | None = None, operation_id: str | None = None
+    ) -> SnapshotRead:
+        """Create, or reconcile, the deterministic empty formal snapshot for a domain.
+
+        The branch and commit marker are domain-scoped, so a retry never creates a
+        second logical bootstrap snapshot.  A branch that exists without our
+        marker is treated as an unknown conflict and is never overwritten.
+        """
+        if not self.store_id or not self.database or not domain_id:
+            return SnapshotRead.unavailable("formal_store_not_configured")
+        identity = operation_id or hashlib.sha256(
+            f"research-map:formal-bootstrap:{domain_id}".encode("utf-8")
+        ).hexdigest()
+        branch = branch_id or f"formal-{identity[:32]}"
+        marker = f"sciweave-formal-bootstrap:{identity}:{domain_id}"
+        try:
+            branches = self._branches()
+            if branches is None:
+                return SnapshotRead.unavailable(errors.STORE_UNAVAILABLE)
+            branch_created = False
+            if branch not in branches:
+                status, _, _ = self._request(
+                    "POST", self._branch_url(branch), json.dumps({
+                        "origin": f"{quote(self.store_id, safe='')}/{quote(self.database, safe='')}/"
+                        f"{quote(self.remote, safe='')}/branch/main"
+                    }, separators=(",", ":")).encode()
+                )
+                if not 200 <= status < 300:
+                    branches = self._branches()
+                    if branches is None or branch not in branches:
+                        return SnapshotRead.unavailable(
+                            errors.STORE_RESULT_UNKNOWN if status >= 500 else "formal_branch_conflict"
+                        )
+                else:
+                    branch_created = True
+            head = None if branch_created else self._head(branch)
+            if not branch_created:
+                if head is None:
+                    return SnapshotRead.unavailable(errors.STORE_RESULT_UNKNOWN)
+                if head.get("message") != marker or head.get("author") != "sciweave":
+                    return SnapshotRead.unavailable("formal_branch_conflict")
+                commit = head.get("identifier")
+                if not isinstance(commit, str) or not commit:
+                    return SnapshotRead.unavailable(errors.STORE_RESULT_UNKNOWN)
+                snapshot = self.read_exact_snapshot(self.store_id, self.database, branch, commit)
+                if snapshot.status != SNAPSHOT_CONFIRMED or snapshot.documents:
+                    return snapshot if snapshot.status != SNAPSHOT_CONFIRMED else SnapshotRead.unavailable("formal_snapshot_not_empty")
+                return snapshot
+            status, response_headers, _ = self._request_opener(
+                "POST", self._branch_document_url(branch) + "?author=sciweave&message=" + quote(marker, safe=""),
+                {"Accept": "application/json", "Content-Type": "application/json", **({"Authorization": self._authorization} if self._authorization else {})},
+                b"[]", self.timeout,
+            )
+            if not 200 <= status < 300:
+                return SnapshotRead.unavailable(errors.STORE_RESULT_UNKNOWN if status >= 500 else "formal_store_rejected")
+            head = self._head(branch)
+            if head is None or head.get("message") != marker or head.get("author") != "sciweave":
+                return SnapshotRead.unavailable(errors.STORE_RESULT_UNKNOWN)
+            commit = head.get("identifier")
+            if not isinstance(commit, str) or not commit:
+                return SnapshotRead.unavailable(errors.STORE_RESULT_UNKNOWN)
+            snapshot = self.read_exact_snapshot(self.store_id, self.database, branch, commit)
+            if snapshot.status != SNAPSHOT_CONFIRMED or snapshot.documents:
+                return snapshot if snapshot.status != SNAPSHOT_CONFIRMED else SnapshotRead.unavailable("formal_snapshot_not_empty")
+            return snapshot
+        except (OSError, TimeoutError, urllib.error.URLError, ValueError, json.JSONDecodeError):
+            return SnapshotRead.unavailable(errors.STORE_RESULT_UNKNOWN)
+
     def create_formal_snapshot(
         self, store_id: str, database: str, branch_id: str, commit_hash: str, operation_id: str
     ) -> SnapshotRead:

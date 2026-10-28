@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 
+from research_mapping.bootstrap import ensure_initial_formal_revision
 from research_mapping.candidate_submission import MappingCandidateService
 from research_mapping.config import MappingConfig
 from research_mapping.dashboard_source import run_mapping_dashboard_from_environment
@@ -27,6 +28,11 @@ def main() -> int:
         password=config.terminusdb_password,
         store_id=config.terminusdb_store,
         database=config.terminusdb_database,
+    )
+    ensure_initial_formal_revision(
+        sqlite_store=sqlite_store,
+        terminus_store=terminus_store,
+        mapping_domain_id=config.mapping_domain_id,
     )
     service = FormalQueryService(
         sqlite_store=sqlite_store,
