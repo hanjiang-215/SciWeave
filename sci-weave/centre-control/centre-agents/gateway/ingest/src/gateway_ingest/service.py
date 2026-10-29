@@ -80,8 +80,18 @@ class GovernanceEvent:
         if not isinstance(event_id, str) or not event_id:
             raise GovernanceEnvelopeError("event_id is required")
         schema_version = body.get("schema_version")
-        if schema_version is not None and int(schema_version) != SCHEMA_VERSION:
-            raise GovernanceEnvelopeError(f"unsupported schema_version: {schema_version}")
+        if schema_version is not None:
+            try:
+                parsed_version = int(schema_version)
+            except (TypeError, ValueError) as exc:
+                # A non-numeric schema_version must be a poison-pill envelope,
+                # not an uncaught ValueError that escapes the consumer loop and
+                # stops the whole partition (ai4-t7jc).
+                raise GovernanceEnvelopeError(
+                    f"invalid schema_version: {schema_version!r}"
+                ) from exc
+            if parsed_version != SCHEMA_VERSION:
+                raise GovernanceEnvelopeError(f"unsupported schema_version: {schema_version}")
         domain_id = body.get("mapping_domain_id") or body.get("wiki_domain_id")
         payload = body.get("payload")
         if isinstance(payload, dict):
