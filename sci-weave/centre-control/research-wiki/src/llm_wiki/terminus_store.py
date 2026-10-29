@@ -543,6 +543,56 @@ class TerminusDBWikiCandidateStore(TerminusDBResourceStore):
     def _candidate_log_url(self, branch):
         return f"{self.base_url}/api/log/{quote(self.store_id, safe='')}/{quote(self.database, safe='')}/{quote(self.remote, safe='')}/branch/{quote(branch, safe='')}"
 
+    # --- candidate branch reaping (ai4-4g9s) --------------------------------
+    # Every candidate submission leaves a ``wiki-candidate-*`` branch behind, so a
+    # busy domain accumulates branches without bound. Reaping is deliberately
+    # conservative and explicit: a caller passes the set of branch ids that are
+    # still active (derived from non-terminal submissions) and we only delete the
+    # rest. ``main`` (and any name not matching the candidate prefix) is never
+    # touched, and a domain with an unresolved candidate head is skipped.
+
+    _CANDIDATE_BRANCH_PREFIX = "wiki-candidate-"
+
+    def list_candidate_branches(self) -> list[str] | None:
+        """Return the ``wiki-candidate-*`` branches, or None if the store is unreadable."""
+        branches = self._candidate_branches()
+        if branches is None:
+            return None
+        return sorted(name for name in branches if isinstance(name, str) and name.startswith(self._CANDIDATE_BRANCH_PREFIX))
+
+    def delete_candidate_branch(self, branch: str) -> bool:
+        """Delete one candidate branch. Refuses anything off the candidate namespace."""
+        if not isinstance(branch, str) or not branch.startswith(self._CANDIDATE_BRANCH_PREFIX):
+            raise ValueError("refusing to delete a non-candidate branch")
+        url = (
+            f"{self.base_url}/api/branch/{quote(self.store_id, safe='')}/{quote(self.database, safe='')}"
+            f"/{quote(self.remote, safe='')}/branch/{quote(branch, safe='')}"
+        )
+        status, _, _ = self._request("DELETE", url)
+        return 200 <= status < 300
+
+    def reap_candidate_branches(self, keep: set[str]) -> dict[str, list[str]]:
+        """Delete candidate branches not in ``keep``.
+
+        ``keep`` holds the branch ids that are still active (a branch with a live
+        candidate must never be dropped, or a later formalize would fail with a
+        missing branch). Returns the deleted and failed branch names.
+        """
+        candidates = self.list_candidate_branches()
+        if candidates is None:
+            return {"deleted": [], "failed": [], "skipped": ["store_unreadable"]}
+        deleted: list[str] = []
+        failed: list[str] = []
+        for branch in candidates:
+            if branch in keep:
+                continue
+            if self.delete_candidate_branch(branch):
+                deleted.append(branch)
+            else:
+                failed.append(branch)
+        return {"deleted": deleted, "failed": failed, "skipped": []}
+
+
 
 def _candidate_documents_match(actual, expected):
     for wanted in expected:
