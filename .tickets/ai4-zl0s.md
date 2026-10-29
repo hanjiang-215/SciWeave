@@ -1,6 +1,6 @@
 ---
 id: ai4-zl0s
-status: closed
+status: open
 deps: [ai4-lewg, ai4-ykti]
 links: []
 created: 2026-10-29T14:26:45Z

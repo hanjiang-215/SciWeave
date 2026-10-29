@@ -69,7 +69,7 @@ capabilities:
   - name: read
     platforms:
       linux: {status: supported, limitations: []}
-      windows: {status: supported, limitations: [Harness input only; Task Agent services are unverified]}
+      windows: {status: unverified, limitations: [Python exporter not yet run on Windows; Task Agent services unverified]}
       macos: {status: unverified, limitations: [not tested in this release]}
 export:
   harness_input: .sciweave/harness/researcher-agent-toolkit

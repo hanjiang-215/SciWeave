@@ -40,7 +40,7 @@ capabilities:
   - name: read
     platforms:
       linux: {status: supported, limitations: []}
-      windows: {status: supported, limitations: [Harness input only; private Harness registration remains user-controlled]}
+      windows: {status: unverified, limitations: [Python exporter not yet run on Windows; private Harness registration remains user-controlled]}
       macos: {status: unverified, limitations: [not tested in this release]}
   - name: candidate_review
     platforms:

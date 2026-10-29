@@ -78,7 +78,12 @@ class ProjectSystemdManager:
     ``upgrade`` or an explicit ``rebind``.
     """
 
-    def __init__(self, project_root: os.PathLike[str] | str, *, config_home: os.PathLike[str] | str | None = None):
+    def __init__(
+        self,
+        project_root: os.PathLike[str] | str,
+        *,
+        config_home: os.PathLike[str] | str | None = None,
+    ):
         if project_root is None:
             raise TypeError("project_root must be explicitly provided")
         root = Path(project_root).expanduser().resolve()
@@ -225,11 +230,17 @@ class ProjectSystemdManager:
         )
 
     def start(self, *, run_systemctl: bool = True) -> None:
+        """Start the instance, creating the binding on first use.
+
+        An existing binding that points somewhere else is refused: only an
+        explicit ``rebind`` may re-point an already-bound instance.
+        """
         if not self.project_root.is_dir():
             raise ProjectBindingStaleError(
                 f"project root is missing; explicit rebind required: {self.project_root}"
             )
-        self._require_current_binding()
+        if self._read_binding():
+            self._require_current_binding()
         self.generate()
         if not run_systemctl:
             return
@@ -375,10 +386,13 @@ class ProjectSystemdManager:
         project_root: os.PathLike[str] | str,
         *,
         config_home: os.PathLike[str] | str | None = None,
+        run_systemctl: bool = False,
     ) -> "ProjectSystemdManager":
-        """Move a legacy install onto an explicitly chosen project root.
+        """Copy a legacy install onto an explicitly chosen project root.
 
-        The old data is never deleted here; the caller decides that separately.
+        Code and state move by copy, never by delete: the legacy directory is
+        left intact so a half-finished migration cannot destroy the only copy.
+        An existing target ``data/`` or ``project/`` is never overwritten.
         """
         legacy = cls.inspect_legacy(legacy_root)
         target = Path(project_root).expanduser().resolve()
@@ -388,7 +402,31 @@ class ProjectSystemdManager:
             raise ProjectBindingError(
                 "legacy installation ownership is unknown; explicit binding metadata is required"
             )
+        source = legacy.root
         manager = cls(target, config_home=config_home)
-        manager._validate_paths()
+        manager.paths.runtime.mkdir(parents=True, exist_ok=True)
+        manager.paths.data.mkdir(parents=True, exist_ok=True)
+        cls._adopt(source, manager.paths.runtime, {"project-binding.json"})
+        cls._adopt(source / "data", manager.paths.data)
         manager.generate()
+        if run_systemctl:
+            manager.stop(run_systemctl=True)
+            manager.start(run_systemctl=True)
         return manager
+
+    @staticmethod
+    def _adopt(source: Path, destination: Path, skip: set[str] | None = None) -> None:
+        """Copy missing files from ``source`` into ``destination`` without clobbering."""
+        if not source.is_dir():
+            return
+        skip = skip or set()
+        for entry in source.iterdir():
+            if entry.name in skip:
+                continue
+            target = destination / entry.name
+            if target.exists():
+                continue  # never overwrite the target's own state
+            if entry.is_dir():
+                shutil.copytree(entry, target, ignore=shutil.ignore_patterns(".venv", "__pycache__", ".git"))
+            else:
+                shutil.copy2(entry, target)

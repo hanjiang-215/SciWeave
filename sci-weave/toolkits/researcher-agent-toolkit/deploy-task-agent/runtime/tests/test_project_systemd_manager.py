@@ -112,10 +112,10 @@ class ProjectSystemdManagerTests(unittest.TestCase):
         manager.start(run_systemctl=False)
         self.assertEqual(manager.project_root, (self.base / "cwd").resolve())
 
-    def test_start_refuses_an_instance_that_was_never_generated(self):
+    def test_first_start_creates_the_binding(self):
         manager = self.manager("unbound")
-        with self.assertRaisesRegex(ProjectBindingError, "no project binding"):
-            manager.start(run_systemctl=False)
+        manager.start(run_systemctl=False)
+        self.assertTrue(manager.binding_path.is_file())
 
     # -- upgrade ---------------------------------------------------------
 
@@ -211,6 +211,33 @@ class ProjectSystemdManagerTests(unittest.TestCase):
         (legacy / "project-binding.json").write_text(json.dumps({"project_root": str(target)}), encoding="utf-8")
         manager = ProjectSystemdManager.migrate_legacy(legacy, target, config_home=self.config)
         self.assertEqual(json.loads(manager.binding_path.read_text(encoding="utf-8"))["project_root"], str(target.resolve()))
+
+    def test_legacy_migration_copies_code_and_state_without_deleting_the_source(self):
+        legacy = self.base / "legacy"
+        (legacy / "bin").mkdir(parents=True)
+        (legacy / "bin" / "start-subscriber").write_text("#!/usr/bin/env sh\n", encoding="utf-8")
+        (legacy / "data").mkdir()
+        (legacy / "data" / "inbox.sqlite3").write_text("old-state", encoding="utf-8")
+        target = make_project(self.base / "target")
+        (legacy / "project-binding.json").write_text(json.dumps({"project_root": str(target)}), encoding="utf-8")
+
+        manager = ProjectSystemdManager.migrate_legacy(legacy, target, config_home=self.config)
+
+        self.assertEqual((manager.runtime_path / "bin" / "start-subscriber").read_text(encoding="utf-8"), "#!/usr/bin/env sh\n")
+        self.assertEqual((manager.data_path / "inbox.sqlite3").read_text(encoding="utf-8"), "old-state")
+        self.assertTrue((legacy / "data" / "inbox.sqlite3").is_file(), "the legacy copy must survive migration")
+
+    def test_legacy_migration_never_overwrites_existing_target_state(self):
+        legacy = self.base / "legacy"
+        (legacy / "data").mkdir(parents=True)
+        (legacy / "data" / "inbox.sqlite3").write_text("old-state", encoding="utf-8")
+        target = make_project(self.base / "target")
+        (target / ".sciweave" / "data" / "inbox.sqlite3").write_text("current-state", encoding="utf-8")
+        (legacy / "project-binding.json").write_text(json.dumps({"project_root": str(target)}), encoding="utf-8")
+
+        manager = ProjectSystemdManager.migrate_legacy(legacy, target, config_home=self.config)
+
+        self.assertEqual((manager.data_path / "inbox.sqlite3").read_text(encoding="utf-8"), "current-state")
 
     def test_legacy_description_honours_config_home(self):
         legacy = self.base / "legacy"
