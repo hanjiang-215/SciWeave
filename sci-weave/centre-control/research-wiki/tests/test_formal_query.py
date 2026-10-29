@@ -126,6 +126,35 @@ class WikiFormalQueryTestCase(unittest.TestCase):
         self.assertEqual(self.terminus.calls, [(STORE, DATABASE, BRANCH, COMMIT)])
         self.assertEqual(self.reviews.calls, [("rv-exact-7", "reference")])
 
+    def test_empty_body_default_formal_revision_is_available(self):
+        # The default/genesis formal revision legitimately has an empty title and
+        # body. body_markdown is not an identity field; content integrity is
+        # guaranteed by content_digest + exact commit read-back. This must not be
+        # reported as "unavailable" (which previously broke the wiki dashboard
+        # source for a freshly bootstrapped domain).
+        empty_doc = {
+            "@id": "WikiRevision/" + REVISION,
+            "@type": "WikiRevision",
+            "wiki_revision_id": REVISION,
+            "title": "",
+            "body_markdown": "",
+            "lifecycle_state": "formal",
+        }
+        self.terminus.outcome = WikiSnapshotRead.confirmed(
+            store_id=STORE, database=DATABASE, branch_id=BRANCH,
+            commit_hash=COMMIT, documents=(empty_doc,),
+            content_digest=sha256_json([empty_doc]),
+        )
+
+        result = self.service.get_current(DOMAIN)
+
+        self.assertEqual(result.status, "available")
+        self.assertEqual(result.reason_code, "ok")
+        self.assertEqual(result.formal_wiki_revision_id, REVISION)
+        self.assertIsNone(result.body_markdown)
+        self.assertIsNone(result.title)
+        self.assertEqual(result.references, ())
+
     def test_unknown_qualification_is_pending_and_keeps_exact_target(self):
         result = self.service.get_current(DOMAIN)
 
