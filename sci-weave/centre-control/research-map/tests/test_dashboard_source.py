@@ -28,6 +28,11 @@ class MappingDashboardSourceTests(unittest.TestCase):
         self.assertEqual(payload["tasks"][0]["status"], "succeeded")
         self.assertEqual(payload["tasks"][1]["prerequisiteIds"], ["a-v1"])
         self.assertEqual(payload["tasks"][1]["status"], "waiting")
+        # ai4-fnzt: the projection exposes a stable logical id separately from the
+        # immutable version id, so the UI labels the logical task, not "v1".
+        self.assertEqual(payload["tasks"][0]["id"], "a-v1")
+        self.assertEqual(payload["tasks"][0]["logicalId"], "a")
+        self.assertEqual(payload["tasks"][1]["logicalId"], "b")
 
     def test_unavailable_formal_query_does_not_expose_candidate_documents(self) -> None:
         result = SimpleNamespace(status="inconsistent", mapping_domain_id="mapping-1", documents=({"secret": "candidate"},))

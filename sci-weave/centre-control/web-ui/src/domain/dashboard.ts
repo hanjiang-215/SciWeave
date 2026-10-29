@@ -22,6 +22,7 @@ export interface ProjectSummary {
 
 export interface TaskNode {
   id: string
+  logicalId?: string
   projectId: string
   name: string
   status: TaskStatus

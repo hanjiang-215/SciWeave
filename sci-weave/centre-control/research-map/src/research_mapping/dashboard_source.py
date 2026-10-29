@@ -171,8 +171,14 @@ def _task_projection(
         mapping_domain_id=mapping_domain_id,
     )
     updated_at = _text(document.get("updated_at") or document.get("published_at") or document.get("created_at")) or _utc_now()
+    # ai4-fnzt: the dashboard shows "TASK NODE · <id>" and, without a separate
+    # logical id, that surfaced the immutable version id (e.g. ``v1``). Keep
+    # ``id`` as the unique node id (routing/dependencies key off it) but also
+    # expose the stable ``logicalId`` so the UI can label the logical task.
+    logical_id = _text(document.get("logical_id")) or task_id
     return {
         "id": task_id,
+        "logicalId": logical_id,
         "projectId": _text(document.get("mapping_domain_id")) or "mapping",
         "name": _text(document.get("title") or document.get("logical_id")) or task_id,
         "status": status,
