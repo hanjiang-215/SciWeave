@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import json
+import logging
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from .aggregator import DashboardAggregator
 from .config import DashboardConfig
 from .sources import fetch_json
+
+logger = logging.getLogger(__name__)
 
 
 class DashboardRequestHandler(BaseHTTPRequestHandler):
@@ -28,6 +31,9 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             try:
                 payload = self.server.dashboard_aggregator.get_snapshot()  # type: ignore[attr-defined]
             except Exception:
+                # The client only sees a generic 503, so log the cause here or the
+                # failure is invisible (ai4-onvr).
+                logger.exception("dashboard snapshot failed")
                 self._send_json(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "snapshot_unavailable"})
                 return
             self._send_json(HTTPStatus.OK, payload)
@@ -79,7 +85,11 @@ def create_dashboard_server(config: DashboardConfig, aggregator: DashboardAggreg
     if aggregator is None:
         def fetch(source):
             return fetch_json(source, timeout_seconds=config.timeout_seconds, max_payload_bytes=config.max_payload_bytes)
-        aggregator = DashboardAggregator(config.source_specs, fetch)
+        aggregator = DashboardAggregator(
+            config.source_specs,
+            fetch,
+            deadline_seconds=config.snapshot_deadline_seconds,
+        )
     server = DashboardServer((config.host, config.port), DashboardRequestHandler)
     server.dashboard_config = config  # type: ignore[attr-defined]
     server.dashboard_aggregator = aggregator  # type: ignore[attr-defined]

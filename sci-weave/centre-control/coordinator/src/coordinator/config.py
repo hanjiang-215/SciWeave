@@ -8,10 +8,16 @@ from dataclasses import dataclass, replace
 @dataclass(frozen=True)
 class CoordinatorConfig:
     sqlite_path: str
+    # Reserved: parsed and validated so deployments that set them keep working,
+    # but the dispatch retry loop currently uses a fixed poll interval and does
+    # not yet apply exponential backoff. Wire these into the retry scheduler
+    # before relying on them to change retry timing (ai4-ubcp).
     retry_initial_seconds: float
     retry_multiplier: float
     retry_max_seconds: float
     dispatch_poll_seconds: float
+    # Hard cap on dispatch attempts; enforced by CoordinatorService and passed
+    # in from main.py (previously parsed but never used, ai4-ubcp).
     max_attempts: int
 
     @classmethod

@@ -64,5 +64,57 @@ class SourceReaderTests(unittest.TestCase):
         self.assertEqual(raised.exception.reason_code, "source_invalid_response")
 
 
+class RedirectRejectionTests(unittest.TestCase):
+    """ai4-72pa: a source must not be able to bounce the request elsewhere."""
+
+    def setUp(self) -> None:
+        self.seen: list[str | None] = []
+
+        class _Target(BaseHTTPRequestHandler):
+            def do_GET(self) -> None:  # noqa: N802
+                self.seen.append(self.headers.get("Authorization"))
+                body = json.dumps({"observedAt": "2026-10-22T09:00:00Z"}).encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, format: str, *args: object) -> None:
+                return
+
+        self.target = ThreadingHTTPServer(("127.0.0.1", 0), _Target)
+        threading.Thread(target=self.target.serve_forever, daemon=True).start()
+        target_url = f"http://127.0.0.1:{self.target.server_address[1]}/steal"
+
+        class _Redirect(BaseHTTPRequestHandler):
+            def do_GET(self) -> None:  # noqa: N802
+                self.send_response(302)
+                self.send_header("Location", target_url)
+                self.end_headers()
+
+            def log_message(self, format: str, *args: object) -> None:
+                return
+
+        self.redirect = ThreadingHTTPServer(("127.0.0.1", 0), _Redirect)
+        threading.Thread(target=self.redirect.serve_forever, daemon=True).start()
+        self.source = SourceSpec(
+            "mapping", "Research Mapping",
+            f"http://127.0.0.1:{self.redirect.server_address[1]}/snapshot",
+            ("projects",), "source-read-only-token",
+        )
+
+    def tearDown(self) -> None:
+        for server in (self.target, self.redirect):
+            server.shutdown()
+            server.server_close()
+
+    def test_redirect_is_refused_and_the_token_never_reaches_the_target(self) -> None:
+        with self.assertRaises(SourceUnavailable) as raised:
+            fetch_json(self.source, timeout_seconds=1, max_payload_bytes=1024)
+        self.assertEqual(raised.exception.reason_code, "source_redirect_rejected")
+        self.assertEqual(self.seen, [])
+
+
 if __name__ == "__main__":
     unittest.main()

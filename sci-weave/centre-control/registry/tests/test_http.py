@@ -738,3 +738,32 @@ def test_register_workflow_agent_endpoint_requires_principal(registry_mcp):
     )
     assert "error" not in body(centre)
     assert body(centre)["agent_id"] == "agent:centre-ok"
+
+
+def test_an_unexpected_operation_error_does_not_leave_a_transaction_open() -> None:
+    """ai4-onvr: a non-RegistryError from operation() used to keep BEGIN open."""
+    import sqlite3
+
+    from registry.service import RegistryService
+
+    conn = sqlite3.connect(":memory:", check_same_thread=False)
+    service = RegistryService(conn)
+
+    def explode() -> dict:
+        conn.execute(
+            "INSERT INTO operation(operation_id, idempotency_key, caller_id, action, target_id,"
+            " request_json, result_json) VALUES(?,?,?,?,?,?,?)",
+            ("o-tmp", "k-tmp", "c", "probe", "t", "{}", "{}"),
+        )
+        raise RuntimeError("boom")
+
+    caller = type("Caller", (), {"caller_id": "c", "caller_type": "researcher"})()
+    payload = {"idempotency_key": "k-tmp"}
+    with pytest.raises(RuntimeError):
+        service._write(caller, payload, "probe", "t", explode)
+
+    assert conn.in_transaction is False
+    # The rolled-back row is gone and the connection still accepts writes.
+    assert conn.execute("SELECT COUNT(*) FROM operation").fetchone()[0] == 0
+    service._write(caller, {"idempotency_key": "k-ok"}, "probe", "t", lambda: {"ok": True})
+    assert conn.execute("SELECT COUNT(*) FROM operation").fetchone()[0] == 1

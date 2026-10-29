@@ -227,6 +227,19 @@ class OutcomeTests(_RuntimeTestCase):
         self.assertEqual(outcome.status, "failed")
         self.assertEqual(outcome.error_summary, "fast_agent_runtime_error")
 
+    def test_a_raising_agent_is_logged_with_its_stack(self) -> None:
+        """A failed run must leave a trace, not only a bare error code."""
+        import logging
+
+        self.agent.error = RuntimeError("model exploded")
+        with self.assertLogs("task_agent_worker", level="ERROR") as captured:
+            self.runtime.run(doubles.Request())
+        joined = "\n".join(captured.output)
+        self.assertIn("fast-agent runtime failed", joined)
+        # ``logger.exception`` records the traceback, so the cause is visible.
+        self.assertIn("model exploded", joined)
+        self.assertIn("Traceback", joined)
+
 
 class ConfigurationAtStartupTests(unittest.TestCase):
     def test_a_broken_definition_fails_when_the_runtime_is_built_not_on_first_run(self) -> None:

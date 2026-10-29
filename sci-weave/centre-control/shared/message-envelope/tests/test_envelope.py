@@ -165,6 +165,17 @@ def test_non_utf8_bytes_are_rejected():
         decode(b"\xff\xfe{}")
 
 
+def test_nan_and_infinity_constants_are_rejected():
+    """ai4-onvr: json.loads accepts NaN/Infinity; the envelope wire format does not."""
+    marker = b'"payload": {'
+    for constant in (b"NaN", b"Infinity", b"-Infinity"):
+        body = raw_body()
+        assert marker in body
+        body = body.replace(marker, marker + b'"value": ' + constant + b', ', 1)
+        with pytest.raises(EnvelopeFormatError):
+            decode(body)
+
+
 def raw_body(**overrides) -> bytes:
     body = {
         "message_id": "msg-1",

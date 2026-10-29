@@ -401,6 +401,7 @@ class WikiManagementService:
             decision=_required(arguments, "decision"),
             reason=_required(arguments, "reason"),
             selected_solution_id=_required(arguments, "selected_solution_id"),
+            expected_owner_event_id=arguments.get("expected_owner_event_id") or None,
         )
         return {
             "status": result.status,
@@ -542,6 +543,7 @@ TOOL_DEFINITIONS = [
                 "decision": {"type": "string", "enum": ["approved", "rejected"]},
                 "reason": {"type": "string"},
                 "selected_solution_id": {"type": "string"},
+                "expected_owner_event_id": {"type": "string"},
             },
             "additionalProperties": False,
         },

@@ -102,13 +102,23 @@ def run_loop(
             # every subsequent handoff went unprocessed.
             try:
                 service.handle_message(message)
-                for target in service.queued_targets():
-                    runner.run_once(target)
             except Exception as exc:  # noqa: BLE001 - poison-pill isolation
+                # Nothing was persisted, so there is no queued record to re-pick:
+                # commit past it and leave a trace (ai4-onvr).
                 _log.warning(
                     "skipping unprocessable queue message topic=%s partition=%s offset=%s: %s",
                     message.topic, message.partition, message.offset, exc,
                 )
+            else:
+                for target in service.queued_targets():
+                    try:
+                        runner.run_once(target)
+                    except Exception:
+                        # One broken target must not stop the others in the batch;
+                        # its queued record stays so the next poll retries it.
+                        _log.exception(
+                            "subscriber worker failed for target=%s; leaving it queued", target,
+                        )
             queue.commit(message)
             processed += 1
     return processed

@@ -110,7 +110,15 @@ def build(config: CoordinatorConfig) -> "CoordinatorRuntime":
         kafka_bootstrap,
         governance_group,
     )
-    service = CoordinatorService(store, snapshot, publisher, notifications, registry)
+    service = CoordinatorService(
+        store,
+        snapshot,
+        publisher,
+        notifications,
+        registry,
+        max_attempts=config.max_attempts,
+    )
+    logger.info("coordinator dispatch max_attempts=%d", config.max_attempts)
     runtime = CoordinatorRuntime(
         service=service,
         publisher=publisher,
@@ -198,7 +206,16 @@ class CoordinatorRuntime:
                     if self.event_router.handle(envelope) is not None:
                         handled += 1
                 except Exception:
-                    logger.exception("governance event could not be handled; continuing with the batch")
+                    # Keep going (a poison event must not pin the partition), but
+                    # log the event identity so the lost record can be replayed
+                    # (ai4-onvr). There is no automatic dead-letter queue yet.
+                    logger.exception(
+                        "governance event could not be handled; continuing with the batch "
+                        "(topic=%s partition=%s offset=%s)",
+                        getattr(envelope, "topic", "?"),
+                        getattr(envelope, "partition", "?"),
+                        getattr(envelope, "offset", "?"),
+                    )
         finally:
             self.events.commit()
         return handled

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 from dataclasses import dataclass
 
@@ -169,6 +170,19 @@ def _mailbox() -> MailboxSettings:
         if security:
             raise ValueError(
                 "SCIWEAVE_EMAIL_SMTP_SECURITY is set but no SMTP channel is configured"
+            )
+        if mailbox.from_address:
+            # A from-address with no channel is ignored in practice (nothing can
+            # be sent), but silently dropping it looks like it worked. Say so,
+            # and fail loudly on the one value that is easy to get wrong.
+            if "@" not in mailbox.from_address:
+                raise ValueError(
+                    "SCIWEAVE_EMAIL_FROM_ADDRESS is set but is not an email address; "
+                    "unset it or configure the SMTP channel"
+                )
+            logging.getLogger("email_service").warning(
+                "SCIWEAVE_EMAIL_FROM_ADDRESS is set but no SMTP channel is configured; "
+                "the service will report not_configured and cannot send mail"
             )
         return mailbox
     if not security:

@@ -3,7 +3,7 @@ import { computed } from 'vue'
 import { RouterLink } from 'vue-router'
 import SourceHealth from '@/components/SourceHealth.vue'
 import StatusBadge from '@/components/StatusBadge.vue'
-import { attentionItems, statusDescription } from '@/domain/dashboard'
+import { attentionItems, formatInstant, statusDescription } from '@/domain/dashboard'
 import { useDashboardStore } from '@/stores/dashboard'
 
 const store = useDashboardStore()
@@ -15,7 +15,7 @@ const failed = computed(() => snapshot.value?.tasks.filter((task) => ['failed', 
 const attentionCount = computed(() => snapshot.value?.tasks.filter((task) => task.attentionRank > 0).length ?? 0)
 
 function timeLabel(value: string): string {
-  return new Intl.DateTimeFormat('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Shanghai' }).format(new Date(value))
+  return formatInstant(value, 'short')
 }
 </script>
 

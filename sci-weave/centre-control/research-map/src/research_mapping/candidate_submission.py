@@ -140,7 +140,12 @@ class MappingCandidateService:
         if store_id and outcome.store_id != store_id:
             return _result("result_unknown", "store_result_unknown", identity, change_set.get("proposal_id"))
         if self._sqlite.get_formal_revision(base) is None:
-            return _result("rejected", BASE_REVISION_MISSING, identity, change_set.get("proposal_id"))
+            # The candidate snapshot is already committed in TerminusDB but the
+            # base revision is gone from SQLite: this is not a clean rejection.
+            # Report result_unknown so the caller reconciles instead of assuming
+            # nothing was written (an orphan branch would otherwise be silent,
+            # ai4-o1aj).
+            return _result("result_unknown", "base_revision_missing_after_store_write", identity, change_set.get("proposal_id"))
         try:
             self._persist(
                 change_set, idempotency_key, digest, snapshot_digest, outcome, expected_base=base

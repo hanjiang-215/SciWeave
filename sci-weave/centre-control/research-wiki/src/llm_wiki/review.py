@@ -85,7 +85,7 @@ class WikiReviewService:
             c.execute("INSERT INTO wiki_audit_event VALUES (?,?,?,?,?,?,?,?,?,?)",(audit,now,reviewer_id,"wiki_review_completed","WikiMergeRequestBuffer",merge_request_id,"completed",p.reason_code,canonical_json({"preview_id":p.preview_id}),None)); c.commit()
         return WikiReviewResult("ready_for_owner","locked",p.preview_id,proposal_id,p.base_formal_revision_id,p.candidate_head,p.evidence)
 
-    def decide(self, merge_request_id, *, actor_id, decision, reason, selected_solution_id):
+    def decide(self, merge_request_id, *, actor_id, decision, reason, selected_solution_id, expected_owner_event_id=None):
         if decision not in ("approved","rejected") or not actor_id or not reason: return WikiDecisionResult("rejected","invalid_decision")
         with self.db.connection() as c:
             mr=c.execute("SELECT * FROM wiki_merge_request_buffer WHERE merge_request_id=?",(merge_request_id,)).fetchone()
@@ -118,8 +118,18 @@ class WikiReviewService:
             if latest is None or latest['status'] not in ('ready_for_owner','approved','rejected','reapproval_required'):
                 c.rollback()
                 return WikiDecisionResult("rejected","merge_request_state_invalid")
+            if expected_owner_event_id is not None and latest['owner_event_id'] != expected_owner_event_id:
+                # ai4-tcub: compare-and-set. A caller that decided on a specific
+                # previous decision must not silently overwrite one that landed in
+                # between (the audit trail kept both, but the buffer flipped).
+                c.rollback()
+                return WikiDecisionResult("rejected","stale_owner_decision")
             c.execute("UPDATE wiki_merge_request_buffer SET status=?,owner_id=?,owner_decision=?,owner_event_id=?,owner_resource_approval_ids=? WHERE merge_request_id=?",(status,actor_id,decision,event,canonical_json(approval_ids),merge_request_id))
-            c.execute("INSERT INTO wiki_audit_event VALUES (?,?,?,?,?,?,?,?,?,?)",(event,now,actor_id,"owner_formal_publication_review","WikiMergeRequestBuffer",merge_request_id,decision,"owner_decision",canonical_json({"reason":reason,"selected_solution_id":selected_solution_id}),None)); c.commit()
+            # ai4-tcub: owner_event_id is a hash of (request, actor, decision,
+            # reason), so replaying the same decision yields the same audit id.
+            # A plain INSERT then blew up with a UNIQUE violation instead of
+            # confirming the decision that was already recorded.
+            c.execute("INSERT OR IGNORE INTO wiki_audit_event VALUES (?,?,?,?,?,?,?,?,?,?)",(event,now,actor_id,"owner_formal_publication_review","WikiMergeRequestBuffer",merge_request_id,decision,"owner_decision",canonical_json({"reason":reason,"selected_solution_id":selected_solution_id}),None)); c.commit()
         return WikiDecisionResult(status,"owner_decision_recorded",event)
 
     def _candidate_head_matches(self, mr):

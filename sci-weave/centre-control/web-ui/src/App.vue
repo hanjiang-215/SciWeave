@@ -4,6 +4,7 @@ import { RouterLink, RouterView, useRoute } from 'vue-router'
 import ErrorState from '@/components/ErrorState.vue'
 import { createHttpQuery } from '@/data/httpQuery'
 import { fixtureQuery } from '@/data/fixtureQuery'
+import { formatInstant } from '@/domain/dashboard'
 import { useDashboardStore } from '@/stores/dashboard'
 
 const store = useDashboardStore()
@@ -30,7 +31,7 @@ function setPollingInterval(event: Event): void {
 
 function formatTime(value?: string): string {
   if (!value) return '尚未更新'
-  return new Intl.DateTimeFormat('zh-CN', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Shanghai' }).format(new Date(value))
+  return formatInstant(value, 'time')
 }
 </script>
 

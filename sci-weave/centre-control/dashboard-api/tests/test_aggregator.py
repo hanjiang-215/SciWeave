@@ -100,3 +100,23 @@ class DashboardAggregatorTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SnapshotDeadlineTests(unittest.TestCase):
+    """ai4-onvr: a slow source must not make the whole snapshot time out."""
+
+    def test_slow_source_is_reported_as_timeout_and_others_still_render(self) -> None:
+        import time
+
+        def fetch(source):
+            if source.id == "wiki":
+                time.sleep(1.0)
+            return {"observedAt": "2026-10-22T00:00:00Z", "sourceStatus": "fresh", "projects": [], "tasks": [], "events": []}
+
+        aggregator = DashboardAggregator(SOURCES, fetch, deadline_seconds=0.2)
+        result = aggregator.get_snapshot()
+        by_id = {entry["id"]: entry for entry in result["sources"]}
+        self.assertEqual(by_id["wiki"]["status"], "unavailable")
+        self.assertEqual(by_id["wiki"]["error"], "查询超时")
+        self.assertEqual(by_id["mapping"]["status"], "fresh")
+        self.assertTrue(result["partial"])

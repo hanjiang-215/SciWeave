@@ -510,3 +510,103 @@ class KafkaCompletionEnvelopeTests(unittest.TestCase):
         self.assertEqual(payload["completed_version_ref"], "node-v7")
         self.assertEqual(payload["formal_revision_id"], "rev-9")
         self.assertEqual(key, "node-1:node-v7")
+
+
+class CompletionOutboxTests(unittest.TestCase):
+    """ai4-odwi: a crash between commit and publish must not lose task_completed."""
+
+    def setUp(self) -> None:
+        self.temp = tempfile.TemporaryDirectory()
+        self.store = ExecutionStore(str(Path(self.temp.name) / "centre.sqlite3"))
+        self.service = SubscriberService(self.store, agent_id="agent-1")
+        self.queue = FakeQueueClient()
+        self.queue.subscribe(["sciweave.task-handoff.agent-1"])
+
+    def tearDown(self) -> None:
+        self.store.close()
+        self.temp.cleanup()
+
+    def _enqueue(self) -> None:
+        message = task_handoff("node-1", "event-1", formal_revision_id="rev-9", target_version_ref="node-v7")
+        queue_message = self.queue.publish("sciweave.task-handoff.agent-1", "event-1", message)
+        self.service.handle_message(queue_message)
+
+    def test_event_is_staged_even_if_publish_fails_then_replayed(self) -> None:
+        self._enqueue()
+        publisher = _RecordingCompletionPublisher()
+        publisher.fail = True  # broker down at completion time
+        runner = SubscriberWorkerRunner(
+            self.store, self.service, DeterministicRuntime(), completion_publisher=publisher
+        )
+        outcome = runner.run_once("node-1")
+        self.assertEqual(outcome["status"], "completed")
+        # The publish failed, so nothing was delivered -- but the event is staged.
+        self.assertEqual(publisher.published, [])
+        pending = self.store.pending_outbox_events()
+        self.assertEqual(len(pending), 1)
+        self.assertEqual(pending[0]["event_type"], "task_completed")
+
+        # The broker recovers: the next drain replays the staged event exactly once.
+        publisher.fail = False
+        delivered = runner.drain_outbox()
+        self.assertEqual(delivered, 1)
+        self.assertEqual(len(publisher.published), 1)
+        self.assertEqual(publisher.published[0]["task_node_id"], "node-1")
+        self.assertEqual(publisher.published[0]["mapping_domain_id"], "iris")
+        self.assertEqual(self.store.pending_outbox_events(), [])
+
+    def test_event_is_staged_and_delivered_on_success(self) -> None:
+        self._enqueue()
+        publisher = _RecordingCompletionPublisher()
+        runner = SubscriberWorkerRunner(
+            self.store, self.service, DeterministicRuntime(), completion_publisher=publisher
+        )
+        runner.run_once("node-1")
+        self.assertEqual(len(publisher.published), 1)
+        self.assertEqual(self.store.pending_outbox_events(), [])
+
+
+class RunLoopIsolationTests(unittest.TestCase):
+    """ai4-onvr: one failing target must not skip the rest of the batch."""
+
+    def test_a_failing_runner_does_not_stop_other_targets(self) -> None:
+        from gateway_subscriber.cli import run_loop
+
+        class _Service:
+            def __init__(self) -> None:
+                self.handled: list[Any] = []
+
+            def handle_message(self, message) -> None:
+                self.handled.append(message)
+
+            def queued_targets(self):
+                return ["bad", "good"]
+
+        class _Runner:
+            def __init__(self) -> None:
+                self.ran: list[str] = []
+
+            def run_once(self, target):
+                self.ran.append(target)
+                if target == "bad":
+                    raise RuntimeError("worker exploded")
+                return None
+
+        class _Queue:
+            def __init__(self) -> None:
+                self.batch = [QueueMessage(topic="sciweave.task-handoff.agent-1", partition=0, offset=0, key=None, payload={})]
+                self.committed: list[Any] = []
+
+            def poll(self, timeout_ms):
+                batch, self.batch = self.batch, []
+                return batch
+
+            def commit(self, message):
+                self.committed.append(message)
+
+        service, runner, queue = _Service(), _Runner(), _Queue()
+        processed = run_loop(service, runner, queue, max_messages=1)
+
+        self.assertEqual(processed, 1)
+        self.assertEqual(runner.ran, ["bad", "good"])
+        self.assertEqual(len(queue.committed), 1)

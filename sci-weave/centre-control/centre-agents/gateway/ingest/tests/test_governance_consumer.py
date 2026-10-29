@@ -204,3 +204,46 @@ class IngestLoopTests(unittest.TestCase):
         run_loop(self._consumer(), queue, poll_timeout_ms=0, max_messages=1)
 
         self.assertEqual(queue.commits, [("t", 3, 99)])
+
+class PoisonEnvelopeIsolationTests(unittest.TestCase):
+    """ai4-t7jc: a malformed record must never stop the whole consumer loop."""
+
+    def test_non_numeric_schema_version_is_a_governance_envelope_error(self) -> None:
+        from gateway_ingest.service import GovernanceEvent
+
+        body = make_event_body(
+            event_type="candidate_created",
+            domain_id="map-1",
+            dedupe_key="map-1:sub-1:head-1",
+            payload={"candidate_id": "sub-1", "candidate_head": "head-1"},
+        )
+        body["schema_version"] = "v1"
+        with self.assertRaises(GovernanceEnvelopeError):
+            GovernanceEvent.from_dict(body)
+
+    def test_unexpected_consumer_exception_is_committed_past(self) -> None:
+        from gateway_ingest.cli import FakeQueue, _RawMessage, run_loop
+
+        class ExplodingConsumer:
+            def __init__(self) -> None:
+                self.calls = 0
+
+            def consume(self, envelope):
+                self.calls += 1
+                if self.calls == 1:
+                    raise RuntimeError("boom: not a GovernanceEnvelopeError")
+                return ConsumeOutcome(handled=True, recorded=True, recomputed=False)
+
+        queue = FakeQueue()
+        queue.messages = [
+            _RawMessage(topic="t", partition=0, offset=0, key=None, payload={"event_type": "candidate_created"}),
+            _RawMessage(topic="t", partition=0, offset=1, key=None, payload={"event_type": "candidate_created"}),
+        ]
+        consumer = ExplodingConsumer()
+
+        consumed = run_loop(consumer, queue, poll_timeout_ms=0, max_messages=2)
+
+        # The loop kept going: both records were attempted and committed.
+        self.assertEqual(consumed, 2)
+        self.assertEqual(consumer.calls, 2)
+        self.assertEqual(queue.commits, [("t", 0, 0), ("t", 0, 1)])

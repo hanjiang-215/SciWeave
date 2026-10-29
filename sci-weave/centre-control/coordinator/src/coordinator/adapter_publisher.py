@@ -11,9 +11,12 @@ producer and reports transient failures back to the coordinator for retry.
 from __future__ import annotations
 
 import json
+import logging
 from typing import Any
 
 from .ports import HandoffPublisherPort, HandoffReadyMessage
+
+_log = logging.getLogger(__name__)
 
 _TASK_HANDOFF_TOPIC_PREFIX = "sciweave.task-handoff."
 
@@ -26,7 +29,7 @@ class KafkaHandoffPublisher(HandoffPublisherPort):
         bootstrap_servers: str,
         *,
         timeout_seconds: float = 5.0,
-        allow_unknown_agent_topic: bool = True,
+        allow_unknown_agent_topic: bool = False,
     ) -> None:
         self.bootstrap_servers = bootstrap_servers
         self.timeout_seconds = timeout_seconds
@@ -47,7 +50,14 @@ class KafkaHandoffPublisher(HandoffPublisherPort):
         topic = self._topic_for(message.target_agent_id)
         if topic is None:
             if self.allow_unknown_agent_topic:
-                return  # no per-agent topic to publish to; caller decides retry
+                # ai4-2hv6: the caller marks the dispatch published as soon as this
+                # returns, so a silent return loses the handoff with no trace.
+                # Warn, and only stay silent because the flag was set explicitly.
+                _log.warning(
+                    "no task-handoff topic for agent %r; dropping handoff for %s",
+                    message.target_agent_id, message.task_node_id,
+                )
+                return
             raise RuntimeError(f"no task-handoff topic for agent {message.target_agent_id!r}")
         envelope: dict[str, Any] = {
             # NOTE: the per-agent subscriber expects the shared governance-event

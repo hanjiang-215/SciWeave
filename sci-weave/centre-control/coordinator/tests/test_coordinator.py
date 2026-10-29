@@ -23,6 +23,7 @@ from coordinator.ports import (
     SnapshotUnavailableError,
     TaskNodeDoc,
 )
+SnapshotPortError = (SnapshotUnavailableError, SnapshotInconsistentError, NoSuchRevisionError)
 from coordinator.service import CoordinatorService
 from coordinator.store import (
     DISPATCH_DEAD,
@@ -50,12 +51,17 @@ class FakeSnapshotPort:
         self.snapshots[(mapping_domain_id, formal_revision_id)] = snapshot
 
     def fail_revision(self, mapping_domain_id: str, formal_revision_id: str, error: Exception) -> None:
+        if not isinstance(error, SnapshotPortError):
+            # ai4-v046: a plain Exception here would be re-raised fine, but a
+            # real adapter can only fail with one of the port's own errors --
+            # using anything else would test a shape production never produces.
+            raise TypeError(f"fail_revision expects a SnapshotPortError, got {type(error).__name__}")
         self.snapshots[(mapping_domain_id, formal_revision_id)] = error
 
     def get_formal_mapping_at_revision(self, mapping_domain_id: str, formal_revision_id: str) -> FormalSnapshot:
         self.calls.append((mapping_domain_id, formal_revision_id))
         value = self.snapshots.get((mapping_domain_id, formal_revision_id))
-        if isinstance(value, Exception):
+        if isinstance(value, SnapshotPortError):
             raise value
         if value is None:
             raise NoSuchRevisionError()
@@ -1250,4 +1256,150 @@ def test_unconfigured_notification_transport_keeps_the_dispatch_retryable():
     ]
     assert [d.status for d in notifications] == [DISPATCH_FAILED]
     assert notifications[0].error_summary.startswith("notification_transport_unconfigured")
+    connection.close()
+
+def test_repeating_a_ready_dispatch_does_not_bypass_max_attempts():
+    """ai4-ubcp: a re-dispatched node must not republish outside the retry policy.
+
+    After a failed publish the dispatch is result_unknown with attempt_count=1.
+    Re-running dispatch_root_task for the same trigger must NOT call publish
+    again (that reset attempt_count and made max_attempts unreachable); the
+    retry poll owns the row instead.
+    """
+    connection = sqlite3.connect(":memory:")
+    snapshot_port = FakeSnapshotPort()
+    snapshot = FormalSnapshot(
+        mapping_domain_id="map-1",
+        formal_revision_id="rev-1",
+        nodes=(node("T1", "v1", ("agent-1",)),),
+        latest_published_by="owner-1",
+    )
+    snapshot_port.set("map-1", "rev-1", snapshot)
+    publisher = FakeHandoffPublisher()
+    service = make_service(
+        connection, snapshot_port, publisher, FakeNotificationPublisher(),
+        FakeAgentAvailability({"agent-1"}),
+    )
+    service.store.set_latest_revision("map-1", "rev-1")
+    publisher.fail_next = 100  # every publish fails
+
+    service.dispatch_root_task("map-1", "T1", "v1", trigger_revision_id="rev-1")
+    attempts_after_first = publisher.fail_next
+    first = service.store.list_dispatches(statuses=(DISPATCH_RESULT_UNKNOWN,))
+    assert len(first) == 1
+    assert first[0].attempt_count == 1
+
+    # The same trigger fires again (recompute): no new publish attempt, and the
+    # recorded attempt_count is untouched.
+    published = service.dispatch_root_task("map-1", "T1", "v1", trigger_revision_id="rev-1")
+    assert published is False
+    assert publisher.fail_next == attempts_after_first  # publish() was not called
+    still_unknown = service.store.list_dispatches(statuses=(DISPATCH_RESULT_UNKNOWN,))
+    assert len(still_unknown) == 1
+    assert still_unknown[0].attempt_count == 1
+    connection.close()
+
+
+def test_main_passes_max_attempts_from_config():
+    """ai4-ubcp: SCIWEAVE_COORDINATOR_MAX_ATTEMPTS must reach the service.
+
+    Guards the wiring itself: config.from_environment parsed max_attempts but
+    build() once dropped it on the floor, so the env var silently did nothing.
+    """
+    import importlib.util
+    import inspect
+    from pathlib import Path
+
+    main_path = Path(__file__).resolve().parents[1] / "src" / "main.py"
+    spec = importlib.util.spec_from_file_location("coordinator_entry_point_build", main_path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    source = inspect.getsource(module.build)
+    assert "max_attempts=config.max_attempts" in source
+
+
+def test_pending_handoff_records_the_executor_actually_selected():
+    """ai4-0k36: the stored executor must be the chosen one, not executor_refs[0]."""
+    connection = sqlite3.connect(":memory:")
+    snapshot_port = FakeSnapshotPort()
+    snapshot = FormalSnapshot(
+        mapping_domain_id="map-1",
+        formal_revision_id="rev-1",
+        nodes=(node("T1", "v1", ("agent-a1", "agent-a2"), task_owner_id="owner-1"),),
+        latest_published_by="owner-1",
+    )
+    snapshot_port.set("map-1", "rev-1", snapshot)
+    publisher = FakeHandoffPublisher()
+    notifications = FakeNotificationPublisher()
+    service = make_service(
+        connection, snapshot_port, publisher, notifications, FakeAgentAvailability({"agent-a2"})
+    )
+    service.store.set_latest_revision("map-1", "rev-1")
+    assert service.dispatch_root_task("map-1", "T1", "v1", trigger_revision_id="rev-1") is True
+    pending = service.store.get_pending_handoff("map-1", "T1", "v1")
+    # a2 was picked even though a1 is declared first, and the row says so.
+    assert pending.executor_agent_id == "agent-a2"
+    assert pending.executor_refs == ("agent-a1", "agent-a2")
+    connection.close()
+
+
+def test_a_snapshot_with_no_documents_is_not_treated_as_present():
+    """ai4-v046: ``isinstance(value, Exception)`` hid the empty-snapshot case;
+    a FormalSnapshot with zero nodes must still be honoured, not mistaken for a
+    failure or silently skipped."""
+    connection = sqlite3.connect(":memory:")
+    snapshot_port = FakeSnapshotPort()
+    snapshot_port.set(
+        "map-1",
+        "rev-1",
+        FormalSnapshot(
+            mapping_domain_id="map-1",
+            formal_revision_id="rev-1",
+            nodes=(),
+            latest_published_by="owner-1",
+        ),
+    )
+    service = make_service(
+        connection, snapshot_port, FakeHandoffPublisher(), FakeNotificationPublisher(), FakeAgentAvailability(set())
+    )
+    service.store.set_latest_revision("map-1", "rev-1")
+    service.startup_scan()
+    # No nodes means nothing to hand off, and no snapshot failure recorded.
+    assert service.store.list_pending_handoffs() == []
+    assert service.store.list_snapshot_failures() == []
+    assert snapshot_port.calls == [("map-1", "rev-1")]
+    connection.close()
+
+
+def test_recompute_does_not_rewrite_an_already_waiting_handoff(monkeypatch):
+    """ai4-v046: re-running dispatch for a handoff that is already waiting must
+    not commit an identical UPDATE every round."""
+    connection = sqlite3.connect(":memory:")
+    snapshot_port = FakeSnapshotPort()
+    snapshot = FormalSnapshot(
+        mapping_domain_id="map-1",
+        formal_revision_id="rev-1",
+        nodes=(node("T1", "v1", ("agent-a1",), task_owner_id="owner-1"),),
+        latest_published_by="owner-1",
+    )
+    snapshot_port.set("map-1", "rev-1", snapshot)
+    service = make_service(
+        connection, snapshot_port, FakeHandoffPublisher(), FakeNotificationPublisher(), FakeAgentAvailability(set())
+    )
+    service.store.set_latest_revision("map-1", "rev-1")
+    service.on_formal_revision_published("map-1", "rev-1")
+    pending = service.store.get_pending_handoff("map-1", "T1", "v1")
+    assert pending.status == PENDING_WAITING
+
+    calls: list[str] = []
+    original = service.store.set_pending_handoff_status
+
+    def recording(*args, **kwargs):
+        calls.append(kwargs.get("status", args[3] if len(args) > 3 else "?"))
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(service.store, "set_pending_handoff_status", recording)
+    # Same revision again: the node is still waiting, so no status write.
+    service.on_formal_revision_published("map-1", "rev-1")
+    assert PENDING_WAITING not in calls
     connection.close()

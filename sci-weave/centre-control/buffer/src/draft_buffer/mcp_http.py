@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hmac
 import json
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -8,6 +9,20 @@ from typing import Any, Callable, Mapping
 from . import BufferError
 
 _MAX_BODY_BYTES = 1_000_000
+
+
+def _lookup_token(tokens: Mapping[str, str], presented: str) -> str | None:
+    """Resolve a bearer token with constant-time comparison (ai4-62t0).
+
+    ``dict.get`` short-circuits on length and hash, which leaks a timing signal
+    about the configured tokens. Compare against every token with
+    ``hmac.compare_digest`` instead, matching the gateway's own token check.
+    """
+    actor: str | None = None
+    for token, candidate_actor in tokens.items():
+        if hmac.compare_digest(presented, token):
+            actor = candidate_actor
+    return actor
 
 
 class _McpHttpHandler(BaseHTTPRequestHandler):
@@ -89,7 +104,7 @@ class _McpHttpHandler(BaseHTTPRequestHandler):
             self._drain_body()
             self._send(HTTPStatus.UNAUTHORIZED, {"error": "unauthorized", "message": "missing bearer token"})
             return None
-        actor = self.server.tokens.get(token.strip())  # type: ignore[attr-defined]
+        actor = _lookup_token(self.server.tokens, token.strip())  # type: ignore[attr-defined]
         if actor is None:
             self._drain_body()
             self._send(HTTPStatus.UNAUTHORIZED, {"error": "unauthorized", "message": "unknown bearer token"})

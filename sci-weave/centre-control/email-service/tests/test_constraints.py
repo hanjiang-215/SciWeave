@@ -384,3 +384,20 @@ def test_failed_status_summary_omits_body_credentials_and_raw_send_error(
     assert SMTP_PASSWORD not in encoded
     assert RAW_SEND_ERROR not in encoded
     assert "550" not in encoded
+
+
+def test_unexpected_sender_error_is_named_but_not_leaked_in_the_summary(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """ai4-onvr: an unanticipated sender exception must leave a usable trace."""
+    sender = FakeSender(failure=RuntimeError(f"smtp exploded {SMTP_PASSWORD}"))
+    server, thread, mcp = _start(tmp_path, monkeypatch, sender=sender)
+    try:
+        body(call_tool(mcp, "gateway", "send_notification", _intent()))
+        status = _wait_status(mcp, "gateway", NOTIFICATION_ID, "permanent_failure")
+    finally:
+        _stop(server, thread)
+    assert status["error_summary"] == "sender_failure:RuntimeError"
+    assert status["recipients"][0]["error_summary"] == "sender_failure:RuntimeError"
+    assert SMTP_PASSWORD not in json.dumps(status)
