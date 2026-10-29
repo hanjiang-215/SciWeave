@@ -1,0 +1,3 @@
+# ai4-ttwn 的索引归属与简介（人工维护）
+module = "wiki"
+summary = "wiki 正式化幂等误报 reconciliation_required 且激活事务吞错"
