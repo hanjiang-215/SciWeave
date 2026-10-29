@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 
 from .ports import (
@@ -21,6 +22,7 @@ from .ports import (
     UnverifiablePrincipalDirectory,
 )
 from .store import (
+    DISPATCH_CREATED,
     DISPATCH_DEAD,
     DISPATCH_FAILED,
     DISPATCH_PUBLISHED,
@@ -39,6 +41,8 @@ from .store import (
     InvalidPendingTransition,
     PendingHandoff,
 )
+
+_log = logging.getLogger(__name__)
 
 
 class PublisherUnavailableError(Exception):
@@ -359,7 +363,19 @@ class CoordinatorService:
                 trigger_revision_id,
                 waiting_reason=waiting_reason,
             )
-        except InvalidPendingTransition:
+        except InvalidPendingTransition as exc:
+            # ai4-zpyg: a rejected transition keeps the stored status and lets
+            # the rest of the round advance, but record what was dropped so a
+            # node stuck in a non-advanced state is observable rather than a
+            # silent no-op.
+            _log.info(
+                "pending transition rejected for %s: %s -> %s (%s -> %s)",
+                node.task_node_id,
+                exc.current,
+                exc.requested,
+                snapshot.mapping_domain_id,
+                snapshot.formal_revision_id,
+            )
             return False
         return True
 
@@ -501,6 +517,11 @@ class CoordinatorService:
         )
         if pending is None:
             return False
+        # ai4-0k36: the pending row stores executor_refs[0] at insert time (no
+        # selection yet); record what was actually chosen so the column means what
+        # its name promises, including "nobody available" as NULL.
+        if pending.executor_agent_id != executor_agent_id:
+            self.store.set_pending_handoff_executor(pending.pending_handoff_id, executor_agent_id)
         if executor_agent_id is None:
             # `_select_executor` already decided which of the three kinds the
             # owner needs to hear about; guessing one here would send them to
@@ -509,20 +530,32 @@ class CoordinatorService:
                 snapshot, pending, trigger, notify_kind or NOTIFY_AGENT_UNAVAILABLE
             )
             # The waiting fact is retained: the handoff is not marked ready or
-            # done until an executor becomes available.
-            self.store.set_pending_handoff_status(
-                snapshot.mapping_domain_id,
-                pending.task_node_id,
-                pending.target_node_version_ref,
-                PENDING_WAITING,
-            )
+            # done until an executor becomes available. Skip the write when it is
+            # already waiting -- the row would be identical, and every recompute
+            # would otherwise commit a no-op UPDATE (ai4-xx5f).
+            if pending.status != PENDING_WAITING:
+                self.store.set_pending_handoff_status(
+                    snapshot.mapping_domain_id,
+                    pending.task_node_id,
+                    pending.target_node_version_ref,
+                    PENDING_WAITING,
+                )
             return False
         dedupe_key = self._dedupe(snapshot.mapping_domain_id, pending, MSG_HANDOFF_READY, trigger)
         dispatch = self.store.create_dispatch(
             pending.pending_handoff_id, dedupe_key, MSG_HANDOFF_READY, executor_agent_id
         )
-        if dispatch is None or dispatch.status in (DISPATCH_PUBLISHED,):
-            return dispatch is not None and dispatch.status in (DISPATCH_PUBLISHED,)
+        if dispatch is None:
+            return False
+        if dispatch.status == DISPATCH_PUBLISHED:
+            # Already handed off for this trigger; idempotent success.
+            return True
+        if dispatch.status != DISPATCH_CREATED:
+            # A pre-existing row from an earlier attempt (result_unknown /
+            # failed / dead). Publishing again here would bypass the retry
+            # policy -- attempt_count would be reset to 1 and max_attempts could
+            # never fire (ai4-ubcp). The retry poll owns these rows.
+            return False
         try:
             self.publisher.publish(
                 HandoffReadyMessage(
@@ -639,8 +672,13 @@ class CoordinatorService:
         )
         if dispatch is None:
             return False
-        if dispatch.status in (DISPATCH_PUBLISHED,):
+        if dispatch.status == DISPATCH_PUBLISHED:
             return True
+        if dispatch.status != DISPATCH_CREATED:
+            # Pre-existing non-terminal/terminal row: leave it to the retry poll
+            # so attempt_count keeps accumulating and max_attempts can fire
+            # (ai4-ubcp).
+            return False
         subject, body = self._human_notification_content(
             notification_kind, pending.task_node_id, executor_refs
         )
@@ -781,6 +819,11 @@ class CoordinatorService:
             pending.pending_handoff_id, dedupe_key, MSG_TERMINAL_SUMMARY, None
         )
         if dispatch is None or dispatch.status in (DISPATCH_PUBLISHED,):
+            return
+        if dispatch.status != DISPATCH_CREATED:
+            # Pre-existing non-terminal/terminal row: hand it to the retry poll
+            # instead of republishing here, which would reset attempt_count and
+            # defeat max_attempts (ai4-ubcp).
             return
         try:
             self.notifications.publish(

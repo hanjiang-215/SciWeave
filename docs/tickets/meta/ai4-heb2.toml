@@ -1,0 +1,3 @@
+# ai4-heb2 的索引归属与简介（人工维护）
+module = "infra"
+summary = "worker 运行时异常只报错误码不记堆栈，含死代码 step()"

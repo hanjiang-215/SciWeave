@@ -141,12 +141,22 @@ def _drop_absent_optionals(body: dict[str, Any]) -> None:
             body[container].pop(optional, None)
 
 
+def _reject_json_constant(name: str) -> Any:
+    """Refuse NaN/Infinity, which JSON does not allow and Python silently accepts.
+
+    ``json.loads`` parses these by default, so a producer that emitted them
+    would land a non-JSON value in the envelope and break every downstream
+    re-serialization (ai4-onvr).
+    """
+    raise EnvelopeFormatError(f"body contains the non-JSON constant {name}")
+
+
 def decode(data: bytes) -> Envelope:
     """Deserialize UTF-8 JSON bytes into a validated envelope."""
     if not isinstance(data, (bytes, bytearray)):
         raise EnvelopeFormatError(f"body must be bytes, not {type(data).__name__}")
     try:
-        body = json.loads(data.decode("utf-8"))
+        body = json.loads(data.decode("utf-8"), parse_constant=_reject_json_constant)
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise EnvelopeFormatError(f"body is not UTF-8 JSON: {exc}") from exc
     if not isinstance(body, dict):

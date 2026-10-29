@@ -98,3 +98,86 @@ class Reviews(unittest.TestCase):
 
 
 if __name__ == "__main__": unittest.main()
+
+
+class OwnerDecisionCompareAndSet(unittest.TestCase):
+    """ai4-tcub: a stale decision must not silently replace a newer one."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.db = SqliteStore(str(Path(self.tmp.name) / "wiki.db")); self.db.initialize()
+        self.db.add_formal_revision(formal_revision_id="base", wiki_domain_id="d", terminus_store_id="s", formal_branch_id="main", formal_commit_hash="base-commit")
+        self.db.set_current_formal_revision("d", "base")
+        docs = [{"@type":"WikiRevision", "wiki_revision_id":"r2", "document_id":"doc", "title":"new", "body_markdown":"candidate", "lifecycle_state":"candidate"}]
+        with self.db.connection() as c:
+            c.execute("INSERT INTO wiki_proposal VALUES (?,?,?,?,?,?,?,?)", ("p","d","base","s","candidate-branch","candidate","owner","now"))
+            c.execute("INSERT INTO wiki_candidate_commit VALUES (?,?,?,?,?,?,?,?,?,?,?)", ("cc","d","p","s","candidate-branch","candidate-head","base","digest",sha256_json(docs),"author","now")); c.commit()
+        self.service = WikiReviewService(sqlite_store=self.db, terminus_store=Snapshots(docs), terminus_database="wiki-db")
+        self.service.owner_authorization_verifier = type(
+            "Verifier", (), {"verify_owner": lambda _self, actor, domain: actor == "owner" and domain == "d"}
+        )()
+        self.service.create_merge_request("p", "mr", "curator")
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def _owner_event(self):
+        with self.db.connection() as c:
+            return c.execute("SELECT owner_event_id FROM wiki_merge_request_buffer WHERE merge_request_id='mr'").fetchone()[0]
+
+    def test_matching_event_is_accepted(self):
+        assert self._owner_event() is None
+        first = self.service.decide("mr", actor_id="owner", decision="rejected", reason="revise", selected_solution_id="cc")
+        assert first.status == "rejected"
+        event = self._owner_event()
+        assert event
+        # Re-deciding on top of that exact event is allowed (idempotent replay).
+        second = self.service.decide(
+            "mr", actor_id="owner", decision="rejected", reason="revise",
+            selected_solution_id="cc", expected_owner_event_id=event,
+        )
+        assert second.reason_code == "owner_decision_recorded"
+
+    def test_stale_event_is_refused(self):
+        self.service.decide("mr", actor_id="owner", decision="rejected", reason="revise", selected_solution_id="cc")
+        stale = self.service.decide(
+            "mr", actor_id="owner", decision="approved", reason="publish",
+            selected_solution_id="cc", expected_owner_event_id="owner-event-from-an-older-read",
+        )
+        assert (stale.status, stale.reason_code) == ("rejected", "stale_owner_decision")
+        with self.db.connection() as c:
+            row = c.execute("SELECT status, owner_decision FROM wiki_merge_request_buffer WHERE merge_request_id='mr'").fetchone()
+        assert (row["status"], row["owner_decision"]) == ("rejected", "rejected")
+
+
+class OwnerDecisionReplay(unittest.TestCase):
+    """ai4-tcub: replaying the identical decision must confirm, not crash."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.db = SqliteStore(str(Path(self.tmp.name) / "wiki.db")); self.db.initialize()
+        self.db.add_formal_revision(formal_revision_id="base", wiki_domain_id="d", terminus_store_id="s", formal_branch_id="main", formal_commit_hash="base-commit")
+        self.db.set_current_formal_revision("d", "base")
+        docs = [{"@type":"WikiRevision", "wiki_revision_id":"r2", "document_id":"doc", "title":"new", "body_markdown":"candidate", "lifecycle_state":"candidate"}]
+        with self.db.connection() as c:
+            c.execute("INSERT INTO wiki_proposal VALUES (?,?,?,?,?,?,?,?)", ("p","d","base","s","candidate-branch","candidate","owner","now"))
+            c.execute("INSERT INTO wiki_candidate_commit VALUES (?,?,?,?,?,?,?,?,?,?,?)", ("cc","d","p","s","candidate-branch","candidate-head","base","digest",sha256_json(docs),"author","now")); c.commit()
+        self.service = WikiReviewService(sqlite_store=self.db, terminus_store=Snapshots(docs), terminus_database="wiki-db")
+        self.service.owner_authorization_verifier = type(
+            "Verifier", (), {"verify_owner": lambda _self, actor, domain: actor == "owner" and domain == "d"}
+        )()
+        self.service.create_merge_request("p", "mr", "curator")
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_identical_replay_is_idempotent_and_keeps_one_audit_row(self):
+        first = self.service.decide("mr", actor_id="owner", decision="rejected", reason="revise", selected_solution_id="cc")
+        replay = self.service.decide("mr", actor_id="owner", decision="rejected", reason="revise", selected_solution_id="cc")
+        assert (first.status, first.audit_event_id) == (replay.status, replay.audit_event_id)
+        assert replay.reason_code == "owner_decision_recorded"
+        with self.db.connection() as c:
+            count = c.execute(
+                "SELECT COUNT(*) FROM wiki_audit_event WHERE target_id='mr' AND action='owner_formal_publication_review'"
+            ).fetchone()[0]
+        assert count == 1

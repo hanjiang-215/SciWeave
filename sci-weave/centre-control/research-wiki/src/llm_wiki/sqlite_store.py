@@ -47,7 +47,57 @@ class SqliteStore:
             columns={row[1] for row in connection.execute("PRAGMA table_info(wiki_merge_request_buffer)")}
             if "owner_resource_approval_ids" not in columns:
                 connection.execute("ALTER TABLE wiki_merge_request_buffer ADD COLUMN owner_resource_approval_ids TEXT NOT NULL DEFAULT '{}' ")
+            self._migrate_prereview_report_key(connection)
             connection.commit()
+
+    def _migrate_prereview_report_key(self, connection: sqlite3.Connection) -> None:
+        """Widen the prereview report key to include the base revision.
+
+        Mirrors research-map's ai4-sf8l fix. A database created with the
+        three-column key INSERT-OR-IGNOREd a re-review after ``base_moved`` onto
+        the invalidated row, so the new checks were dropped and the candidate
+        stayed ``report_stale`` for good (ai4-e82q). Rebuilding the table keeps
+        every row.
+        """
+        columns: tuple[str, ...] | None = None
+        for index in connection.execute("PRAGMA index_list(wiki_prereview_report)").fetchall():
+            if not index["unique"]:
+                continue
+            names = tuple(
+                row["name"]
+                for row in connection.execute(f"PRAGMA index_info({index['name']})").fetchall()
+            )
+            if len(names) == 4:
+                return
+            if len(names) == 3:
+                columns = names
+        if columns is None:
+            return
+        connection.execute("PRAGMA foreign_keys = OFF")
+        connection.executescript(
+            """
+            CREATE TABLE wiki_prereview_report_rebuild (
+                report_id               TEXT PRIMARY KEY,
+                candidate_id            TEXT NOT NULL,
+                candidate_head          TEXT NOT NULL,
+                base_formal_revision_id TEXT NOT NULL DEFAULT '',
+                rule_set_version        TEXT NOT NULL,
+                checks                  TEXT NOT NULL,
+                verdict                 TEXT NOT NULL CHECK (verdict IN ('passed', 'failed')),
+                conflict_matrix         TEXT NOT NULL,
+                created_at              TEXT NOT NULL,
+                UNIQUE (candidate_id, candidate_head, rule_set_version, base_formal_revision_id)
+            );
+            INSERT INTO wiki_prereview_report_rebuild
+                SELECT report_id, candidate_id, candidate_head,
+                       COALESCE(base_formal_revision_id, ''), rule_set_version,
+                       checks, verdict, conflict_matrix, created_at
+                FROM wiki_prereview_report;
+            DROP TABLE wiki_prereview_report;
+            ALTER TABLE wiki_prereview_report_rebuild RENAME TO wiki_prereview_report;
+            """
+        )
+        connection.execute("PRAGMA foreign_keys = ON")
 
     @contextmanager
     def connection(self) -> Iterator[sqlite3.Connection]:
@@ -196,9 +246,10 @@ class SqliteStore:
             row = connection.execute(
                 """
                 SELECT * FROM wiki_prereview_report
-                WHERE candidate_id = ? AND candidate_head = ? AND rule_set_version = ?
+                WHERE candidate_id = ? AND candidate_head = ?
+                  AND rule_set_version = ? AND base_formal_revision_id = ?
                 """,
-                (candidate_id, candidate_head, rule_set_version),
+                (candidate_id, candidate_head, rule_set_version, base_formal_revision_id or ""),
             ).fetchone()
             connection.commit()
         return dict(row)
@@ -238,6 +289,7 @@ class SqliteStore:
                 """
                 SELECT * FROM wiki_prereview_report
                 WHERE candidate_id = ? AND candidate_head = ?
+                ORDER BY created_at DESC, rowid DESC LIMIT 1
                 """,
                 (candidate_id, candidate_head),
             ).fetchone()
@@ -269,6 +321,7 @@ class SqliteStore:
                 """
                 SELECT * FROM wiki_prereview_report
                 WHERE candidate_id = ? AND candidate_head = ?
+                ORDER BY created_at DESC, rowid DESC LIMIT 1
                 """,
                 (candidate_id, candidate_head),
             ).fetchone()

@@ -18,14 +18,28 @@ const validStatuses = new Set(statusOptions.map((option) => option.value))
 const project = computed(() => store.snapshot?.projects[0])
 const tasks = computed(() => store.filteredTasks)
 
+// Two watchers that each feed the other: route -> store, and store -> route.
+// Without suppressing re-entry they can ping-pong, and each hop issues a
+// router.replace. Guard both directions so a change that a watcher itself caused
+// does not immediately re-trigger the opposite one.
+let syncingFromRoute = false
+let syncingToRoute = false
+
 function applyRouteFilters(): void {
+  if (syncingToRoute) return
+  syncingFromRoute = true
   const rawStatus = typeof route.query.status === 'string' ? route.query.status : 'all'
   store.setFilters({ status: validStatuses.has(rawStatus as TaskStatus) ? rawStatus as TaskStatus : 'all', query: typeof route.query.q === 'string' ? route.query.q : '' })
+  syncingFromRoute = false
 }
 
 function updateQuery(): void {
+  if (syncingFromRoute) return
   const query = { ...route.query, status: store.statusFilter === 'all' ? undefined : store.statusFilter, q: store.searchQuery.trim() || undefined }
-  void router.replace({ query })
+  syncingToRoute = true
+  void Promise.resolve(router.replace({ query })).finally(() => {
+    syncingToRoute = false
+  })
 }
 
 watch(() => [route.query.status, route.query.q], applyRouteFilters, { immediate: true })

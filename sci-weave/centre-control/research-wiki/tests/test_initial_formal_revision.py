@@ -108,3 +108,68 @@ class DomainConsistencyTests(unittest.TestCase):
             self.assertTrue(module._warn_if_domain_mismatch(store, "sciweave-wiki"))
             # configured domain matches -> no mismatch
             self.assertFalse(module._warn_if_domain_mismatch(store, "wiki-diabetes"))
+
+
+class PrereviewBaseKeyTests(unittest.TestCase):
+    """ai4-e82q: a moved base must not let an old report pass as current."""
+
+    def test_report_after_base_move_is_a_new_row(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = SqliteStore(str(Path(directory) / "wiki.db"))
+            store.initialize()
+            first = store.append_prereview_report(
+                report_id="r1", candidate_id="c1", candidate_head="h1",
+                base_formal_revision_id="base-A", rule_set_version="v1",
+                checks="{}", verdict="passed", conflict_matrix="{}", created_at="2026-01-01T00:00:00Z",
+            )
+            self.assertEqual(first["report_id"], "r1")
+            # base moved: the same head+rules is re-reviewed against a new base
+            second = store.append_prereview_report(
+                report_id="r2", candidate_id="c1", candidate_head="h1",
+                base_formal_revision_id="base-B", rule_set_version="v1",
+                checks="{}", verdict="passed", conflict_matrix="{}", created_at="2026-01-02T00:00:00Z",
+            )
+            self.assertEqual(second["report_id"], "r2")
+            self.assertEqual(second["base_formal_revision_id"], "base-B")
+            # current report is the newest one, not the stale base-A row
+            current = store.current_prereview_report("c1", "h1")
+            self.assertEqual(current["report_id"], "r2")
+
+    def test_current_report_uses_latest_not_arbitrary(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = SqliteStore(str(Path(directory) / "wiki.db"))
+            store.initialize()
+            for i, base in enumerate(("b0", "b1", "b2")):
+                store.append_prereview_report(
+                    report_id=f"r{i}", candidate_id="c1", candidate_head="h1",
+                    base_formal_revision_id=base, rule_set_version="v1",
+                    checks="{}", verdict="passed", conflict_matrix="{}",
+                    created_at=f"2026-01-0{i+1}T00:00:00Z",
+                )
+            current = store.current_prereview_report("c1", "h1")
+            self.assertEqual(current["report_id"], "r2")
+
+
+class ContainsReconciliationTests(unittest.TestCase):
+    """ai4-hhs4: snapshot reconciliation must compare whole documents, not ids."""
+
+    def test_document_with_same_id_but_altered_body_is_rejected(self):
+        from llm_wiki.candidate_submission import _contains
+
+        actual = ({"@id": "WikiRevision/r1", "title": "A", "body_markdown": "tampered"},)
+        expected = ({"@id": "WikiRevision/r1", "title": "A", "body_markdown": "original"},)
+        self.assertFalse(_contains(actual, expected))
+
+    def test_identical_document_is_accepted(self):
+        from llm_wiki.candidate_submission import _contains
+
+        doc = {"@id": "WikiRevision/r1", "title": "A", "body_markdown": "body"}
+        self.assertTrue(_contains((dict(doc),), (dict(doc),)))
+
+    def test_missing_null_reference_id_does_not_match_anything(self):
+        from llm_wiki.candidate_submission import _contains
+
+        # Both sides carry reference_id=None; the old weak matcher accepted this.
+        actual = ({"@type": "ResourceReference", "reference_id": None, "url": "x"},)
+        expected = ({"@type": "WikiRevision", "reference_id": None, "title": "A"},)
+        self.assertFalse(_contains(actual, expected))

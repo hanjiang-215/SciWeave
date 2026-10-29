@@ -42,6 +42,35 @@ def _warn_if_domain_mismatch(sqlite_store: SqliteStore, configured_domain: str) 
     return False
 
 
+def _health_report(sqlite_store: SqliteStore, configured_domain: str):
+    """Return a ``/health`` provider that flags a config/data domain mismatch (B12).
+
+    The dashboard queries ``configured_domain``; if formal revisions live only
+    under other domains the dashboard reports ``no_current_pointer`` while the
+    process still looks healthy. Surface that as ``degraded`` with the domains
+    actually present so an operator can fix the configuration.
+    """
+    def report() -> dict[str, object]:
+        known = sqlite_store.list_known_domains()
+        others = [domain for domain in known if domain != configured_domain]
+        has_pointer = configured_domain in known
+        if known and not has_pointer and others:
+            return {
+                "status": "degraded",
+                "wiki_domain_id": configured_domain,
+                "reason_code": "wiki_domain_mismatch",
+                "known_domains": known,
+                "detail": (
+                    f"configured domain {configured_domain!r} has no current formal pointer, "
+                    f"but formal revisions exist under {others}; the dashboard will report "
+                    "no_current_pointer. Set SCIWEAVE_WIKI_DOMAIN_ID to the data domain."
+                ),
+            }
+        return {"wiki_domain_id": configured_domain, "formal_pointer_present": has_pointer}
+
+    return report
+
+
 def main(argv: list[str] | None = None) -> int:
     arguments = sys.argv if argv is None else argv
     config = WikiConfig.from_environment()
@@ -177,6 +206,15 @@ def main(argv: list[str] | None = None) -> int:
             sqlite_store, candidate_service,
             service_name="wiki-management",
         )
+        # ai4-0hdz: the MCP endpoint is the owner-facing surface, so the first
+        # formal revision is created through a guarded tool there rather than a
+        # startup side effect.
+        from llm_wiki.bootstrap import WikiBootstrapService
+
+        bootstrap_service = WikiBootstrapService(
+            sqlite_store=sqlite_store,
+            terminus_store=terminus_store,
+        )
         management = WikiManagementService(
             formal_query=formal_query,
             candidate_service=candidate_service,
@@ -188,11 +226,14 @@ def main(argv: list[str] | None = None) -> int:
             candidate_reader=candidate_reader,
             prereview_log=prereview_log,
             merged_candidate_service=merged_candidate_service,
+            bootstrap_service=bootstrap_service,
             # ai4-u5e6: 与 research-map 对称。不接线时 wiki 的候选提交与正式发布
             # 不产生任何事件，下游（Centre Agent、交接协调）只能靠快照扫描。
             governance_events=create_governance_publisher(config.governance_kafka_bootstrap),
         )
-        return run_wiki_management_server_from_config(config, management)
+        return run_wiki_management_server_from_config(
+            config, management, health=_health_report(sqlite_store, config.domain_id)
+        )
     if len(arguments) > 1:
         qualification = service.get_current_qualification(arguments[1])
         print(json.dumps(asdict(qualification), ensure_ascii=False))

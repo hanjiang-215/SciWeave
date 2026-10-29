@@ -352,6 +352,12 @@ class RegistryService:
         except sqlite3.Error as exc:
             self.conn.rollback()
             raise RegistryError("registry_unavailable") from exc
+        except Exception:
+            # operation() may raise anything; without this the BEGIN above stayed
+            # open and every later statement on the shared connection failed
+            # (ai4-onvr).
+            self.conn.rollback()
+            raise
         result["duplicate"] = False
         return result
 

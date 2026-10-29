@@ -170,3 +170,26 @@ class McpHttpTransportTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+def test_token_comparison_is_constant_time_and_still_rejects_unknown_tokens():
+    """ai4-62t0: token lookup must not short-circuit on the dict hash."""
+    from draft_buffer import mcp_http
+
+    original = mcp_http.hmac.compare_digest
+    calls: list[tuple[str, str]] = []
+
+    def recording(left, right):
+        calls.append((left, right))
+        return original(left, right)
+
+    tokens = {"tok-a": "agent-a", "tok-b": "agent-b"}
+    mcp_http.hmac.compare_digest = recording
+    try:
+        # A hit still compares against every configured token.
+        assert mcp_http._lookup_token(tokens, "tok-a") == "agent-a"
+        assert len(calls) == len(tokens)
+        calls.clear()
+        assert mcp_http._lookup_token(tokens, "tok-missing") is None
+        assert len(calls) == len(tokens)
+    finally:
+        mcp_http.hmac.compare_digest = original

@@ -13,6 +13,7 @@ otherwise a FakeQueue keeps local tests and demos broker-free.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import sys
 from dataclasses import dataclass
@@ -22,6 +23,8 @@ from .service import GovernanceEnvelopeError
 
 from .domain_mcp import BufferMGatewayMCPClient
 from .service import CentreGovernanceConsumer, SqliteProcessedKeyStore
+
+_log = logging.getLogger(__name__)
 
 
 def required_environment(name: str) -> str:
@@ -176,6 +179,18 @@ def run_loop(
             try:
                 consumer.consume(envelope)
             except GovernanceEnvelopeError:
+                queue.commit(message)
+                consumed += 1
+                continue
+            except Exception:  # noqa: BLE001 - poison-pill isolation
+                # Any other unexpected failure on a single record must not stop
+                # the whole consumer (ai4-t7jc): log it, commit past, continue.
+                _log.exception(
+                    "skipping unprocessable ingest message topic=%s partition=%s offset=%s",
+                    getattr(message, "topic", "?"),
+                    getattr(message, "partition", "?"),
+                    getattr(message, "offset", "?"),
+                )
                 queue.commit(message)
                 consumed += 1
                 continue

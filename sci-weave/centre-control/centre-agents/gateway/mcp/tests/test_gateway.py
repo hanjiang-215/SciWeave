@@ -11,6 +11,8 @@ from pathlib import Path
 from typing import Any
 
 from gateway.app import create_app, make_handler
+from gateway.runtime import RuntimeOutcome
+from task_agent_worker.store import ExecutionStore, utc_now
 
 
 class FakeCandidateQueue:
@@ -255,3 +257,181 @@ class PendingDispositionTests(unittest.TestCase):
 
         self.assertEqual(self.app.list_pending("node-1")[0]["execution_id"], "exec-1")
         self.assertEqual(self.app.list_pending("node-2"), [])
+
+class CancelDoesNotGetOverwrittenTests(unittest.TestCase):
+    """ai4-7oxu: a cancel that lands mid-run must survive the worker's final write."""
+
+    def setUp(self) -> None:
+        self.temp = tempfile.TemporaryDirectory()
+        self.db = str(Path(self.temp.name) / "centre.sqlite3")
+        self.store = ExecutionStore(self.db)
+        self.store.initialize()
+        now = utc_now()
+        with self.store.transaction() as connection:
+            connection.execute("INSERT INTO task_sessions VALUES ('node-1','sess-1',?,?)", (now, now))
+            connection.execute("INSERT INTO callers VALUES ('owner-1',?)", (now,))
+            connection.execute(
+                "INSERT INTO owner_commands VALUES ('cmd-1','node-1','owner-1','idem-1','do it',?)",
+                (now,),
+            )
+            connection.execute(
+                """INSERT INTO execution_records
+                   (execution_id, command_id, task_node_id, session_id, status, created_at, updated_at)
+                   VALUES ('exec-1','cmd-1','node-1','sess-1','queued',?,?)""",
+                (now, now),
+            )
+
+    def tearDown(self) -> None:
+        self.store.close()
+        self.temp.cleanup()
+
+    def test_cancel_during_run_is_not_overwritten_by_completed(self) -> None:
+        from gateway.app import run_worker_process
+
+        db = self.db
+
+        class CancellingRuntime:
+            """Simulates cancel_execution landing while run() is in flight."""
+
+            def run(self, request):
+                other = ExecutionStore(db)
+                try:
+                    with other.transaction() as connection:
+                        connection.execute(
+                            "UPDATE execution_records SET status='cancelled' WHERE execution_id='exec-1'"
+                        )
+                finally:
+                    other.close()
+                return RuntimeOutcome("completed", result_summary="finished anyway")
+
+            def resume(self, request):
+                return self.run(request)
+
+            def cancel(self, execution_id):
+                return RuntimeOutcome("cancelled")
+
+        run_worker_process(db, "exec-1", CancellingRuntime())
+
+        with self.store.transaction() as connection:
+            row = connection.execute(
+                "SELECT status, result_summary FROM execution_records WHERE execution_id='exec-1'"
+            ).fetchone()
+            lease = connection.execute(
+                "SELECT COUNT(*) FROM worker_leases WHERE execution_id='exec-1'"
+            ).fetchone()[0]
+        # The cancel wins: no completed/failed overwrite, and the lease is released.
+        self.assertEqual(row["status"], "cancelled")
+        self.assertIsNone(row["result_summary"])
+        self.assertEqual(lease, 0)
+
+
+class RecoverySweepTests(unittest.TestCase):
+    """ai4-qt7x: a killed Worker must not leave an execution stuck forever."""
+
+    def setUp(self) -> None:
+        self.temp = tempfile.TemporaryDirectory()
+        self.db = str(Path(self.temp.name) / "centre.sqlite3")
+        self.store = ExecutionStore(self.db)
+        self.store.initialize()
+        self.now = utc_now()
+        with self.store.transaction() as connection:
+            connection.execute("INSERT INTO task_sessions VALUES ('node-1','sess-1',?,?)", (self.now, self.now))
+            connection.execute("INSERT INTO callers VALUES ('owner-1',?)", (self.now,))
+            connection.execute(
+                "INSERT INTO owner_commands VALUES ('cmd-1','node-1','owner-1','idem-1','do it',?)",
+                (self.now,),
+            )
+            connection.execute(
+                """INSERT INTO execution_records
+                   (execution_id, command_id, task_node_id, session_id, status, created_at, updated_at)
+                   VALUES ('exec-1','cmd-1','node-1','sess-1','queued',?,?)""",
+                (self.now, self.now),
+            )
+
+    def tearDown(self) -> None:
+        self.store.close()
+        self.temp.cleanup()
+
+    def _execution(self, execution_id: str = "exec-1"):
+        with self.store.transaction() as connection:
+            return connection.execute(
+                "SELECT status, error_summary FROM execution_records WHERE execution_id = ?", (execution_id,)
+            ).fetchone()
+
+    def test_orphan_lease_for_a_finished_execution_is_reaped(self) -> None:
+        with self.store.transaction() as connection:
+            connection.execute("INSERT INTO worker_leases VALUES ('node-1','exec-1',?)", (self.now,))
+            connection.execute("UPDATE execution_records SET status='completed' WHERE execution_id='exec-1'")
+        self.assertEqual(self.store.reap_orphan_leases(), 1)
+        with self.store.transaction() as connection:
+            self.assertEqual(connection.execute("SELECT COUNT(*) FROM worker_leases").fetchone()[0], 0)
+
+    def test_stale_running_lease_is_failed_and_released(self) -> None:
+        old = "2020-01-01T00:00:00+00:00"
+        with self.store.transaction() as connection:
+            connection.execute("INSERT INTO worker_leases VALUES ('node-1','exec-1',?)", (old,))
+            connection.execute("UPDATE execution_records SET status='running' WHERE execution_id='exec-1'")
+        reclaimed = self.store.reclaim_stale_leases(older_than_seconds=60)
+        self.assertEqual(reclaimed, ["exec-1"])
+        row = self._execution()
+        self.assertEqual((row["status"], row["error_summary"]), ("failed", "worker_lost"))
+        with self.store.transaction() as connection:
+            self.assertEqual(connection.execute("SELECT COUNT(*) FROM worker_leases").fetchone()[0], 0)
+            audit = connection.execute(
+                "SELECT COUNT(*) FROM audit_events WHERE event_type='worker_lost' AND execution_id='exec-1'"
+            ).fetchone()[0]
+        self.assertEqual(audit, 1)
+
+    def test_fresh_lease_is_left_alone(self) -> None:
+        with self.store.transaction() as connection:
+            connection.execute("INSERT INTO worker_leases VALUES ('node-1','exec-1',?)", (self.now,))
+            connection.execute("UPDATE execution_records SET status='running' WHERE execution_id='exec-1'")
+        self.assertEqual(self.store.reclaim_stale_leases(older_than_seconds=3600), [])
+        self.assertEqual(self._execution()["status"], "running")
+
+    def test_queued_execution_without_lease_is_redispatched_by_the_sweep(self) -> None:
+        from gateway import app as gateway_app
+
+        service = create_app(self.db, "test-token", "centre-agent")
+        started: list[tuple[str, str]] = []
+
+        class _Runtime:
+            def run(self, request):
+                return RuntimeOutcome("completed")
+
+            def resume(self, request):
+                return self.run(request)
+
+            def cancel(self, execution_id):
+                return RuntimeOutcome("cancelled")
+
+        service.set_runtime(_Runtime())
+        original = gateway_app.start_worker_process
+
+        def recording(database, execution_id, runtime):
+            started.append((database, execution_id))
+
+        gateway_app.start_worker_process = recording
+        try:
+            report = gateway_app.sweep_once(service, stale_worker_seconds=3600)
+        finally:
+            gateway_app.start_worker_process = original
+            service.store.close()
+
+        self.assertEqual(report["redispatched"], ["exec-1"])
+        self.assertEqual(started, [(self.db, "exec-1")])
+
+    def test_sweep_does_not_dispatch_when_no_runtime_is_configured(self) -> None:
+        from gateway import app as gateway_app
+
+        service = create_app(self.db, "test-token", "centre-agent")
+        started: list[str] = []
+        original = gateway_app.start_worker_process
+        gateway_app.start_worker_process = lambda database, execution_id, runtime: started.append(execution_id)
+        try:
+            report = gateway_app.sweep_once(service, stale_worker_seconds=3600)
+        finally:
+            gateway_app.start_worker_process = original
+            service.store.close()
+        self.assertEqual(report["redispatched"], [])
+        self.assertEqual(started, [])

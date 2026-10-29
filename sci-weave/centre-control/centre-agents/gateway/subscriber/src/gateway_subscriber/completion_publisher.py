@@ -26,9 +26,21 @@ logger = logging.getLogger("gateway_subscriber")
 _GOVERNANCE_TOPIC = "sciweave.governance-events"
 
 
+class CompletionPublishError(Exception):
+    """Raised when a ``task_completed`` event could not be confirmed by the broker.
+
+    The outbox drain treats this as "still pending" and retries later, so the
+    error must mean the event was NOT accepted -- not merely slow (ai4-odwi).
+    """
+
+
 class CompletionPublisher(Protocol):
     def publish(self, *, execution: dict[str, Any]) -> None:
-        """Publish one ``task_completed`` for a terminal successful execution."""
+        """Publish one ``task_completed`` for a terminal successful execution.
+
+        Must raise :class:`CompletionPublishError` if the broker did not confirm
+        the write, so the transactional outbox can retry it.
+        """
 
 
 def _split_business_key(business_key: str | None) -> tuple[str, str]:
@@ -48,9 +60,15 @@ def _split_business_key(business_key: str | None) -> tuple[str, str]:
 class KafkaCompletionPublisher:
     """Publish ``task_completed`` envelopes to the governance-events topic."""
 
-    def __init__(self, bootstrap_servers: str, producer_factory: Any | None = None) -> None:
+    def __init__(
+        self,
+        bootstrap_servers: str,
+        producer_factory: Any | None = None,
+        send_timeout_seconds: float = 10.0,
+    ) -> None:
         self.bootstrap_servers = bootstrap_servers
         self._producer_factory = producer_factory
+        self._send_timeout_seconds = send_timeout_seconds
         self._producer = None
 
     def _lazy_producer(self):
@@ -107,14 +125,25 @@ class KafkaCompletionPublisher:
         return body, f"{task_node_id}:{version_ref}"
 
     def publish(self, *, execution: dict[str, Any]) -> None:
+        """Send one ``task_completed`` and confirm the broker accepted it.
+
+        Raises :class:`CompletionPublishError` on any failure so the outbox keeps
+        the event pending for a later retry (ai4-odwi). ``send()`` alone is
+        fire-and-forget; waiting on the returned future is what makes "published"
+        mean the broker actually took the record.
+        """
         try:
             body, key = self.build_envelope(execution)
-            self._lazy_producer().send(_GOVERNANCE_TOPIC, key=key.encode("utf-8"), value=body)
-        except Exception as exc:  # noqa: BLE001 - completion must not fail the execution
-            logger.warning(
-                "could not publish task_completed for execution=%s: %s",
-                execution.get("execution_id"), exc,
+            future = self._lazy_producer().send(
+                _GOVERNANCE_TOPIC, key=key.encode("utf-8"), value=body
             )
+            get = getattr(future, "get", None)
+            if callable(get):
+                get(timeout=self._send_timeout_seconds)
+        except Exception as exc:  # noqa: BLE001 - surface as a retryable failure
+            raise CompletionPublishError(
+                f"task_completed publish failed for execution={execution.get('execution_id')}: {exc}"
+            ) from exc
 
     def close(self) -> None:
         if self._producer is not None:

@@ -6,6 +6,10 @@ import type { DashboardQueryPort } from '@/data/queryPort'
 
 export type DashboardLoadState = 'idle' | 'loading' | 'ready' | 'empty' | 'error'
 
+function isAbortError(error: unknown): boolean {
+  return typeof error === 'object' && error !== null && (error as { name?: string }).name === 'AbortError'
+}
+
 export const useDashboardStore = defineStore('dashboard', () => {
   const snapshot = ref<DashboardSnapshot | null>(null)
   const state = ref<DashboardLoadState>('idle')
@@ -31,18 +35,23 @@ export const useDashboardStore = defineStore('dashboard', () => {
     errorMessage.value = ''
     refreshing.value = true
     activeController?.abort()
-    activeController = new AbortController()
+    const controller = new AbortController()
+    activeController = controller
     try {
-      const result = await queryPort.value.getSnapshot(activeController.signal)
+      const result = await queryPort.value.getSnapshot(controller.signal)
       snapshot.value = result
       const hasData = [result.projects, result.tasks, result.wikiDocuments, result.wikiCandidates, result.executions, result.services, result.events]
         .some((collection) => collection.length > 0)
       state.value = hasData || result.sources.some((source) => source.status !== 'fresh') ? 'ready' : 'empty'
-    } catch {
+    } catch (error) {
+      // A cancelled request is not a failure: a newer load superseded this one
+      // or the view unmounted, so keep the last good snapshot and message
+      // instead of telling the user the data is broken (ai4-onvr).
+      if (isAbortError(error)) return
       state.value = 'error'
       errorMessage.value = '数据暂时无法更新，已保留最近一次成功读取的内容。请稍后重试。'
     } finally {
-      activeController = undefined
+      if (activeController === controller) activeController = undefined
       refreshing.value = false
     }
   }

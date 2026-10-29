@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import json
+import logging
 import sqlite3
 import threading
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
+
+_log = logging.getLogger(__name__)
 
 PENDING_WAITING = "waiting"
 PENDING_READY = "ready"
@@ -38,7 +41,11 @@ class InvalidPendingTransition(Exception):
 _PENDING_TRANSITIONS = {
     PENDING_WAITING: {PENDING_READY, PENDING_DONE, PENDING_DISPATCHED_UNKNOWN, PENDING_SUPERSEDED, PENDING_FAILED},
     PENDING_READY: {PENDING_DONE, PENDING_DISPATCHED_UNKNOWN, PENDING_SUPERSEDED, PENDING_FAILED, PENDING_WAITING},
-    PENDING_DISPATCHED_UNKNOWN: {PENDING_DONE, PENDING_FAILED, PENDING_SUPERSEDED, PENDING_WAITING},
+    # A dispatch whose outcome was never confirmed can be re-driven by
+    # recompute once its gate is satisfied again: the pending fact returns to
+    # ready and the dispatch retry policy (not a duplicate publish) owns the
+    # actual re-send (ai4-zpyg).
+    PENDING_DISPATCHED_UNKNOWN: {PENDING_DONE, PENDING_FAILED, PENDING_SUPERSEDED, PENDING_WAITING, PENDING_READY},
     PENDING_DONE: frozenset(),  # terminal; no rollback
     PENDING_SUPERSEDED: frozenset(),  # terminal
     PENDING_FAILED: {PENDING_SUPERSEDED},  # human may supersede a failure
@@ -67,6 +74,9 @@ class PendingHandoff:
     target_node_version_ref: str
     upstream_source_refs: tuple[tuple[str, str], ...]
     executor_refs: tuple[str, ...]
+    # ai4-0k36: the executor the coordinator actually selected for this handoff
+    # (None when none was available). Distinct from ``executor_refs``, which is
+    # the declared list from the mapping.
     executor_agent_id: str | None
     status: str
     last_trigger_revision_id: str | None
@@ -237,7 +247,14 @@ class CoordinatorStore:
         if existing is not None:
             if existing.status == PENDING_DONE:
                 # ai4-zc85: done is terminal; a recompute after completion must
-                # not overwrite the published fact (nor blow up the loop).
+                # not overwrite the published fact (nor blow up the loop). Log a
+                # requested status that differs so a caller is not silently
+                # ignored (ai4-onvr).
+                if status != PENDING_DONE:
+                    _log.info(
+                        "pending %s is done; ignoring requested status %s for %s",
+                        task_node_id, status, mapping_domain_id,
+                    )
                 return existing
             self._guard_transition(existing, status)
             self.conn.execute(
@@ -341,6 +358,21 @@ class CoordinatorStore:
         )
         self.conn.commit()
         return self.get_pending_handoff(mapping_domain_id, task_node_id, target_node_version_ref)
+
+    def set_pending_handoff_executor(
+        self, pending_handoff_id: str, executor_agent_id: str | None
+    ) -> None:
+        """Record the executor the coordinator actually selected (ai4-0k36).
+
+        The insert path stores ``executor_refs[0]`` because no selection has
+        happened yet; writing the real choice here keeps the column honest once
+        ``_select_executor`` has answered (including "nobody available" as NULL).
+        """
+        self.conn.execute(
+            "UPDATE pending_handoff SET executor_agent_id = ?, updated_at = ? WHERE pending_handoff_id = ?",
+            (executor_agent_id, now_iso(), pending_handoff_id),
+        )
+        self.conn.commit()
 
     def _guard_transition(self, pending: PendingHandoff, next_status: str) -> None:
         # Same-state rewrite is an idempotent recompute (e.g. waiting kept

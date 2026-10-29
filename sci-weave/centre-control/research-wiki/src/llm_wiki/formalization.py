@@ -26,6 +26,12 @@ class WikiFormalizationService:
             if not current or any(prior[key] != current[column] for key,column in (("owner_event_id","owner_event_id"),("candidate_head","candidate_head"),("base_formal_revision_id","base_formal_revision_id"))):
                 return WikiFormalizationResult('failed','operation_id_conflict',operation_id=operation_id)
         if prior and prior['state']=='succeeded':
+            # ai4-ttwn: a retry of an operation that already succeeded must be
+            # idempotent. Verify the activation evidence instead of reporting
+            # "needs reconciliation" for a state that is in fact committed.
+            reconciled = self.reconcile(operation_id)
+            if reconciled.status == 'succeeded':
+                return WikiFormalizationResult('succeeded','already_activated',reconciled.formal_wiki_revision_id,operation_id,prior['commit_hash'])
             return WikiFormalizationResult('reconciliation_required','activation_evidence_unverified',operation_id=operation_id,commit_hash=prior['commit_hash'])
         if not mr or mr['status']!='approved' or not mr['owner_event_id']:
             return self._persist(operation_id,merge_request_id,'failed','owner_approval_required')
@@ -110,6 +116,16 @@ class WikiFormalizationService:
                 c.execute("INSERT INTO wiki_formalization_operation (operation_id,merge_request_id,state,attempt_number,formal_revision_id,store_id,branch_id,commit_hash,reason_code,resource_approval_ids,owner_event_id,candidate_head,base_formal_revision_id,notification_status,notification_reason,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(operation_id) DO UPDATE SET state=excluded.state,attempt_number=excluded.attempt_number,formal_revision_id=COALESCE(excluded.formal_revision_id,formal_revision_id),store_id=COALESCE(excluded.store_id,store_id),branch_id=COALESCE(excluded.branch_id,branch_id),commit_hash=COALESCE(excluded.commit_hash,commit_hash),reason_code=excluded.reason_code,resource_approval_ids=excluded.resource_approval_ids,owner_event_id=COALESCE(owner_event_id,excluded.owner_event_id),candidate_head=COALESCE(candidate_head,excluded.candidate_head),base_formal_revision_id=COALESCE(base_formal_revision_id,excluded.base_formal_revision_id),updated_at=excluded.updated_at",(operation_id,merge_request_id,'succeeded',successful_attempt,revision,store,branch,commit,None,json.dumps(approvals,sort_keys=True),mr['owner_event_id'],mr['candidate_head'],mr['base_formal_revision_id'],'pending',None,now))
                 c.commit()
         except Exception as exc:
+            # ai4-ttwn: distinguish "committed but commit() raised" from "the
+            # transaction rolled back". Probe for the landed evidence before
+            # calling it unknown, so a genuinely activated revision is not
+            # misreported as reconciliation_required.
+            if self._activation_landed(mr['wiki_domain_id'], revision, result, commit):
+                if self.notifier:
+                    try: self.notifier(merge_request_id,revision)
+                    except Exception:
+                        self._notification_failed(operation_id,merge_request_id,revision)
+                return WikiFormalizationResult('succeeded','activated',revision,operation_id,commit)
             return self._persist(operation_id,merge_request_id,'reconciliation_required','sqlite_activation_unknown' if not isinstance(exc,ValueError) else 'activation_blocked',store,branch,commit,approvals)
         if self.notifier:
             try: self.notifier(merge_request_id,revision)
@@ -136,12 +152,36 @@ class WikiFormalizationService:
             c.execute("INSERT OR IGNORE INTO wiki_audit_event VALUES (?,?,?,?,?,?,?,?,?,?)",(event,now,'system','formalization_notification','WikiMergeRequestBuffer',merge_request_id,'failed','notification_failed',json.dumps({'formal_revision_id':revision,'operation_id':operation_id}),None))
             c.commit()
 
+    def _activation_landed(self, wiki_domain_id, revision_id, result_id, commit_hash):
+        """True when the activation is durably visible, even if the commit raised (ai4-ttwn)."""
+        try:
+            with self.db.connection() as c:
+                row = c.execute(
+                    "SELECT 1 FROM formal_wiki_revision r JOIN wiki_formalization_result f"
+                    " ON f.formal_wiki_revision_id=r.formal_wiki_revision_id"
+                    " WHERE r.formal_wiki_revision_id=? AND r.wiki_domain_id=?"
+                    " AND r.formal_commit_hash=? AND f.result_id=? AND f.result_status='succeeded'",
+                    (revision_id, wiki_domain_id, commit_hash, result_id),
+                ).fetchone()
+                current = c.execute(
+                    "SELECT current_formal_revision_id FROM wiki_current_formal_revision WHERE wiki_domain_id=?",
+                    (wiki_domain_id,),
+                ).fetchone()
+        except Exception:
+            return False
+        return row is not None and current is not None and current[0] == revision_id
+
     def reconcile(self,operation_id):
         with self.db.connection() as c: row=c.execute('SELECT * FROM wiki_formalization_operation WHERE operation_id=?',(operation_id,)).fetchone()
         if not row: return WikiFormalizationResult('reconciliation_required','operation_missing',operation_id=operation_id)
-        if not row: return WikiFormalizationResult('reconciliation_required','operation_missing',operation_id=operation_id)
+        domain=_domain_for_merge_request(self.db,row['merge_request_id'])
+        if not domain:
+            # No domain means the merge request resolved to nothing; say so
+            # instead of running a query against a NULL domain that can only
+            # fall through to write_reconciliation_required (ai4-ttwn).
+            return WikiFormalizationResult('reconciliation_required','merge_request_domain_unresolved',operation_id=operation_id,commit_hash=row['commit_hash'])
         with self.db.connection() as c:
-            activated=c.execute("SELECT r.formal_wiki_revision_id,r.terminus_store_id,r.formal_branch_id,r.formal_commit_hash,r.content_snapshot_digest, f.result_status, f.resource_approval_map, m.status AS mr_status, m.proposal_id, m.owner_event_id, m.candidate_head, m.base_formal_revision_id, p.status AS proposal_status, current.current_formal_revision_id FROM formal_wiki_revision r JOIN wiki_formalization_result f ON f.formal_wiki_revision_id=r.formal_wiki_revision_id JOIN wiki_merge_request_buffer m ON m.merge_request_id=? JOIN wiki_proposal p ON p.proposal_id=m.proposal_id JOIN wiki_current_formal_revision current ON current.wiki_domain_id=r.wiki_domain_id WHERE r.formal_wiki_revision_id=? AND r.wiki_domain_id=? AND r.terminus_store_id=? AND r.formal_branch_id=? AND r.formal_commit_hash=?",(row['merge_request_id'],row['formal_revision_id'],_domain_for_merge_request(self.db,row['merge_request_id']),row['store_id'],row['branch_id'],row['commit_hash'])).fetchone()
+            activated=c.execute("SELECT r.formal_wiki_revision_id,r.terminus_store_id,r.formal_branch_id,r.formal_commit_hash,r.content_snapshot_digest, f.result_status, f.resource_approval_map, m.status AS mr_status, m.proposal_id, m.owner_event_id, m.candidate_head, m.base_formal_revision_id, p.status AS proposal_status, current.current_formal_revision_id FROM formal_wiki_revision r JOIN wiki_formalization_result f ON f.formal_wiki_revision_id=r.formal_wiki_revision_id JOIN wiki_merge_request_buffer m ON m.merge_request_id=? JOIN wiki_proposal p ON p.proposal_id=m.proposal_id JOIN wiki_current_formal_revision current ON current.wiki_domain_id=r.wiki_domain_id WHERE r.formal_wiki_revision_id=? AND r.wiki_domain_id=? AND r.terminus_store_id=? AND r.formal_branch_id=? AND r.formal_commit_hash=?",(row['merge_request_id'],row['formal_revision_id'],domain,row['store_id'],row['branch_id'],row['commit_hash'])).fetchone()
         if activated and activated['current_formal_revision_id']==activated['formal_wiki_revision_id'] and activated['mr_status']=='merged' and activated['proposal_status']=='merged' and activated['owner_event_id']==row['owner_event_id'] and activated['candidate_head']==row['candidate_head'] and activated['base_formal_revision_id']==row['base_formal_revision_id'] and activated['result_status']=='succeeded':
             docs=self._read(row['store_id'],row['branch_id'],row['commit_hash'])
             if docs is not None and sha256_json(docs)==activated['content_snapshot_digest']:

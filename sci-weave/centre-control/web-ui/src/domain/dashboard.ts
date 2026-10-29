@@ -139,7 +139,13 @@ export function filterTasks(tasks: TaskNode[], filter: TaskFilter): TaskNode[] {
 export function attentionItems(snapshot: DashboardSnapshot): AttentionItem[] {
   return snapshot.tasks
     .filter((task) => task.attentionRank > 0)
-    .sort((left, right) => left.attentionRank - right.attentionRank || right.updatedAt.localeCompare(left.updatedAt))
+    // Compare parsed instants, not the raw ISO strings: a plain string compare is
+    // wrong as soon as two rows use different offsets (e.g. +08:00 vs Z), and an
+    // unparseable timestamp must sort to the end rather than crash the sort.
+    .sort(
+      (left, right) =>
+        left.attentionRank - right.attentionRank || compareInstantsDesc(left.updatedAt, right.updatedAt),
+    )
     .map((task) => ({
       id: task.id,
       title: task.name,
@@ -147,6 +153,36 @@ export function attentionItems(snapshot: DashboardSnapshot): AttentionItem[] {
       reason: task.blockingReason ?? statusDescription(task.status),
       updatedAt: task.updatedAt,
     }))
+}
+
+function instantOf(value: string): number {
+  const parsed = Date.parse(value)
+  return Number.isNaN(parsed) ? Number.NEGATIVE_INFINITY : parsed
+}
+
+/** Newest first; entries with an invalid time fall to the bottom. */
+function compareInstantsDesc(left: string, right: string): number {
+  return instantOf(right) - instantOf(left)
+}
+
+const TIME_ZONE = 'Asia/Shanghai'
+const timeOnlyFormat = new Intl.DateTimeFormat('zh-CN', { hour: '2-digit', minute: '2-digit', timeZone: TIME_ZONE })
+const shortFormat = new Intl.DateTimeFormat('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: TIME_ZONE })
+const mediumFormat = new Intl.DateTimeFormat('zh-CN', { dateStyle: 'medium', timeStyle: 'short', timeZone: TIME_ZONE })
+
+/**
+ * Format an ISO timestamp, tolerating bad input.
+ *
+ * ``new Date('garbage')`` is an Invalid Date and ``Intl.DateTimeFormat.format``
+ * throws ``RangeError`` on it, which used to abort the whole render for one
+ * malformed row. Return a neutral placeholder instead so the rest still shows.
+ */
+export function formatInstant(value: string | undefined, style: 'time' | 'short' | 'medium' = 'short'): string {
+  if (!value) return '—'
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return '时间未知'
+  const formatter = style === 'time' ? timeOnlyFormat : style === 'medium' ? mediumFormat : shortFormat
+  return formatter.format(parsed)
 }
 
 export function statusDescription(status: TaskStatus | ExecutionStatus): string {

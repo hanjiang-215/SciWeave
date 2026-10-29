@@ -70,4 +70,19 @@ def main() -> None:
         app,
         required_environment("SCIWEAVE_GATEWAY_HOST"),
         int(required_environment("SCIWEAVE_GATEWAY_PORT")),
+        sweep_interval_seconds=_number("SCIWEAVE_GATEWAY_SWEEP_INTERVAL_SECONDS", 30.0),
+        stale_worker_seconds=_number("SCIWEAVE_GATEWAY_STALE_WORKER_SECONDS", 3600.0),
     )
+
+
+def _number(name: str, default: float) -> float:
+    """Read an optional positive number from the environment."""
+    raw = os.environ.get(name, "").strip()
+    if not raw:
+        return default
+    try:
+        value = float(raw)
+    except ValueError:
+        logger.warning("%s is not a number (%r); using %s", name, raw, default)
+        return default
+    return value if value > 0 else default

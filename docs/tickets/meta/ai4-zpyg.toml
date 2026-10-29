@@ -1,0 +1,3 @@
+# ai4-zpyg 的索引归属与简介（人工维护）
+module = "governance"
+summary = "coordinator dispatched_unknown 节点在 recompute 变僵尸，既不重发也不报告"

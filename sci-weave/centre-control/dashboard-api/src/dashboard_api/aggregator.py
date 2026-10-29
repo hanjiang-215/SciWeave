@@ -1,11 +1,20 @@
 from __future__ import annotations
 
-from concurrent.futures import ThreadPoolExecutor
+import logging
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
 from datetime import datetime, timezone
 import re
+from time import monotonic
 from typing import Callable, Mapping, Sequence
 
 from .sources import SOURCE_COLLECTIONS, SourceSpec, SourceUnavailable
+
+logger = logging.getLogger(__name__)
+
+#: Overall budget for one snapshot. Each source has its own socket timeout, but
+#: without a total deadline N slow sources add up and the HTTP client gives up
+#: with a 5xx instead of getting a partial snapshot (ai4-onvr).
+DEFAULT_DEADLINE_SECONDS = 10.0
 
 
 class SnapshotValidationError(ValueError):
@@ -21,26 +30,39 @@ class DashboardAggregator:
         fetch_contribution: Callable[[SourceSpec], Mapping[str, object]],
         *,
         now: Callable[[], datetime] | None = None,
+        deadline_seconds: float = DEFAULT_DEADLINE_SECONDS,
     ) -> None:
         self._sources = tuple(sources)
         self._fetch = fetch_contribution
         self._now = now or (lambda: datetime.now(timezone.utc))
+        self._deadline_seconds = max(float(deadline_seconds), 0.1)
 
     def get_snapshot(self) -> dict[str, object]:
         contributions: dict[str, tuple[dict[str, object], str | None]] = {}
         configured = [source for source in self._sources if source.url]
         if configured:
+            deadline = monotonic() + self._deadline_seconds
             with ThreadPoolExecutor(max_workers=len(configured), thread_name_prefix="dashboard-source") as executor:
                 futures = {source.id: executor.submit(self._fetch, source) for source in configured}
                 for source in configured:
+                    remaining = deadline - monotonic()
                     try:
-                        raw = futures[source.id].result()
+                        if remaining <= 0:
+                            raise FutureTimeoutError()
+                        raw = futures[source.id].result(timeout=remaining)
                         contributions[source.id] = (self._normalize(source, raw), None)
                     except SnapshotValidationError:
                         contributions[source.id] = ({}, "source_invalid_response")
                     except SourceUnavailable as error:
                         contributions[source.id] = ({}, error.reason_code)
+                    except FutureTimeoutError:
+                        # Report the timed-out source as unavailable instead of
+                        # letting the whole snapshot fail.
+                        logger.warning("dashboard source %s exceeded the %.1fs snapshot deadline",
+                                       source.id, self._deadline_seconds)
+                        contributions[source.id] = ({}, "source_timeout")
                     except Exception:
+                        logger.exception("dashboard source %s raised", source.id)
                         contributions[source.id] = ({}, "source_unavailable")
 
         arrays: dict[str, list[object]] = {collection: [] for collection in SOURCE_COLLECTIONS}
@@ -168,6 +190,7 @@ def _public_error(code: str) -> str:
         "source_not_configured": "来源地址未配置",
         "source_timeout": "查询超时",
         "source_invalid_response": "来源返回格式无效",
+        "source_redirect_rejected": "来源返回了跳转，已拒绝请求",
         "source_unavailable": "来源查询暂不可用",
         "source_stale": "来源数据可能过期",
         "source_partial": "来源只返回部分数据",

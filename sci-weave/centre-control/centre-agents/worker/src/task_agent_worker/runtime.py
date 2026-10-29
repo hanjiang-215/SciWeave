@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 from dataclasses import dataclass
 from pathlib import Path
@@ -73,8 +74,14 @@ class FastAgentPassthroughRuntime:
             history_path.write_text(json.dumps(history, sort_keys=True), encoding="utf-8")
             return WorkerOutcome("completed", result_summary="fast-agent passthrough completed")
         except (OSError, ValueError):
+            logging.getLogger("task_agent_worker").exception(
+                "passthrough runtime storage unavailable for execution %s", request.execution_id
+            )
             return WorkerOutcome("failed", error_summary="runtime_storage_unavailable")
         except Exception:
+            logging.getLogger("task_agent_worker").exception(
+                "passthrough runtime failed for execution %s", request.execution_id
+            )
             return WorkerOutcome("failed", error_summary="fast_agent_runtime_error")
 
     def resume(self, request: RuntimeRequest) -> WorkerOutcome:
@@ -128,8 +135,14 @@ class FastAgentDeepSeekRuntime:
         try:
             return asyncio.run(self._run_agent(request, resumed))
         except OSError:
+            logging.getLogger("task_agent_worker").exception(
+                "fast-agent runtime storage unavailable for execution %s", request.execution_id
+            )
             return WorkerOutcome("failed", error_summary="runtime_storage_unavailable")
         except Exception:
+            logging.getLogger("task_agent_worker").exception(
+                "fast-agent runtime failed for execution %s", request.execution_id
+            )
             return WorkerOutcome("failed", error_summary="fast_agent_runtime_error")
 
     def model_for(self, agent_name: str) -> str:
@@ -148,7 +161,10 @@ class FastAgentDeepSeekRuntime:
     async def _run_agent(self, request: RuntimeRequest, resumed: bool) -> WorkerOutcome:
         from fast_agent import FastAgent
         from fast_agent.context import get_initialized_context
-
+        # ai4-heb2: errors used to reach the caller as a bare
+        # ``fast_agent_runtime_error`` with no log line, so an operator saw a
+        # failed execution and nothing else. Record what happened, where.
+        _log = logging.getLogger("task_agent_worker")
         self.settings.home.mkdir(parents=True, exist_ok=True)
         original_environment = {
             "OPENAI__API_KEY": os.environ.get("OPENAI__API_KEY"),
@@ -243,6 +259,8 @@ class FastAgentDeepSeekRuntime:
             # previous run's turn as well as this one's.
             use_history=False,
         )
+        # The decorator registers ``step`` as the agent's entry point; its body
+        # is deliberately empty because the chain drives every step.
         async def step() -> None:
             return None
 

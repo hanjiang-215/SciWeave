@@ -135,13 +135,13 @@ CREATE TABLE IF NOT EXISTS wiki_prereview_report (
     report_id               TEXT PRIMARY KEY,
     candidate_id            TEXT NOT NULL,
     candidate_head          TEXT NOT NULL,
-    base_formal_revision_id TEXT,
+    base_formal_revision_id TEXT NOT NULL DEFAULT '',
     rule_set_version        TEXT NOT NULL,
     checks                  TEXT NOT NULL,
     verdict                 TEXT NOT NULL CHECK (verdict IN ('passed', 'failed')),
     conflict_matrix         TEXT NOT NULL,
     created_at              TEXT NOT NULL,
-    UNIQUE (candidate_id, candidate_head, rule_set_version)
+    UNIQUE (candidate_id, candidate_head, rule_set_version, base_formal_revision_id)
 );
 
 CREATE TABLE IF NOT EXISTS wiki_prereview_report_decision (

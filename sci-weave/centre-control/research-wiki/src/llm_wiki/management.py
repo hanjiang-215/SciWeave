@@ -107,6 +107,7 @@ class WikiManagementService:
         prereview_log=None,
         merged_candidate_service=None,
         governance_events=None,
+        bootstrap_service=None,
     ) -> None:
         self._formal_query = formal_query
         self._candidate_service = candidate_service
@@ -116,6 +117,7 @@ class WikiManagementService:
         self._candidate_reader = candidate_reader
         self._prereview_log = prereview_log
         self._merged_candidate_service = merged_candidate_service
+        self._bootstrap_service = bootstrap_service
         self._capabilities = caller_capabilities
         self._audit = audit_connection
         self._service = service_name
@@ -152,6 +154,8 @@ class WikiManagementService:
             handlers["append_prereview_log"] = self._append_prereview_log
         if self._merged_candidate_service is not None:
             handlers["create_merged_candidate"] = self._create_merged_candidate
+        if self._bootstrap_service is not None:
+            handlers["bootstrap_wiki"] = self._bootstrap_wiki
         return handlers
 
     def _create_merged_candidate(self, arguments: dict[str, Any], actor_id: str) -> dict[str, Any]:
@@ -401,11 +405,44 @@ class WikiManagementService:
             decision=_required(arguments, "decision"),
             reason=_required(arguments, "reason"),
             selected_solution_id=_required(arguments, "selected_solution_id"),
+            expected_owner_event_id=arguments.get("expected_owner_event_id") or None,
         )
         return {
             "status": result.status,
             "reason_code": result.reason_code,
             "audit_event_id": result.audit_event_id,
+        }
+
+    def _bootstrap_wiki(self, arguments: dict[str, Any], actor_id: str) -> dict[str, Any]:
+        """Create the first formal revision for a domain (B3 / ai4-0hdz).
+
+        Every candidate needs an existing base revision, but nothing created the
+        very first one, so a fresh domain was stuck at ``no_current_pointer`` and
+        could only be seeded by hand. This is the missing entry point: it writes
+        the empty default snapshot to TerminusDB and atomically activates it in
+        SQLite, refusing to disturb an existing pointer. Requires the formalize
+        capability because it establishes the formal baseline.
+        """
+        if self._bootstrap_service is None:
+            return {"status": "unavailable", "reason_code": "bootstrap_not_available"}
+        domain_id = _text(arguments.get("wiki_domain_id")) or ""
+        if not domain_id:
+            raise ValueError("wiki_domain_id is required")
+        result = self._bootstrap_service.bootstrap(domain_id)
+        if result.status in {"created", "already_exists"}:
+            self._publish_safely(
+                formal_revision_event(
+                    wiki_domain_id=domain_id,
+                    formal_wiki_revision_id=result.formal_revision_id,
+                    merge_request_id=None,
+                )
+            )
+        return {
+            "status": result.status,
+            "reason_code": result.reason_code,
+            "wiki_domain_id": domain_id,
+            "formal_revision_id": result.formal_revision_id,
+            "formal_commit_hash": result.formal_commit_hash,
         }
 
     def _formalize_wiki(self, arguments: dict[str, Any], actor_id: str) -> dict[str, Any]:
@@ -448,6 +485,7 @@ _WRITE_TOOLS = frozenset({
     "reconcile_wiki_formalization",
     "append_prereview_log",
     "create_merged_candidate",
+    "bootstrap_wiki",
 })
 
 _TOOL_CAPABILITIES = {
@@ -462,6 +500,7 @@ _TOOL_CAPABILITIES = {
     "reconcile_wiki_formalization": _FORMALIZE_CAPABILITIES,
     "append_prereview_log": _PREREVIEW_LOG_CAPABILITIES,
     "create_merged_candidate": _MERGED_CANDIDATE_CAPABILITIES,
+    "bootstrap_wiki": _FORMALIZE_CAPABILITIES,
 }
 
 TOOL_DEFINITIONS = [
@@ -542,6 +581,7 @@ TOOL_DEFINITIONS = [
                 "decision": {"type": "string", "enum": ["approved", "rejected"]},
                 "reason": {"type": "string"},
                 "selected_solution_id": {"type": "string"},
+                "expected_owner_event_id": {"type": "string"},
             },
             "additionalProperties": False,
         },
@@ -632,6 +672,22 @@ TOOL_DEFINITIONS = [
                     },
                 },
                 "idempotency_key": {"type": "string"},
+            },
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "bootstrap_wiki",
+        "description": (
+            "Create the first formal revision for a Wiki domain so candidates can be "
+            "submitted. Atomically writes the empty default snapshot and activates it; "
+            "refuses to disturb an existing formal pointer. Requires the formalize capability."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "required": ["wiki_domain_id"],
+            "properties": {
+                "wiki_domain_id": {"type": "string"},
             },
             "additionalProperties": False,
         },

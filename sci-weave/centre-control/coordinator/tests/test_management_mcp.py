@@ -178,3 +178,44 @@ class CoordinatorMcpTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+    def test_a_non_root_task_failure_is_reported_as_not_a_root_node(self) -> None:
+        """ai4-onvr: a non-root dispatch is an input error, not a backend failure."""
+
+        class _NonRoot(_RecordingService):
+            def dispatch_root_task(self, *args, **kwargs):
+                raise ValueError("task node-root is not a root node")
+
+        server = create_coordinator_mcp_server("127.0.0.1", 0, _NonRoot(), "test-token")
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        request = urllib.request.Request(
+            f"http://127.0.0.1:{server.server_address[1]}/mcp",
+            data=json.dumps(
+                {
+                    "jsonrpc": "2.0",
+                    "id": "1",
+                    "method": "tools/call",
+                    "params": {
+                        "name": "dispatch_root_task",
+                        "arguments": {
+                            "mapping_domain_id": "iris",
+                            "task_node_id": "node-root",
+                            "target_node_version_ref": "node-v1",
+                            "trigger_revision_id": "rev-1",
+                        },
+                    },
+                }
+            ).encode(),
+            method="POST",
+        )
+        request.add_header("Content-Type", "application/json")
+        request.add_header("Authorization", "Bearer test-token")
+        with urllib.request.urlopen(request) as response:
+            body = json.loads(response.read())
+
+        payload = json.loads(body["result"]["content"][0]["text"])
+        self.assertEqual(payload["status"], "failed")
+        self.assertEqual(payload["reason_code"], "not_a_root_node")
+        self.assertFalse(payload["accepted"])
