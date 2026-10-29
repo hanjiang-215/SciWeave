@@ -1,0 +1,3 @@
+id = "ai4-eka6"
+module = ["mapping", "governance"]
+summary = "候选快照摘要读写口径不一致，预审读不到正文"

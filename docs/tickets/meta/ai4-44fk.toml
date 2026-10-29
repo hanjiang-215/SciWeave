@@ -1,0 +1,3 @@
+id = "ai4-44fk"
+module = ["agent", "governance"]
+summary = "中央 Worker 的命令文本仍是 Execute TaskNode 标识符，模型拿不到域与事件事实"

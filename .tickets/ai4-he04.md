@@ -2,7 +2,7 @@
 id: ai4-he04
 status: closed
 deps: [ai4-upsm]
-links: [ai4-upsm, ai4-5z9e, ai4-oz3s, ai4-eex0]
+links: [ai4-upsm, ai4-5z9e, ai4-oz3s, ai4-eex0, ai4-eka6]
 created: 2026-10-21T12:14:32Z
 type: feature
 priority: 1

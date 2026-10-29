@@ -2,7 +2,7 @@
 id: ai4-xkbd
 status: closed
 deps: [ai4-g5fx]
-links: [ai4-10ja, ai4-te1v, ai4-f985, ai4-2raq, ai4-edrp]
+links: [ai4-10ja, ai4-te1v, ai4-f985, ai4-2raq, ai4-edrp, ai4-3sq5]
 created: 2026-10-26T08:21:32Z
 type: bug
 priority: 1

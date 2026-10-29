@@ -430,6 +430,63 @@ class ShippedPresetTests(unittest.TestCase):
             self.config.with_agent("no-such-agent")
 
 
+class SciencePalPresetTests(unittest.TestCase):
+    """The shipped SciPal workflow templates stay inside the MCP boundary."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.config = load_worker_config(_ENV)
+
+    def test_all_three_sciencepal_workflows_load(self) -> None:
+        self.assertEqual(
+            set(self.config.project.workflows) & {
+                "sciencepal-execution",
+                "sciencepal-data-quality",
+                "sciencepal-analysis-review",
+            },
+            {
+                "sciencepal-execution",
+                "sciencepal-data-quality",
+                "sciencepal-analysis-review",
+            },
+        )
+
+    def test_sciencepal_execution_agents_have_narrow_permissions(self) -> None:
+        agents = self.config.project.agents
+        for name in (
+            "sciencepal-execution-agent",
+            "sciencepal-evidence-agent",
+            "sciencepal-data-quality-agent",
+            "sciencepal-data-quality-reviewer",
+            "sciencepal-analysis-agent",
+            "sciencepal-analysis-auditor",
+        ):
+            with self.subTest(agent=name):
+                self.assertEqual(agents[name].allowed_mcp_resources, ("sciencepal",))
+                self.assertNotIn("draft-buffer", agents[name].allowed_mcp_resources)
+
+        for name in (
+            "sciencepal-execution-writer",
+            "sciencepal-data-quality-writer",
+            "sciencepal-analysis-writer",
+        ):
+            with self.subTest(agent=name):
+                self.assertEqual(agents[name].allowed_mcp_resources, ("draft-buffer",))
+                self.assertNotIn("sciencepal", agents[name].allowed_mcp_resources)
+
+    def test_sciencepal_templates_keep_formalization_human_owned(self) -> None:
+        for name in (
+            "sciencepal-execution-writer",
+            "sciencepal-data-quality-writer",
+            "sciencepal-analysis-writer",
+        ):
+            with self.subTest(agent=name):
+                instruction = self.config.project.agents[name].instruction
+                self.assertTrue("candidate" in instruction or "候选" in instruction)
+                self.assertTrue("formal" in instruction or "正式化" in instruction)
+                self.assertIn("draft_id", instruction)
+
+
 class _Inbox:
     def __init__(self, row: dict) -> None:
         self.row = row

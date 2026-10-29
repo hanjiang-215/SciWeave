@@ -343,7 +343,16 @@ class FactoryTests(unittest.TestCase):
         self.assertEqual(runtime.config.agent_name, "researcher-task-agent")
         self.assertEqual(
             sorted(runtime.config.project.workflows),
-            ["agents-as-tools-example", "literature-agent", "orchestrator-example", "parallel-example", "router-example"],
+            [
+                "agents-as-tools-example",
+                "literature-agent",
+                "orchestrator-example",
+                "parallel-example",
+                "router-example",
+                "sciencepal-analysis-review",
+                "sciencepal-data-quality",
+                "sciencepal-execution",
+            ],
         )
 
     def test_the_factory_refuses_an_agent_id_no_definition_declares(self) -> None:

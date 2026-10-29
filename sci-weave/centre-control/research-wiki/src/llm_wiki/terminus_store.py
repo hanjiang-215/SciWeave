@@ -290,9 +290,65 @@ class TerminusDBWikiCandidateStore(TerminusDBResourceStore):
     """Write isolated Wiki candidates and confirm their exact immutable commit."""
 
     def __init__(self, *, store_id: str, database: str, **kwargs):
+        self._request_opener = kwargs.pop("request_opener", None)
         super().__init__(**kwargs)
         self.store_id = store_id
         self.database = database
+        if self._request_opener is None:
+            self._request_opener = self._opener
+
+    def ensure_default_formal_snapshot(self, domain_id: str):
+        """Create or find the immutable empty formal snapshot for one domain."""
+        from .candidate_submission import CandidateSnapshotResult
+
+        if not all((domain_id, self.store_id, self.database)):
+            return CandidateSnapshotResult("failed", reason_code="formal_store_not_configured")
+        domain_key = hashlib.sha256(domain_id.encode("utf-8")).hexdigest()
+        revision_id = "wiki-default-" + domain_key
+        marker = "sciweave-wiki-default-formal:" + domain_key
+        expected = [{
+            "@id": "WikiRevision/" + revision_id,
+            "@type": "WikiRevision",
+            "wiki_revision_id": revision_id,
+            "title": "",
+            "body_markdown": "",
+            "lifecycle_state": "formal",
+        }]
+        try:
+            head = self._candidate_head("main")
+            if head and head.get("message") == marker:
+                return self._default_formal_readback(revision_id, head.get("identifier"), expected)
+            if head is None:
+                return CandidateSnapshotResult("unknown", reason_code="store_result_unknown")
+            snapshot = self.read_exact_snapshot(self.store_id, self.database, "main", head.get("identifier"))
+            if snapshot.status != "confirmed":
+                return CandidateSnapshotResult("unknown", reason_code="store_result_unknown")
+            if snapshot.documents:
+                return CandidateSnapshotResult("failed", reason_code="default_formal_branch_not_empty")
+            status, _, _ = self._request(
+                "POST", self._candidate_document_url("main") + "?author=sciweave&message=" + quote(marker, safe=""),
+                json.dumps(expected, ensure_ascii=False, separators=(",", ":")).encode("utf-8"),
+            )
+            if not 200 <= status < 300:
+                head = self._candidate_head("main")
+                if not head or head.get("message") != marker:
+                    return CandidateSnapshotResult("unknown", reason_code="store_result_unknown")
+            head = self._candidate_head("main")
+            if not head or head.get("message") != marker:
+                return CandidateSnapshotResult("unknown", reason_code="store_result_unknown")
+            return self._default_formal_readback(revision_id, head.get("identifier"), expected)
+        except Exception:
+            return CandidateSnapshotResult("unknown", reason_code="store_result_unknown")
+
+    def _default_formal_readback(self, revision_id, commit, expected):
+        from .candidate_submission import CandidateSnapshotResult
+        if not isinstance(commit, str) or not commit:
+            return CandidateSnapshotResult("unknown", reason_code="store_result_unknown")
+        snapshot = self.read_exact_snapshot(self.store_id, self.database, "main", commit)
+        if (snapshot.status != "confirmed" or snapshot.commit_hash != commit
+                or list(snapshot.documents) != expected):
+            return CandidateSnapshotResult("unknown", reason_code="store_result_unknown")
+        return CandidateSnapshotResult("confirmed", self.store_id, "main", commit)
 
     def create_candidate_snapshot(self, domain_id: str, base_commit_ref: str,
                                   canonical_snapshot: str, idempotency_key: str):
@@ -437,6 +493,12 @@ class TerminusDBWikiCandidateStore(TerminusDBResourceStore):
         if body is not None:
             headers["Content-Type"] = "application/json"
         request = urllib.request.Request(url, data=body, headers=headers, method=method)
+        if self._request_opener is not None:
+            try:
+                status, response_headers, response_body = self._request_opener(method, url, headers, body, self.timeout)
+                return status, response_headers, response_body
+            except (OSError, TimeoutError, urllib.error.URLError):
+                raise
         try:
             with urllib.request.urlopen(request, timeout=self.timeout) as response:
                 return response.status, dict(response.headers), response.read()
