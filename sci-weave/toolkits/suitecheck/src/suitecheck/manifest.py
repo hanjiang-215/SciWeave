@@ -24,9 +24,20 @@ ROLES = ("machine", "human")
 
 #: Keys the validator understands. Anything else is `unknown_field`.
 _TOP_LEVEL_KEYS = frozenset({
-    "suite", "role", "actor", "title", "version", "summary", "boundary",
+    "schema_version", "suite", "role", "actor", "title", "version", "summary", "boundary",
     "requires", "skills", "mcp", "hooks", "cron", "install", "check",
+    "capabilities", "payloads", "export",
 })
+_SCHEMA_VERSION = 1
+_PLATFORM_STATUSES = frozenset({"supported", "manual", "unsupported", "unverified"})
+_RUNTIME_ROLES = frozenset({"runtime", "data", "service"})
+_PAYLOAD_PATH_KEYS = frozenset({"path", "card"})
+_EXPORT_KEYS = frozenset({"harness_input", "include", "exclude", "configuration"})
+_ENV_ENTRY_KEYS = frozenset({"name", "purpose", "required"})
+_CAPABILITY_ENTRY_KEYS = frozenset({"name", "platforms"})
+_PLATFORM_KEYS = frozenset({"status", "limitations"})
+_PAYLOAD_SECTIONS = frozenset({"skills", "mcp", "hooks", "cron", "runtime"})
+_RUNTIME_ENTRY_KEYS = frozenset({"name", "path", "role"})
 _REQUIRED_KEYS = ("suite", "role", "title", "version", "summary")
 _BOUNDARY_KEYS = frozenset({"may_modify", "must_not"})
 _REQUIRES_KEYS = frozenset({"env", "services"})
@@ -115,7 +126,42 @@ class CronRef:
 
 
 @dataclass(frozen=True)
+class EnvRequirement:
+    name: str
+    purpose: str
+    required: bool
+
+
+@dataclass(frozen=True)
+class PlatformSupport:
+    status: str
+    limitations: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class CapabilitySupport:
+    name: str
+    platforms: Mapping[str, PlatformSupport]
+
+
+@dataclass(frozen=True)
+class RuntimeRef:
+    name: str
+    path: str
+    role: str
+
+
+@dataclass(frozen=True)
+class ExportRules:
+    harness_input: str
+    include: tuple[str, ...]
+    exclude: tuple[str, ...]
+    configuration: str
+
+
+@dataclass(frozen=True)
 class SuiteManifest:
+    schema_version: int
     suite: str
     role: str
     title: str
@@ -125,6 +171,10 @@ class SuiteManifest:
     actor: str | None = None
     boundary: Mapping[str, Any] = field(default_factory=dict)
     requires: Mapping[str, Any] = field(default_factory=dict)
+    env: tuple[EnvRequirement, ...] = ()
+    capabilities: tuple[CapabilitySupport, ...] = ()
+    payloads: Mapping[str, tuple[Any, ...]] = field(default_factory=dict)
+    export: ExportRules | None = None
     skills: tuple[SkillRef, ...] = ()
     mcp: tuple[MCPRef, ...] = ()
     hooks: tuple[HookRef, ...] = ()
@@ -180,6 +230,20 @@ def _closed(data: Mapping[str, Any], allowed: frozenset[str], path: str) -> None
         raise ManifestError("unknown_field", path, ", ".join(unknown))
 
 
+def _relative_path(value: Any, path: str) -> str:
+    text = _required_value_text(value, path)
+    candidate = Path(text)
+    if candidate.is_absolute() or "\\" in text or any(part in {"", ".", ".."} for part in text.split("/")):
+        raise ManifestError("invalid_path", path, "must be a normalized relative path without traversal")
+    return text
+
+
+def _required_value_text(value: Any, path: str) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise ManifestError("invalid_value", path, "required non-empty string")
+    return value.strip()
+
+
 def _refs(items: Any, path: str, *, allow_empty: bool) -> list[Mapping[str, Any]]:
     if items is None:
         return []
@@ -190,6 +254,104 @@ def _refs(items: Any, path: str, *, allow_empty: bool) -> list[Mapping[str, Any]
     if not all(isinstance(item, Mapping) for item in items):
         raise ManifestError("invalid_shape", path, "every entry must be an object")
     return list(items)
+
+
+def _bool(value: Any, path: str) -> bool:
+    if not isinstance(value, bool):
+        raise ManifestError("invalid_value", path, "must be boolean")
+    return value
+
+
+def _env_requirements(value: Any, path: str) -> tuple[EnvRequirement, ...]:
+    if value is None:
+        return ()
+    if isinstance(value, list) and all(isinstance(item, str) for item in value):
+        return tuple(EnvRequirement(item, "declared by the suite", True) for item in _strings(value, "invalid_env", path))
+    entries = _refs(value, path, allow_empty=True)
+    result: list[EnvRequirement] = []
+    for index, item in enumerate(entries):
+        label = f"{path}[{index}]"
+        _closed(item, _ENV_ENTRY_KEYS, label)
+        name = _required_value_text(item.get("name"), f"{label}.name")
+        purpose = _required_value_text(item.get("purpose"), f"{label}.purpose")
+        result.append(EnvRequirement(name, purpose, _bool(item.get("required"), f"{label}.required")))
+    return tuple(result)
+
+
+def _capability_support(value: Any, path: str, ceiling: frozenset[str]) -> tuple[CapabilitySupport, ...]:
+    entries = _refs(value, path, allow_empty=True)
+    result: list[CapabilitySupport] = []
+    for index, item in enumerate(entries):
+        label = f"{path}[{index}]"
+        _closed(item, _CAPABILITY_ENTRY_KEYS, label)
+        name = _required_value_text(item.get("name"), f"{label}.name")
+        if name not in CAPABILITIES:
+            raise ManifestError("capability_unknown", f"{label}.name", f"{name!r} is not supported")
+        if name not in ceiling:
+            raise ManifestError("capability_over_ceiling", f"{label}.name", f"{name!r} exceeds actor ceiling")
+        platforms = item.get("platforms")
+        if not isinstance(platforms, Mapping) or not platforms:
+            raise ManifestError("invalid_platforms", f"{label}.platforms", "must be a non-empty object")
+        support: dict[str, PlatformSupport] = {}
+        for platform, raw in platforms.items():
+            platform_label = f"{label}.platforms.{platform}"
+            if not isinstance(platform, str) or not platform.strip():
+                raise ManifestError("invalid_platform", platform_label, "platform name must be non-empty")
+            details = _mapping(raw, platform_label)
+            _closed(details, _PLATFORM_KEYS, platform_label)
+            status = _required_value_text(details.get("status"), f"{platform_label}.status")
+            if status not in _PLATFORM_STATUSES:
+                raise ManifestError("invalid_platform_status", f"{platform_label}.status", f"must be one of {sorted(_PLATFORM_STATUSES)}")
+            limitations = _strings(details.get("limitations"), "invalid_limitations", f"{platform_label}.limitations")
+            if status in {"manual", "unsupported", "unverified"} and not limitations:
+                raise ManifestError("platform_limitation_missing", platform_label, "non-supported status requires limitations")
+            support[platform] = PlatformSupport(status, limitations)
+        result.append(CapabilitySupport(name, support))
+    return tuple(result)
+
+
+def _payloads(value: Any, path: str) -> Mapping[str, tuple[Any, ...]]:
+    if value is None:
+        return {}
+    data = _mapping(value, path)
+    _closed(data, _PAYLOAD_SECTIONS, path)
+    parsed: dict[str, tuple[Any, ...]] = {}
+    for section in _PAYLOAD_SECTIONS:
+        entries = _refs(data.get(section), f"{path}.{section}", allow_empty=True)
+        refs: list[Any] = []
+        for index, item in enumerate(entries):
+            label = f"{path}.{section}[{index}]"
+            allowed = _PAYLOAD_PATH_KEYS if section == "mcp" else frozenset({"name", "path"})
+            if section == "runtime":
+                allowed = _RUNTIME_ENTRY_KEYS
+            _closed(item, allowed, label)
+            name = _required_value_text(item.get("name"), f"{label}.name")
+            resource_key = "card" if section == "mcp" else "path"
+            resource = _relative_path(item.get(resource_key), f"{label}.{resource_key}")
+            if section == "runtime":
+                role = _required_value_text(item.get("role"), f"{label}.role")
+                if role not in _RUNTIME_ROLES:
+                    raise ManifestError("invalid_runtime_role", f"{label}.role", f"must be one of {sorted(_RUNTIME_ROLES)}")
+                refs.append(RuntimeRef(name, resource, role))
+            elif section == "mcp":
+                refs.append(MCPRef(name, resource))
+            else:
+                refs.append((name, resource))
+        parsed[section] = tuple(refs)
+    return parsed
+
+
+def _export_rules(value: Any, path: str) -> ExportRules | None:
+    if value is None:
+        return None
+    data = _mapping(value, path)
+    _closed(data, _EXPORT_KEYS, path)
+    return ExportRules(
+        _relative_path(data.get("harness_input"), f"{path}.harness_input"),
+        _strings(data.get("include"), "invalid_include", f"{path}.include"),
+        _strings(data.get("exclude"), "invalid_exclude", f"{path}.exclude"),
+        _relative_path(data.get("configuration"), f"{path}.configuration"),
+    )
 
 
 def load_manifest(path: Path | str) -> SuiteManifest:
@@ -208,6 +370,9 @@ def load_manifest(path: Path | str) -> SuiteManifest:
         raise ManifestError("invalid_shape", str(manifest_path), "must be a mapping")
 
     _closed(data, _TOP_LEVEL_KEYS, "suite")
+    schema_version = data.get("schema_version", _SCHEMA_VERSION)
+    if type(schema_version) is not int or schema_version != _SCHEMA_VERSION:
+        raise ManifestError("unsupported_schema_version", "suite.schema_version", f"supported version is {_SCHEMA_VERSION}")
     for key in _REQUIRED_KEYS:
         _required_text(data, key, "suite")
 
@@ -229,14 +394,21 @@ def load_manifest(path: Path | str) -> SuiteManifest:
     requires = _mapping(data.get("requires"), "suite.requires")
     _closed(requires, _REQUIRES_KEYS, "suite.requires")
     for key in ("env", "services"):
+        if key == "env" and isinstance(requires.get(key), list) and any(isinstance(item, Mapping) for item in requires.get(key, ())):
+            continue
         _strings(requires.get(key), f"invalid_{key}", f"suite.requires.{key}")
+    env = _env_requirements(requires.get("env"), "suite.requires.env")
+
+    capabilities = _capability_support(data.get("capabilities"), "suite.capabilities", ROLE_CAPABILITIES[actor or ("researcher" if role == "machine" else role)])
+    payloads = _payloads(data.get("payloads"), "suite.payloads")
+    export = _export_rules(data.get("export"), "suite.export")
 
     skills: list[SkillRef] = []
     for index, item in enumerate(_refs(data.get("skills"), "suite.skills", allow_empty=True)):
         path_label = f"suite.skills[{index}]"
         _closed(item, frozenset({"name", "path"}), path_label)
         skills.append(
-            SkillRef(_required_text(item, "name", path_label), _required_text(item, "path", path_label))
+            SkillRef(_required_text(item, "name", path_label), _relative_path(item.get("path"), f"{path_label}.path"))
         )
 
     mcp: list[MCPRef] = []
@@ -247,7 +419,7 @@ def load_manifest(path: Path | str) -> SuiteManifest:
         mcp.append(
             MCPRef(
                 _required_text(item, "name", path_label),
-                _required_text(item, "card", path_label),
+                _relative_path(item.get("card"), f"{path_label}.card"),
                 capabilities,
             )
         )
@@ -277,6 +449,7 @@ def load_manifest(path: Path | str) -> SuiteManifest:
     check = _strings(data.get("check"), "invalid_check", "suite.check")
 
     return SuiteManifest(
+        schema_version=schema_version,
         suite=_required_text(data, "suite", "suite"),
         role=role,
         title=_required_text(data, "title", "suite"),
@@ -286,6 +459,10 @@ def load_manifest(path: Path | str) -> SuiteManifest:
         actor=actor,
         boundary=boundary,
         requires=requires,
+        env=env,
+        capabilities=capabilities,
+        payloads=payloads,
+        export=export,
         skills=tuple(skills),
         mcp=tuple(mcp),
         hooks=tuple(hooks),

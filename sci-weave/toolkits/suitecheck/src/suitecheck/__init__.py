@@ -16,6 +16,7 @@ from .manifest import (
     ManifestError,
 )
 from .validate import Finding, Severity, validate_suite, find_suites
+from .project_layout import ProjectLayout, ProjectRootRequired, initialize_project
 
 __all__ = [
     "MANIFEST_NAME",
@@ -28,4 +29,7 @@ __all__ = [
     "Severity",
     "validate_suite",
     "find_suites",
+    "ProjectLayout",
+    "ProjectRootRequired",
+    "initialize_project",
 ]
