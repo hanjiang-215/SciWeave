@@ -11,6 +11,8 @@ from pathlib import Path
 from typing import Any
 
 from gateway.app import create_app, make_handler
+from gateway.runtime import RuntimeOutcome
+from task_agent_worker.store import ExecutionStore, utc_now
 
 
 class FakeCandidateQueue:
@@ -255,3 +257,69 @@ class PendingDispositionTests(unittest.TestCase):
 
         self.assertEqual(self.app.list_pending("node-1")[0]["execution_id"], "exec-1")
         self.assertEqual(self.app.list_pending("node-2"), [])
+
+class CancelDoesNotGetOverwrittenTests(unittest.TestCase):
+    """ai4-7oxu: a cancel that lands mid-run must survive the worker's final write."""
+
+    def setUp(self) -> None:
+        self.temp = tempfile.TemporaryDirectory()
+        self.db = str(Path(self.temp.name) / "centre.sqlite3")
+        self.store = ExecutionStore(self.db)
+        self.store.initialize()
+        now = utc_now()
+        with self.store.transaction() as connection:
+            connection.execute("INSERT INTO task_sessions VALUES ('node-1','sess-1',?,?)", (now, now))
+            connection.execute("INSERT INTO callers VALUES ('owner-1',?)", (now,))
+            connection.execute(
+                "INSERT INTO owner_commands VALUES ('cmd-1','node-1','owner-1','idem-1','do it',?)",
+                (now,),
+            )
+            connection.execute(
+                """INSERT INTO execution_records
+                   (execution_id, command_id, task_node_id, session_id, status, created_at, updated_at)
+                   VALUES ('exec-1','cmd-1','node-1','sess-1','queued',?,?)""",
+                (now, now),
+            )
+
+    def tearDown(self) -> None:
+        self.store.close()
+        self.temp.cleanup()
+
+    def test_cancel_during_run_is_not_overwritten_by_completed(self) -> None:
+        from gateway.app import run_worker_process
+
+        db = self.db
+
+        class CancellingRuntime:
+            """Simulates cancel_execution landing while run() is in flight."""
+
+            def run(self, request):
+                other = ExecutionStore(db)
+                try:
+                    with other.transaction() as connection:
+                        connection.execute(
+                            "UPDATE execution_records SET status='cancelled' WHERE execution_id='exec-1'"
+                        )
+                finally:
+                    other.close()
+                return RuntimeOutcome("completed", result_summary="finished anyway")
+
+            def resume(self, request):
+                return self.run(request)
+
+            def cancel(self, execution_id):
+                return RuntimeOutcome("cancelled")
+
+        run_worker_process(db, "exec-1", CancellingRuntime())
+
+        with self.store.transaction() as connection:
+            row = connection.execute(
+                "SELECT status, result_summary FROM execution_records WHERE execution_id='exec-1'"
+            ).fetchone()
+            lease = connection.execute(
+                "SELECT COUNT(*) FROM worker_leases WHERE execution_id='exec-1'"
+            ).fetchone()[0]
+        # The cancel wins: no completed/failed overwrite, and the lease is released.
+        self.assertEqual(row["status"], "cancelled")
+        self.assertIsNone(row["result_summary"])
+        self.assertEqual(lease, 0)

@@ -97,16 +97,46 @@ def run_worker_process(database: str, execution_id: str, runtime: RuntimeAdapter
             ).fetchone()
             if execution is None:
                 return
-            connection.execute(
+            updated = connection.execute(
                 """UPDATE execution_records SET status = ?, result_summary = ?, error_summary = ?,
-                   pending_question = ?, finished_at = ?, updated_at = ? WHERE execution_id = ?""",
+                   pending_question = ?, finished_at = ?, updated_at = ?
+                   WHERE execution_id = ? AND status = 'running'""",
                 (outcome.status, outcome.result_summary, outcome.error_summary,
                  outcome.result_summary if outcome.status == "waiting" else None,
                  finished_at, finished_at, execution_id),
             )
             connection.execute("DELETE FROM worker_leases WHERE execution_id = ?", (execution_id,))
-            _audit(connection, event_type, execution["task_node_id"], execution["command_id"], execution_id, finished_at)
-            _audit(connection, "worker_lease_released", execution["task_node_id"], execution["command_id"], execution_id, finished_at)
+            if updated.rowcount == 0:
+                # The record left 'running' while the Worker was busy: a cancel
+                # (cancel_execution writes 'cancelled') or another terminal write
+                # landed first. Keep that state instead of overwriting a terminal
+                # outcome with completed/failed (ai4-7oxu). Still release the lease
+                # and keep draining the queue so the chain does not stall.
+                _audit(
+                    connection,
+                    "worker_lease_released",
+                    execution["task_node_id"],
+                    execution["command_id"],
+                    execution_id,
+                    finished_at,
+                )
+            else:
+                _audit(
+                    connection,
+                    event_type,
+                    execution["task_node_id"],
+                    execution["command_id"],
+                    execution_id,
+                    finished_at,
+                )
+                _audit(
+                    connection,
+                    "worker_lease_released",
+                    execution["task_node_id"],
+                    execution["command_id"],
+                    execution_id,
+                    finished_at,
+                )
             next_execution = connection.execute(
                 """SELECT execution_id FROM execution_records
                    WHERE task_node_id = ? AND status = 'queued'
