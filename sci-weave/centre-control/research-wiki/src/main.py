@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
 import sys
 from dataclasses import asdict
@@ -14,6 +15,31 @@ from llm_wiki.governance_events import create_governance_publisher
 from llm_wiki.resource_review import ResourceReviewService, SqliteResourceVersionLocationSource
 from llm_wiki.sqlite_store import SqliteStore
 from llm_wiki.terminus_store import TerminusDBWikiCandidateStore
+
+logger = logging.getLogger("llm_wiki")
+
+# B12: sentinel so an empty store (no content anywhere) initializes a default
+# formal revision, while a store whose pointers live under a different domain
+# than the configured one is a mismatch we surface instead of silently seeding.
+def _warn_if_domain_mismatch(sqlite_store: SqliteStore, configured_domain: str) -> bool:
+    """Return True when the store has content under other domains only.
+
+    Signals a config/data domain mismatch (B12): the dashboard queries
+    ``configured_domain`` and would report ``no_current_pointer`` even though
+    formal revisions exist under a different domain id.
+    """
+    known = sqlite_store.list_known_domains()
+    others = [domain for domain in known if domain != configured_domain]
+    if known and configured_domain not in known and others:
+        logger.warning(
+            "wiki domain mismatch: configured SCIWEAVE_WIKI_DOMAIN_ID=%r has no current "
+            "formal pointer, but the store has formal revisions under %s; the dashboard "
+            "will report no_current_pointer. Set SCIWEAVE_WIKI_DOMAIN_ID to the data domain.",
+            configured_domain,
+            others,
+        )
+        return True
+    return False
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -35,18 +61,24 @@ def main(argv: list[str] | None = None) -> int:
         password=config.terminusdb_password,
     )
     if sqlite_store.get_current_formal_revision_id(config.domain_id) is None:
-        domain_key = hashlib.sha256(config.domain_id.encode("utf-8")).hexdigest()
-        initial = terminus_store.ensure_default_formal_snapshot(config.domain_id)
-        if initial.status != "confirmed":
-            raise RuntimeError(f"wiki default formal snapshot initialization failed: {initial.reason_code}")
-        sqlite_store.ensure_initial_formal_revision(
-            formal_revision_id="wiki-default-" + domain_key,
-            result_id="wiki-default-result-" + domain_key,
-            wiki_domain_id=config.domain_id,
-            terminus_store_id=initial.store_id,
-            formal_branch_id=initial.branch_id,
-            formal_commit_hash=initial.commit_hash,
-        )
+        if _warn_if_domain_mismatch(sqlite_store, config.domain_id):
+            # Content exists under another domain: do not seed a fresh default
+            # for the wrongly-configured domain (that would hide the mismatch
+            # and leave the real data unreachable from the dashboard).
+            pass
+        else:
+            domain_key = hashlib.sha256(config.domain_id.encode("utf-8")).hexdigest()
+            initial = terminus_store.ensure_default_formal_snapshot(config.domain_id)
+            if initial.status != "confirmed":
+                raise RuntimeError(f"wiki default formal snapshot initialization failed: {initial.reason_code}")
+            sqlite_store.ensure_initial_formal_revision(
+                formal_revision_id="wiki-default-" + domain_key,
+                result_id="wiki-default-result-" + domain_key,
+                wiki_domain_id=config.domain_id,
+                terminus_store_id=initial.store_id,
+                formal_branch_id=initial.branch_id,
+                formal_commit_hash=initial.commit_hash,
+            )
     service = ResourceReviewService(
         sqlite_store=sqlite_store,
         terminus_store=terminus_store,

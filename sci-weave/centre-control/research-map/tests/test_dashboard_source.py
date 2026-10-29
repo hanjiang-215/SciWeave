@@ -61,3 +61,47 @@ class MappingDashboardSourceTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ExecutionStatusResolverTests(unittest.TestCase):
+    """B7: task status is derived from execution facts when the node has none."""
+
+    def _make_db(self, rows):
+        import sqlite3, tempfile
+        path = tempfile.mktemp(suffix=".sqlite3")
+        conn = sqlite3.connect(path)
+        conn.execute(
+            "CREATE TABLE execution_records (task_node_id TEXT, business_key TEXT, mapping_domain_id TEXT, status TEXT)"
+        )
+        conn.executemany("INSERT INTO execution_records VALUES (?,?,?,?)", rows)
+        conn.commit()
+        conn.close()
+        return path
+
+    def test_status_derived_from_execution_fact(self) -> None:
+        from research_mapping.dashboard_source import ExecutionStatusResolver
+        path = self._make_db([("a", "a:a-v1:rev-1", "mapping-1", "completed")])
+        resolver = ExecutionStatusResolver(path)
+        result = SimpleNamespace(
+            status="available",
+            mapping_domain_id="mapping-1",
+            formal_revision_id="formal-7",
+            documents=(
+                {"@id": "TaskNode/a-v1", "@type": "TaskNode", "logical_id": "a", "version_id": "a-v1", "title": "Prep"},
+            ),
+        )
+        payload = build_mapping_fragment(result, observed_at="2026-10-29T00:00:00Z", execution_status_resolver=resolver)
+        self.assertEqual(payload["tasks"][0]["status"], "succeeded")
+        self.assertEqual(payload["projects"][0]["completed"], 1)
+
+    def test_without_resolver_stays_unknown(self) -> None:
+        result = SimpleNamespace(
+            status="available",
+            mapping_domain_id="mapping-1",
+            formal_revision_id="formal-7",
+            documents=(
+                {"@id": "TaskNode/a-v1", "@type": "TaskNode", "logical_id": "a", "version_id": "a-v1", "title": "Prep"},
+            ),
+        )
+        payload = build_mapping_fragment(result, observed_at="2026-10-29T00:00:00Z")
+        self.assertEqual(payload["tasks"][0]["status"], "unknown")

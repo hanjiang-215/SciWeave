@@ -691,3 +691,50 @@ def test_audit_storage_failure_makes_both_health_checks_unavailable(registry_mcp
     failed = call_tool(registry_mcp, "centre", "health")
     assert error_code(failed) == "registry_unavailable"
     assert formal_map_tasks(registry_mcp) == ["task:keep"]
+
+
+def test_register_principal_accepts_service_role(registry_mcp):
+    # B10: a service principal can be registered directly, matching the
+    # service:xxx principal ids register_workflow_agent already accepts.
+    result = call_tool(
+        registry_mcp,
+        "owner",
+        "register_principal",
+        {"principal_id": "service:bridge", "role": "service", "idempotency_key": "svc-1"},
+    )
+    assert "error" not in body(result)
+    assert body(result)["principal_id"] == "service:bridge"
+    assert body(result)["status"] == "active"
+
+
+def test_register_workflow_agent_endpoint_requires_principal(registry_mcp):
+    # B11: for kind=endpoint a missing principal_id must fail principal_required,
+    # while the schema stays optional so kind=centre (empty) still works.
+    missing = call_tool(
+        registry_mcp,
+        "owner",
+        "register_workflow_agent",
+        {
+            "agent_id": "agent:no-principal",
+            "workflow_id": "wf:x",
+            "kind": "endpoint",
+            "workflow_kind": "review",
+            "idempotency_key": "endpoint-no-principal",
+        },
+    )
+    assert error_code(missing) == "principal_required"
+
+    centre = call_tool(
+        registry_mcp,
+        "owner",
+        "register_workflow_agent",
+        {
+            "agent_id": "agent:centre-ok",
+            "workflow_id": "wf:centre",
+            "kind": "centre",
+            "workflow_kind": "review",
+            "idempotency_key": "centre-ok",
+        },
+    )
+    assert "error" not in body(centre)
+    assert body(centre)["agent_id"] == "agent:centre-ok"

@@ -1,0 +1,2 @@
+module = "governance"
+summary = "coordinator Kafka 消费组缺环境前缀，多栈并存事件被负载均衡"

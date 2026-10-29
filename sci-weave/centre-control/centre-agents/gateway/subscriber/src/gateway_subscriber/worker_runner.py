@@ -15,11 +15,14 @@ with error summary ``draft_submission_failed``.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 from task_agent_worker.store import ExecutionStore, utc_now
 
 from .service import SubscriberService
+
+if TYPE_CHECKING:
+    from .completion_publisher import CompletionPublisher
 
 
 @dataclass(frozen=True)
@@ -61,11 +64,13 @@ class SubscriberWorkerRunner:
         service: SubscriberService,
         runtime: RuntimeLike,
         draft_writer: DraftWriter | None = None,
+        completion_publisher: "CompletionPublisher | None" = None,
     ) -> None:
         self.store = store
         self.service = service
         self.runtime = runtime
         self.draft_writer = draft_writer
+        self.completion_publisher = completion_publisher
 
     def run_once(self, task_node_id: str) -> dict[str, Any] | None:
         """Claim and execute the next queued record of one target.
@@ -90,7 +95,7 @@ class SubscriberWorkerRunner:
                 return None
             queued = connection.execute(
                 """SELECT execution_id, task_node_id, session_id, trigger, trigger_ref,
-                          business_key, resume_of, revision_of
+                          business_key, resume_of, revision_of, mapping_domain_id
                    FROM execution_records
                    WHERE task_node_id = ? AND status = 'queued'
                    ORDER BY created_at, rowid LIMIT 1""",
@@ -196,7 +201,7 @@ class SubscriberWorkerRunner:
                    VALUES (?, ?, ?, '{}', ?)""",
                 (event, claimed["task_node_id"], claimed["execution_id"], now),
             )
-        return {
+        result = {
             **claimed,
             "status": status,
             "result_summary": result_summary,
@@ -204,6 +209,13 @@ class SubscriberWorkerRunner:
             "draft_id": draft_id,
             "finished_at": now,
         }
+        # B6: a successful completion must release the downstream nodes. Publish
+        # after the terminal state is durably committed (outside the transaction
+        # above) so a subscriber crash between commit and publish only drops a
+        # best-effort event, never the execution state itself.
+        if status == "completed" and self.completion_publisher is not None:
+            self.completion_publisher.publish(execution=result)
+        return result
 
 
 class _Failed:

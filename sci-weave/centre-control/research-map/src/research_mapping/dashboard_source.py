@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 import json
 import os
+import sqlite3
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, Callable, Mapping
@@ -11,8 +12,96 @@ from .formal_query import FormalQueryService
 
 KNOWN_TASK_STATUSES = {"queued", "running", "waiting", "succeeded", "revision_required", "cancelled", "failed", "result_unknown", "unknown"}
 
+# Mapping from the execution store's terminal statuses to dashboard task statuses.
+_EXECUTION_STATUS_MAP = {
+    "completed": "succeeded",
+    "running": "running",
+    "queued": "queued",
+    "waiting": "waiting",
+    "failed": "failed",
+    "cancelled": "cancelled",
+    "needs_revision": "revision_required",
+    "rejected": "failed",
+    "human_takeover": "waiting",
+    "result_unknown": "result_unknown",
+}
 
-def build_mapping_fragment(result: Any, *, observed_at: str | None = None) -> dict[str, object]:
+
+class ExecutionStatusResolver:
+    """Read-only projection of execution facts onto mapping task statuses (B7).
+
+    The mapping dashboard's only status source used to be the task-node
+    document's own ``execution_status``/``task_status``/``status`` field, which
+    nothing ever writes, so every task showed ``unknown`` even after execution
+    finished. This resolver derives a task's status from the gateway
+    ``execution_records`` table (the same source the queue dashboard reads),
+    keyed by ``(mapping_domain_id, task_node_version_ref)`` parsed from the
+    execution ``business_key``. It only *reads*; the formal mapping stays
+    immutable.
+    """
+
+    def __init__(self, sqlite_path: str) -> None:
+        self.sqlite_path = sqlite_path
+        self._cache: dict[tuple[str, str], str] | None = None
+
+    def _load(self) -> dict[tuple[str, str], str]:
+        # Build once per fragment read; the table is small and the dashboard is
+        # polled, so a per-request snapshot keeps it simple and consistent.
+        result: dict[tuple[str, str], str] = {}
+        try:
+            connection = sqlite3.connect(f"file:{self.sqlite_path}?mode=ro", uri=True)
+        except sqlite3.Error:
+            return result
+        try:
+            connection.row_factory = sqlite3.Row
+            rows = connection.execute(
+                """SELECT task_node_id, business_key, mapping_domain_id, status
+                   FROM execution_records"""
+            ).fetchall()
+        except sqlite3.Error:
+            return result
+        finally:
+            connection.close()
+        for row in rows:
+            version_ref = _version_ref_from_business_key(row["business_key"])
+            mapped = _EXECUTION_STATUS_MAP.get(str(row["status"]))
+            if mapped is None or not version_ref:
+                continue
+            for key in _candidate_keys(row["mapping_domain_id"], row["task_node_id"], version_ref):
+                # Later rows (newer executions) win, matching list ordering intent.
+                result[key] = mapped
+        return result
+
+    def lookup(self, *, mapping_domain_id: str | None, task_node_id: str, version_ref: str) -> str | None:
+        if self._cache is None:
+            self._cache = self._load()
+        for key in _candidate_keys(mapping_domain_id, task_node_id, version_ref):
+            if key in self._cache:
+                return self._cache[key]
+        return None
+
+
+def _version_ref_from_business_key(business_key: object) -> str:
+    text = _text(business_key)
+    if not text:
+        return ""
+    parts = text.split(":", 3)
+    return parts[1] if len(parts) > 1 else ""
+
+
+def _candidate_keys(mapping_domain_id: object, task_node_id: object, version_ref: object) -> list[tuple[str, str]]:
+    node = str(task_node_id or "")
+    version = str(version_ref or "")
+    domain = str(mapping_domain_id or "")
+    return [(domain, f"{node}:{version}"), ("", f"{node}:{version}")]
+
+
+def build_mapping_fragment(
+    result: Any,
+    *,
+    observed_at: str | None = None,
+    execution_status_resolver: "ExecutionStatusResolver | None" = None,
+) -> dict[str, object]:
     observed_at = observed_at or _utc_now()
     if getattr(result, "status", None) != "available":
         return {
@@ -34,7 +123,15 @@ def build_mapping_fragment(result: Any, *, observed_at: str | None = None) -> di
         if source and target and target in prerequisites and source in node_ids:
             prerequisites[target].append(source)
 
-    tasks = [_task_projection(node, prerequisites.get(_document_id(node), [])) for node in nodes]
+    tasks = [
+        _task_projection(
+            node,
+            prerequisites.get(_document_id(node), []),
+            execution_status_resolver=execution_status_resolver,
+            mapping_domain_id=str(getattr(result, "mapping_domain_id", "mapping")) or "mapping",
+        )
+        for node in nodes
+    ]
     completed = sum(task["status"] == "succeeded" for task in tasks)
     project_id = str(getattr(result, "mapping_domain_id", "mapping"))
     revision_id = getattr(result, "formal_revision_id", None)
@@ -60,9 +157,19 @@ def build_mapping_fragment(result: Any, *, observed_at: str | None = None) -> di
     }
 
 
-def _task_projection(document: Mapping[str, Any], prerequisite_ids: list[str]) -> dict[str, object]:
+def _task_projection(
+    document: Mapping[str, Any],
+    prerequisite_ids: list[str],
+    *,
+    execution_status_resolver: "ExecutionStatusResolver | None" = None,
+    mapping_domain_id: str | None = None,
+) -> dict[str, object]:
     task_id = _document_id(document)
-    status = _task_status(document)
+    status = _task_status(
+        document,
+        execution_status_resolver=execution_status_resolver,
+        mapping_domain_id=mapping_domain_id,
+    )
     updated_at = _text(document.get("updated_at") or document.get("published_at") or document.get("created_at")) or _utc_now()
     return {
         "id": task_id,
@@ -77,12 +184,28 @@ def _task_projection(document: Mapping[str, Any], prerequisite_ids: list[str]) -
     }
 
 
-def _task_status(document: Mapping[str, Any]) -> str:
+def _task_status(
+    document: Mapping[str, Any],
+    *,
+    execution_status_resolver: "ExecutionStatusResolver | None" = None,
+    mapping_domain_id: str | None = None,
+) -> str:
     raw = _text(document.get("execution_status") or document.get("task_status") or document.get("status"))
     if raw in KNOWN_TASK_STATUSES:
         return raw
     if raw in {"complete", "completed", "formal"}:
         return "succeeded"
+    # B7 fallback: the node document carries no status (nothing writes it), so
+    # derive it from the execution fact when a resolver is configured.
+    if execution_status_resolver is not None:
+        version_ref = _text(document.get("version_id") or document.get("logical_id")) or ""
+        derived = execution_status_resolver.lookup(
+            mapping_domain_id=mapping_domain_id,
+            task_node_id=_text(document.get("logical_id")) or _document_id(document),
+            version_ref=version_ref,
+        )
+        if derived is not None:
+            return derived
     return "unknown"
 
 
@@ -127,7 +250,8 @@ class _MappingDashboardHandler(BaseHTTPRequestHandler):
             return
         try:
             result = self.server.query_current()  # type: ignore[attr-defined]
-            self._send(HTTPStatus.OK, build_mapping_fragment(result))
+            resolver: ExecutionStatusResolver | None = getattr(self.server, "execution_status_resolver", None)
+            self._send(HTTPStatus.OK, build_mapping_fragment(result, execution_status_resolver=resolver))
         except Exception:
             self._send(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "mapping_query_unavailable"})
 
@@ -163,10 +287,11 @@ class MappingDashboardServer(ThreadingHTTPServer):
     allow_reuse_address = True
 
 
-def create_mapping_dashboard_server(query_current: Callable[[], Any], *, host: str, port: int, token: str | None = None) -> MappingDashboardServer:
+def create_mapping_dashboard_server(query_current: Callable[[], Any], *, host: str, port: int, token: str | None = None, execution_status_resolver: ExecutionStatusResolver | None = None) -> MappingDashboardServer:
     server = MappingDashboardServer((host, port), _MappingDashboardHandler)
     server.query_current = query_current  # type: ignore[attr-defined]
     server.dashboard_token = token  # type: ignore[attr-defined]
+    server.execution_status_resolver = execution_status_resolver  # type: ignore[attr-defined]
     return server
 
 
@@ -177,7 +302,18 @@ def run_mapping_dashboard_from_environment(service: FormalQueryService, domain_i
         raise RuntimeError("SCIWEAVE_MAPPING_DASHBOARD_HOST and SCIWEAVE_MAPPING_DASHBOARD_PORT are required")
     port = int(port_text)
     token = os.environ.get("SCIWEAVE_MAPPING_DASHBOARD_TOKEN") or None
-    server = create_mapping_dashboard_server(lambda: service.get_current(domain_id), host=host, port=port, token=token)
+    # B7: opt-in projection of execution facts onto task status. Point this at
+    # the gateway execution SQLite DB (SCIWEAVE_GATEWAY_DB) so finished tasks
+    # read as succeeded instead of a permanent unknown.
+    execution_db = os.environ.get("SCIWEAVE_MAPPING_EXECUTION_DB", "").strip()
+    resolver = ExecutionStatusResolver(execution_db) if execution_db else None
+    server = create_mapping_dashboard_server(
+        lambda: service.get_current(domain_id),
+        host=host,
+        port=port,
+        token=token,
+        execution_status_resolver=resolver,
+    )
     try:
         server.serve_forever()
     except KeyboardInterrupt:
