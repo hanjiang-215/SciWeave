@@ -18,6 +18,7 @@ class DashboardConfig:
     host: str
     port: int
     timeout_seconds: float
+    snapshot_deadline_seconds: float
     max_payload_bytes: int
     cors_origin: str | None
     source_specs: tuple[SourceSpec, ...]
@@ -34,6 +35,7 @@ class DashboardConfig:
             raise ConfigurationError("SCIWEAVE_DASHBOARD_HOST is required")
         port = _integer(values.get("SCIWEAVE_DASHBOARD_PORT"), "SCIWEAVE_DASHBOARD_PORT", minimum=0, maximum=65535)
         timeout = _decimal(values.get("SCIWEAVE_DASHBOARD_SOURCE_TIMEOUT_SECONDS", "5"), "SCIWEAVE_DASHBOARD_SOURCE_TIMEOUT_SECONDS", minimum=0.1)
+        deadline = _decimal(values.get("SCIWEAVE_DASHBOARD_SNAPSHOT_DEADLINE_SECONDS", "10"), "SCIWEAVE_DASHBOARD_SNAPSHOT_DEADLINE_SECONDS", minimum=0.1)
         max_payload_bytes = _integer(values.get("SCIWEAVE_DASHBOARD_SOURCE_MAX_BYTES", "1048576"), "SCIWEAVE_DASHBOARD_SOURCE_MAX_BYTES", minimum=1024, maximum=50_000_000)
         cors_origin = _origin(values.get("SCIWEAVE_DASHBOARD_CORS_ORIGIN", "").strip() or None)
         source_specs = (
@@ -42,7 +44,7 @@ class DashboardConfig:
             SourceSpec("gateway", "Gateway", _url(values.get("SCIWEAVE_DASHBOARD_SOURCE_GATEWAY_URL"), "SCIWEAVE_DASHBOARD_SOURCE_GATEWAY_URL"), ("executions", "services", "events"), values.get("SCIWEAVE_DASHBOARD_SOURCE_GATEWAY_TOKEN") or None),
             SourceSpec("queue", "消息监听", _url(values.get("SCIWEAVE_DASHBOARD_SOURCE_QUEUE_URL"), "SCIWEAVE_DASHBOARD_SOURCE_QUEUE_URL"), ("services", "events"), values.get("SCIWEAVE_DASHBOARD_SOURCE_QUEUE_TOKEN") or None),
         )
-        return cls(host=host, port=port, timeout_seconds=timeout, max_payload_bytes=max_payload_bytes, cors_origin=cors_origin, source_specs=source_specs)
+        return cls(host=host, port=port, timeout_seconds=timeout, snapshot_deadline_seconds=deadline, max_payload_bytes=max_payload_bytes, cors_origin=cors_origin, source_specs=source_specs)
 
 
 def _integer(value: str | None, name: str, *, minimum: int, maximum: int) -> int:
