@@ -137,8 +137,19 @@ class CentreConfig:
 
 
 def centre_root() -> Path:
-    """``centre-agents/``, i.e. ``parents[3]`` of ``worker/src/<package>/assembly.py``."""
-    return Path(__file__).resolve().parents[3]
+    """``centre-agents/``, located by a marker rather than a fixed depth.
+
+    This used to be hard-coded as ``parents[3]`` of
+    ``worker/src/<package>/assembly.py``, which broke the moment the source
+    moved. Walk up from this file to the first directory that actually holds the
+    shipped ``definitions/`` tree; if none does, fall back to the old depth so the
+    caller still gets a path and its own existence check reports what is missing.
+    """
+    here = Path(__file__).resolve()
+    for candidate in here.parents:
+        if (candidate / "definitions").is_dir():
+            return candidate
+    return here.parents[3]
 
 
 def _root(variable: str, *, environ: Mapping[str, str], default: Path) -> Path:
