@@ -359,3 +359,31 @@ def test_unknown_event_types_are_ignored():
 
     assert consumer.handle({"event_type": "candidate_created", "mapping_domain_id": "iris"}) is None
     assert service.formal_revisions == [] and service.completions == []
+
+def test_kafka_publisher_refuses_to_drop_a_handoff_silently(caplog) -> None:
+    """ai4-2hv6: no topic must fail loudly; the caller then retries the dispatch."""
+    from coordinator.ports import HandoffReadyMessage
+
+    message = HandoffReadyMessage(
+        pending_handoff_id="p1",
+        task_node_id="node-1",
+        target_node_version_ref="node-v1",
+        mapping_domain_id="iris",
+        target_agent_id="",
+        trigger_revision_id="rev-1",
+    )
+    publisher = KafkaHandoffPublisher("127.0.0.1:9092")
+    try:
+        with pytest.raises(RuntimeError):
+            publisher.publish(message)
+    finally:
+        publisher.close()
+
+    # An explicit opt-in still warns, so a dropped handoff leaves a trace.
+    lenient = KafkaHandoffPublisher("127.0.0.1:9092", allow_unknown_agent_topic=True)
+    try:
+        with caplog.at_level("WARNING"):
+            lenient.publish(message)
+    finally:
+        lenient.close()
+    assert "no task-handoff topic" in caplog.text
