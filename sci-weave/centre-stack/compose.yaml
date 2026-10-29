@@ -128,6 +128,8 @@ services:
       SCIWEAVE_REGISTRY_TOKENS_JSON: >-
         {"${CENTRE_TOKEN_REGISTRY_OWNER:?set CENTRE_TOKEN_REGISTRY_OWNER in .env}":{"caller_id":"person:owner","caller_type":"project_owner"},
         "${CENTRE_TOKEN_REGISTRY_RESEARCHER:?set CENTRE_TOKEN_REGISTRY_RESEARCHER in .env}":{"caller_id":"person:researcher","caller_type":"researcher","principal_id":"person:researcher"},
+        "${CENTRE_TOKEN_REGISTRY_ALICE:?set CENTRE_TOKEN_REGISTRY_ALICE in .env}":{"caller_id":"person:alice","caller_type":"researcher","principal_id":"person:alice"},
+        "${CENTRE_TOKEN_REGISTRY_BOB:?set CENTRE_TOKEN_REGISTRY_BOB in .env}":{"caller_id":"person:bob","caller_type":"researcher","principal_id":"person:bob"},
         "${CENTRE_TOKEN_REGISTRY_CENTRE:?set CENTRE_TOKEN_REGISTRY_CENTRE in .env}":{"caller_id":"service:centre","caller_type":"service","service_role":"centre"},
         "${CENTRE_TOKEN_REGISTRY_EMAIL:?set CENTRE_TOKEN_REGISTRY_EMAIL in .env}":{"caller_id":"service:email","caller_type":"service","service_role":"email"}}
 
