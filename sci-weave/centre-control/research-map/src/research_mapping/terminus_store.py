@@ -40,9 +40,18 @@ def _normalize_set_fields(document):
     if not isinstance(document, dict):
         return document
     normalized = dict(document)
-    for key, value in normalized.items():
+    for key, value in list(normalized.items()):
         if isinstance(value, list) and all(isinstance(item, str) for item in value):
             normalized[key] = sorted(value)
+        elif value is None:
+            # TerminusDB omits an empty ``@type: Set`` field entirely from the
+            # read-back, so an optional Set submitted as ``[]`` (or omitted) is
+            # returned as ``None`` or absent. Treating ``None`` as the empty
+            # list keeps ``_contains_documents`` from reporting a false
+            # ``store_result_unknown`` for every node that has no executors or
+            # every edge without optional fields. A non-empty value never
+            # collapses to empty here, so real differences still show.
+            normalized[key] = []
     return normalized
 
 
@@ -114,12 +123,38 @@ _DEPENDENCY_EDGE_SCHEMA = {
 _CANDIDATE_SCHEMA_CLASSES = [_TASK_NODE_SCHEMA, _DEPENDENCY_EDGE_SCHEMA]
 
 
+def _documents_equal(stored, submitted):
+    """Compare one stored document against the submitted one.
+
+    TerminusDB omits an empty ``@type: Set`` field from the read-back entirely,
+    so a submitted ``executor_refs: []`` (or any optional Set given as ``[]``)
+    comes back as a missing key. Treating a missing key that the other side
+    holds as an empty list as equal avoids a false ``store_result_unknown`` on
+    every document that leaves an optional Set empty. Normalising away such
+    empty Sets on both sides keeps the comparison order- and presence-robust.
+    """
+    if not isinstance(stored, dict) or not isinstance(submitted, dict):
+        return False
+    a = _normalize_set_fields(stored)
+    b = _normalize_set_fields(submitted)
+    for key in set(a) | set(b):
+        av = a.get(key)
+        bv = b.get(key)
+        # A field present as an empty list on either side and missing (or None)
+        # on the other is the same empty Set after TerminusDB's round-trip.
+        if av in (None, []) and bv in (None, []):
+            continue
+        if av != bv:
+            return False
+    return True
+
+
 def _contains_documents(actual, expected):
     """Confirm every submitted document exists unchanged in the exact commit."""
     by_id = {document.get("@id"): document for document in actual if isinstance(document, dict)}
     return all(
         isinstance(document.get("@id"), str)
-        and _normalize_set_fields(by_id.get(document["@id"])) == _normalize_set_fields(document)
+        and _documents_equal(by_id.get(document["@id"]), document)
         for document in expected
     )
 
