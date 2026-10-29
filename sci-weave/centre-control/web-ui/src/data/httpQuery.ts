@@ -81,6 +81,7 @@ function isProject(value: unknown): boolean {
 }
 function isTask(value: unknown): boolean {
   return isRecord(value) && isString(value.id) && isString(value.projectId) && isString(value.name)
+    && (value.logicalId === undefined || value.logicalId === null || isString(value.logicalId))
     && ['queued', 'running', 'waiting', 'succeeded', 'revision_required', 'cancelled', 'failed', 'result_unknown', 'unknown'].includes(String(value.status))
     && isString(value.owner) && isStringArray(value.prerequisiteIds) && Number.isFinite(value.attentionRank)
     && isString(value.updatedAt)

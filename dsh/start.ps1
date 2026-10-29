@@ -157,6 +157,42 @@ function New-RoleEnv([hashtable]$overrides) {
 }
 
 # 启动一个角色：用其子项目 venv 的 python，记录 pid。
+function Test-PortInUse([int]$Port) {
+    # ai4-18cl: a role that starts while its port is still held by a lingering
+    # previous process exits on bind. Probe the port first and wait for it to free.
+    try {
+        $client = New-Object System.Net.Sockets.TcpClient
+        $iar = $client.BeginConnect('127.0.0.1', $Port, $null, $null)
+        $connected = $iar.AsyncWaitHandle.WaitOne(300)
+        if ($connected) { $client.EndConnect($iar) }
+        $client.Close()
+        return $connected
+    } catch {
+        return $false
+    }
+}
+
+function Wait-PortFree([int]$Port, [int]$TimeoutSeconds = 30) {
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    while ((Get-Date) -lt $deadline) {
+        if (-not (Test-PortInUse $Port)) { return $true }
+        Start-Sleep -Milliseconds 500
+    }
+    return -not (Test-PortInUse $Port)
+}
+
+function Get-RolePort([hashtable]$EnvMap) {
+    # The listen port is whichever *_PORT / HOST_PORT field the role is configured
+    # with; pick the one the process binds (prefer *MCP_PORT* then any *PORT*).
+    foreach ($k in @($EnvMap.Keys | Where-Object { $_ -match 'MCP_PORT$' })) {
+        $v = 0; if ([int]::TryParse([string]$EnvMap[$k], [ref]$v)) { return $v }
+    }
+    foreach ($k in @($EnvMap.Keys | Where-Object { $_ -match 'PORT$' })) {
+        $v = 0; if ([int]::TryParse([string]$EnvMap[$k], [ref]$v)) { return $v }
+    }
+    return 0
+}
+
 function Start-Role {
     param(
         [string]$Name,
@@ -166,6 +202,15 @@ function Start-Role {
         [hashtable]$EnvMap,
         [string]$EntryPath = 'src/main.py'
     )
+    $port = Get-RolePort $EnvMap
+    if ($port -gt 0) {
+        if (Test-PortInUse $port) {
+            Write-Warn2 ("{0} 的端口 {1} 被占用，等待释放（最多 30s）" -f $Name, $port)
+            if (-not (Wait-PortFree $port 30)) {
+                Write-Warn2 ("{0} 的端口 {1} 30s 内未释放，仍尝试启动（可能 bind 失败）" -f $Name, $port)
+            }
+        }
+    }
     $outLog = Join-Path $logDir "$Name.out.log"
     $errLog = Join-Path $logDir "$Name.err.log"
     # 用 cmd 包装给每个子进程一份干净环境（Start-Process -Environment 需 PS7+，这里显式设置）。

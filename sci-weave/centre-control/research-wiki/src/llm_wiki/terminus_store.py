@@ -295,7 +295,19 @@ class TerminusDBWikiCandidateStore(TerminusDBResourceStore):
         self.store_id = store_id
         self.database = database
         if self._request_opener is None:
-            self._request_opener = self._opener
+            # ``_request`` needs to send arbitrary methods and a request body, so it
+            # must not reuse the 3-argument GET-only ``self._opener`` (which would
+            # raise TypeError for every candidate-submission call). Default to a
+            # request-shaped opener; tests may still inject one of the same shape.
+            self._request_opener = self._urllib_request_opener
+
+    def _urllib_request_opener(self, method, url, headers, body, timeout):
+        request = urllib.request.Request(url, data=body, headers=headers, method=method)
+        try:
+            with urllib.request.urlopen(request, timeout=timeout) as response:
+                return response.status, dict(response.headers), response.read()
+        except urllib.error.HTTPError as error:
+            return error.code, dict(error.headers or {}), error.read()
 
     def ensure_default_formal_snapshot(self, domain_id: str):
         """Create or find the immutable empty formal snapshot for one domain."""
@@ -492,18 +504,11 @@ class TerminusDBWikiCandidateStore(TerminusDBResourceStore):
             headers["Authorization"] = self._authorization
         if body is not None:
             headers["Content-Type"] = "application/json"
-        request = urllib.request.Request(url, data=body, headers=headers, method=method)
-        if self._request_opener is not None:
-            try:
-                status, response_headers, response_body = self._request_opener(method, url, headers, body, self.timeout)
-                return status, response_headers, response_body
-            except (OSError, TimeoutError, urllib.error.URLError):
-                raise
-        try:
-            with urllib.request.urlopen(request, timeout=self.timeout) as response:
-                return response.status, dict(response.headers), response.read()
-        except urllib.error.HTTPError as error:
-            return error.code, dict(error.headers or {}), error.read()
+        # ``_request_opener`` is a 5-argument (method, url, headers, body, timeout)
+        # opener, distinct from the 3-argument GET-only ``self._opener``. Routing
+        # through it lets tests inject a stub while the default builds a real
+        # Request, so arbitrary methods and bodies work.
+        return self._request_opener(method, url, headers, body, self.timeout)
 
     def _candidate_branches(self):
         status, _, body = self._request("GET", self._candidate_database_url() + "?branches=true")
@@ -538,10 +543,66 @@ class TerminusDBWikiCandidateStore(TerminusDBResourceStore):
     def _candidate_log_url(self, branch):
         return f"{self.base_url}/api/log/{quote(self.store_id, safe='')}/{quote(self.database, safe='')}/{quote(self.remote, safe='')}/branch/{quote(branch, safe='')}"
 
+    # --- candidate branch reaping (ai4-4g9s) --------------------------------
+    # Every candidate submission leaves a ``wiki-candidate-*`` branch behind, so a
+    # busy domain accumulates branches without bound. Reaping is deliberately
+    # conservative and explicit: a caller passes the set of branch ids that are
+    # still active (derived from non-terminal submissions) and we only delete the
+    # rest. ``main`` (and any name not matching the candidate prefix) is never
+    # touched, and a domain with an unresolved candidate head is skipped.
+
+    _CANDIDATE_BRANCH_PREFIX = "wiki-candidate-"
+
+    def list_candidate_branches(self) -> list[str] | None:
+        """Return the ``wiki-candidate-*`` branches, or None if the store is unreadable."""
+        branches = self._candidate_branches()
+        if branches is None:
+            return None
+        return sorted(name for name in branches if isinstance(name, str) and name.startswith(self._CANDIDATE_BRANCH_PREFIX))
+
+    def delete_candidate_branch(self, branch: str) -> bool:
+        """Delete one candidate branch. Refuses anything off the candidate namespace."""
+        if not isinstance(branch, str) or not branch.startswith(self._CANDIDATE_BRANCH_PREFIX):
+            raise ValueError("refusing to delete a non-candidate branch")
+        url = (
+            f"{self.base_url}/api/branch/{quote(self.store_id, safe='')}/{quote(self.database, safe='')}"
+            f"/{quote(self.remote, safe='')}/branch/{quote(branch, safe='')}"
+        )
+        status, _, _ = self._request("DELETE", url)
+        return 200 <= status < 300
+
+    def reap_candidate_branches(self, keep: set[str]) -> dict[str, list[str]]:
+        """Delete candidate branches not in ``keep``.
+
+        ``keep`` holds the branch ids that are still active (a branch with a live
+        candidate must never be dropped, or a later formalize would fail with a
+        missing branch). Returns the deleted and failed branch names.
+        """
+        candidates = self.list_candidate_branches()
+        if candidates is None:
+            return {"deleted": [], "failed": [], "skipped": ["store_unreadable"]}
+        deleted: list[str] = []
+        failed: list[str] = []
+        for branch in candidates:
+            if branch in keep:
+                continue
+            if self.delete_candidate_branch(branch):
+                deleted.append(branch)
+            else:
+                failed.append(branch)
+        return {"deleted": deleted, "failed": failed, "skipped": []}
+
+
 
 def _candidate_documents_match(actual, expected):
     for wanted in expected:
         key = "wiki_revision_id" if wanted.get("@type") == "WikiRevision" else "reference_id"
-        if not any(isinstance(doc, dict) and doc.get(key) == wanted.get(key) and doc == wanted for doc in actual):
+        wanted_norm = {k: v for k, v in wanted.items() if k != "@id"}
+        if not any(
+            isinstance(doc, dict)
+            and doc.get(key) == wanted.get(key)
+            and {k: v for k, v in doc.items() if k != "@id"} == wanted_norm
+            for doc in actual
+        ):
             return False
     return True
