@@ -128,6 +128,102 @@ export interface AttentionItem {
   updatedAt: string
 }
 
+export interface GraphNode {
+  task: TaskNode
+  /** Layer index, 0 = leftmost (no prerequisites within the visible set). */
+  layer: number
+  /** Row index within its layer, 0 = topmost. */
+  row: number
+}
+
+export interface GraphEdge {
+  from: string
+  to: string
+}
+
+export interface TaskGraph {
+  nodes: GraphNode[]
+  edges: GraphEdge[]
+  layerCount: number
+  maxRowsInLayer: number
+}
+
+/**
+ * Lay out a task DAG as a left-to-right layered graph (Sugiyama-style layering).
+ *
+ * Each node's layer is ``max(layer of prerequisites) + 1`` so a task always
+ * sits to the right of everything it depends on. Prerequisites that fall
+ * outside the given task set (e.g. filtered out) are ignored rather than
+ * treated as layer 0, so the visible subgraph still reads left-to-right.
+ *
+ * Rows are assigned per layer and ordered to keep predecessors roughly above
+ * their successors, which keeps edges short and crossings down. Ties fall back
+ * to the original input order so the layout is deterministic.
+ */
+export function layoutTaskGraph(tasks: TaskNode[]): TaskGraph {
+  const byId = new Map(tasks.map((task) => [task.id, task]))
+  const layerOf = new Map<string, number>()
+
+  // Resolve layers with an explicit stack to stay safe on cycles in bad data:
+  // a visited node on the current path contributes its best-known layer instead
+  // of recursing forever.
+  const resolveLayer = (id: string): number => {
+    const cached = layerOf.get(id)
+    if (cached !== undefined) return cached
+    const task = byId.get(id)
+    if (!task) return 0
+    layerOf.set(id, 0)
+    let layer = 0
+    for (const prerequisiteId of task.prerequisiteIds) {
+      if (!byId.has(prerequisiteId) || prerequisiteId === id) continue
+      layer = Math.max(layer, resolveLayer(prerequisiteId) + 1)
+    }
+    layerOf.set(id, layer)
+    return layer
+  }
+
+  const buckets: TaskNode[][] = []
+  for (const task of tasks) {
+    const layer = resolveLayer(task.id)
+    ;(buckets[layer] ??= []).push(task)
+  }
+
+  // Order rows using the barycenter of each task's prerequisites' current rows
+  // so successors tend to line up under their parents.
+  const rowOf = new Map<string, number>()
+  const nodes: GraphNode[] = []
+  buckets.forEach((bucket, layer) => {
+    const order = bucket
+      .map((task, index) => {
+        const rows = task.prerequisiteIds
+          .map((id) => rowOf.get(id))
+          .filter((row): row is number => row !== undefined)
+        const barycenter = rows.length ? rows.reduce((sum, row) => sum + row, 0) / rows.length : Number.POSITIVE_INFINITY
+        return { task, index, barycenter }
+      })
+      .sort((left, right) => left.barycenter - right.barycenter || left.index - right.index)
+      .map((entry) => entry.task)
+    order.forEach((task, row) => {
+      rowOf.set(task.id, row)
+      nodes.push({ task, layer, row })
+    })
+  })
+
+  const edges: GraphEdge[] = []
+  for (const task of tasks) {
+    for (const prerequisiteId of task.prerequisiteIds) {
+      if (byId.has(prerequisiteId) && prerequisiteId !== task.id) {
+        edges.push({ from: prerequisiteId, to: task.id })
+      }
+    }
+  }
+
+  const layerCount = buckets.filter((bucket) => bucket !== undefined).length
+  const maxRowsInLayer = buckets.reduce((max, bucket) => Math.max(max, bucket?.length ?? 0), 0)
+
+  return { nodes, edges, layerCount, maxRowsInLayer }
+}
+
 export function filterTasks(tasks: TaskNode[], filter: TaskFilter): TaskNode[] {
   const query = filter.query.trim().toLocaleLowerCase()
   return tasks.filter((task) => {

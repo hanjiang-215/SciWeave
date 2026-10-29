@@ -2,6 +2,7 @@ import {
   attentionItems,
   filterTasks,
   formatInstant,
+  layoutTaskGraph,
   sourceLabel,
   type DashboardSnapshot,
   type TaskNode,
@@ -42,6 +43,42 @@ describe('dashboard domain', () => {
     expect(sourceLabel({ status: 'stale' })).toEqual('数据可能过期')
     expect(sourceLabel({ status: 'unavailable' })).toEqual('数据暂不可用')
     expect(sourceLabel({ status: 'partial' })).toEqual('部分数据')
+  })
+})
+
+describe('layoutTaskGraph', () => {
+  const node = (id: string, prerequisiteIds: string[] = []): TaskNode => ({
+    id, projectId: 'p1', name: id, status: 'queued', owner: 'o',
+    prerequisiteIds, attentionRank: 0, updatedAt: '2026-10-22T09:00:00Z',
+  })
+
+  it('places each task one layer to the right of its deepest prerequisite', () => {
+    const graph = layoutTaskGraph([node('a'), node('b', ['a']), node('c', ['b']), node('d', ['a', 'c'])])
+    const layer = Object.fromEntries(graph.nodes.map((entry) => [entry.task.id, entry.layer]))
+    expect(layer).toEqual({ a: 0, b: 1, c: 2, d: 3 })
+    expect(graph.layerCount).toBe(4)
+    expect(graph.edges).toEqual(expect.arrayContaining([
+      { from: 'a', to: 'b' }, { from: 'b', to: 'c' }, { from: 'a', to: 'd' }, { from: 'c', to: 'd' },
+    ]))
+  })
+
+  it('keeps a fan-out sibling on the same layer as its peers', () => {
+    const graph = layoutTaskGraph([node('root'), node('left', ['root']), node('right', ['root'])])
+    const layer = Object.fromEntries(graph.nodes.map((entry) => [entry.task.id, entry.layer]))
+    expect(layer).toEqual({ root: 0, left: 1, right: 1 })
+    expect(graph.maxRowsInLayer).toBe(2)
+  })
+
+  it('ignores prerequisites outside the visible set instead of pulling them to layer 0', () => {
+    const graph = layoutTaskGraph([node('b', ['a-hidden'])])
+    expect(graph.nodes).toHaveLength(1)
+    expect(graph.nodes[0].layer).toBe(0)
+    expect(graph.edges).toHaveLength(0)
+  })
+
+  it('does not hang on cyclic input', () => {
+    const graph = layoutTaskGraph([node('a', ['b']), node('b', ['a'])])
+    expect(graph.nodes).toHaveLength(2)
   })
 })
 
