@@ -30,7 +30,16 @@ class _WikiManagementHttpHandler(BaseHTTPRequestHandler):
         if self.path != "/health":
             self._send(HTTPStatus.NOT_FOUND, {"error": "not_found"})
             return
-        self._send(HTTPStatus.OK, {"status": "ready", "protocol": "mcp-streamable-http"})
+        payload: dict[str, Any] = {"status": "ready", "protocol": "mcp-streamable-http"}
+        # B12 / ai4-jmiv: surface a config/data domain mismatch on /health, where
+        # an operator looks, instead of only in a startup log line the dashboard
+        # never shows. A mismatch is a degraded, not ready, state for the wiki.
+        health = getattr(self.server, "health", None)  # type: ignore[attr-defined]
+        if callable(health):
+            detail = health()
+            if detail:
+                payload.update(detail)
+        self._send(HTTPStatus.OK, payload)
 
     def do_POST(self) -> None:  # noqa: N802
         if self.path != "/mcp":
@@ -163,19 +172,24 @@ def create_wiki_management_mcp_server(
     host: str,
     port: int,
     tokens: Mapping[str, str],
+    health: Any | None = None,
 ) -> WikiManagementMcpServer:
     server = WikiManagementMcpServer((host, port), _WikiManagementHttpHandler)
     server.service = service  # type: ignore[attr-defined]
     server.tokens = dict(tokens)  # type: ignore[attr-defined]
+    if health is not None:
+        server.health = health  # type: ignore[attr-defined]
     return server
 
 
-def run_wiki_management_server_from_config(config, service: WikiManagementService) -> int:
+def run_wiki_management_server_from_config(config, service: WikiManagementService, *, health: Any | None = None) -> int:
     if config.mcp_host is None or config.mcp_port is None:
         raise ValueError("SCIWEAVE_WIKI_MCP_HOST and SCIWEAVE_WIKI_MCP_PORT are required for the management endpoint")
     if not config.mcp_tokens:
         raise ValueError("SCIWEAVE_WIKI_MCP_TOKENS_JSON is required; an unauthenticated management endpoint is not allowed")
-    server = create_wiki_management_mcp_server(service, host=config.mcp_host, port=config.mcp_port, tokens=config.mcp_tokens)
+    server = create_wiki_management_mcp_server(
+        service, host=config.mcp_host, port=config.mcp_port, tokens=config.mcp_tokens, health=health
+    )
     try:
         server.serve_forever()
     except KeyboardInterrupt:
