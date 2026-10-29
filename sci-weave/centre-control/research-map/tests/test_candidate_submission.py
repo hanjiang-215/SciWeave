@@ -265,3 +265,40 @@ class CandidateSubmissionTestCase(unittest.TestCase):
         self.assertEqual(duplicate_submission.reason_code,"identity_conflict")
         self.assertEqual(duplicate_proposal.reason_code,"identity_conflict")
         self.assertEqual(len(self.terminus.calls),1)
+
+
+class OrphanCandidateCommitTests(unittest.TestCase):
+    """ai4-o1aj: a store write with a vanished base must reconcile, not "reject"."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory(); self.addCleanup(self.tmp.cleanup)
+        self.sqlite = SqliteStore(os.path.join(self.tmp.name, "mapping.db")); self.sqlite.initialize()
+        self.sqlite.add_formal_revision(FormalMappingRevision(formal_revision_id=BASE, mapping_domain_id=DOMAIN,
+            terminus_store_id="store", formal_branch_id="formal", formal_commit_hash="base-commit",
+            base_formal_revision_id=None, source_proposal_id=None, approval_audit_event_id=None,
+            published_by="owner", published_at="2026-10-21T00:00:00Z"))
+        self.sqlite.set_current_formal_revision(DOMAIN, BASE, updated_at="2026-10-21T00:00:00Z")
+        self.terminus = FakeTerminus()
+        self.service = MappingCandidateService(self.sqlite, self.terminus, terminus_database="db")
+
+    def test_store_write_then_missing_base_is_result_unknown(self):
+        real = self.sqlite.get_formal_revision
+        calls = {"n": 0}
+
+        def flaky(base_id):
+            calls["n"] += 1
+            # First read is the pre-write validation; the read after the store
+            # write sees the base gone.
+            if calls["n"] >= 2:
+                return None
+            return real(base_id)
+
+        self.sqlite.get_formal_revision = flaky
+        result = self.service.submit(change_set(), "key-1")
+        self.assertEqual(
+            (result.status, result.reason_code),
+            ("result_unknown", "base_revision_missing_after_store_write"),
+        )
+        # The candidate really was written to TerminusDB, so it cannot be a clean
+        # rejection that implies nothing happened.
+        self.assertEqual(len(self.terminus.calls), 1)
