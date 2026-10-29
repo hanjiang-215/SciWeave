@@ -202,12 +202,26 @@ def create_email_server(
 
     @server.custom_route("/health", methods=["GET"], include_in_schema=False)
     async def http_health(_: Request) -> JSONResponse:
-        payload = {
-            "status": _public_status(conn, audit_box.get("conn"), lock, config.mailbox, sender),
+        status = _public_status(conn, audit_box.get("conn"), lock, config.mailbox, sender)
+        payload: dict[str, Any] = {
+            "status": status,
             "service": "email-service",
             "api_version": config.api_version,
         }
-        if payload["status"] != "ready":
+        # ai4-99h8: distinguish a *deployment* state (no SMTP channel configured)
+        # from a *fault*. When SMTP is intentionally absent the MCP still serves, so
+        # that is not a 5xx failure: answer 200 with an explicit reason. Any other
+        # non-ready status -- including a configured mailbox whose sender failed to
+        # bind, which is an inconsistency -- stays 503 so monitors still catch it.
+        mailbox_missing = _mailbox_state(config.mailbox) != "ready"
+        if status == "not_configured" and mailbox_missing:
+            payload["reason"] = "smtp_not_configured"
+            payload["detail"] = (
+                "no SMTP delivery channel is configured; notification sending is "
+                "disabled but the MCP service is operational"
+            )
+            return JSONResponse(payload)
+        if status != "ready":
             return JSONResponse(payload, status_code=503)
         return JSONResponse(payload)
 

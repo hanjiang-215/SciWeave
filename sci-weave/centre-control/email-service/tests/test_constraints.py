@@ -167,12 +167,14 @@ def test_public_health_is_not_configured_when_mailbox_is_missing(tmp_path: Path,
         probe = httpx.get(mcp["health_url"])
     finally:
         _stop(server, thread)
-    assert probe.status_code == 503
-    assert probe.json() == {
-        "status": "not_configured",
-        "service": "email-service",
-        "api_version": API_VERSION,
-    }
+    # ai4-99h8: an intentionally mail-less deployment is a deployment state, not a
+    # fault: answer 200 with a clear reason instead of 503 so monitors don't flag it.
+    assert probe.status_code == 200
+    payload = probe.json()
+    assert payload["status"] == "not_configured"
+    assert payload["service"] == "email-service"
+    assert payload["api_version"] == API_VERSION
+    assert payload["reason"] == "smtp_not_configured"
     assert SMTP_PASSWORD not in probe.text
 
 
