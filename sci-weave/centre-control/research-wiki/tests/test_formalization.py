@@ -53,7 +53,12 @@ class Formalization(unittest.TestCase):
                 evidence = c.execute("SELECT r.formal_wiki_revision_id,r.terminus_store_id,r.formal_branch_id,r.formal_commit_hash,r.content_snapshot_digest,f.result_status,m.status,p.status,current.current_formal_revision_id FROM formal_wiki_revision r JOIN wiki_formalization_result f ON f.formal_wiki_revision_id=r.formal_wiki_revision_id JOIN wiki_merge_request_buffer m ON m.merge_request_id='mr' JOIN wiki_proposal p ON p.proposal_id=m.proposal_id JOIN wiki_current_formal_revision current ON current.wiki_domain_id=r.wiki_domain_id WHERE r.formal_wiki_revision_id='r2'").fetchone()
                 self.assertIsNotNone(evidence)
                 self.assertEqual(tuple(evidence[5:]), ('succeeded','merged','merged','r2'))
-            self.assertEqual(service.formalize("mr", "fresh-op").status, "reconciliation_required")
+            # ai4-ttwn: replaying a succeeded operation is now idempotent -- it
+            # verifies the activation evidence and reports success instead of
+            # forcing the caller into a reconciliation loop.
+            replay = service.formalize("mr", "fresh-op")
+            self.assertEqual((replay.status, replay.reason_code), ("succeeded", "already_activated"))
+            self.assertEqual(replay.formal_wiki_revision_id, "r2")
             reconciled = service.reconcile("fresh-op")
             self.assertEqual((reconciled.status, reconciled.reason_code), ("succeeded", "activation_reconciled"))
             with db.connection() as c:
