@@ -421,6 +421,20 @@ class SqliteStore:
             ).fetchone()
         return None if row is None else row["current_formal_revision_id"]
 
+    def list_known_domains(self) -> list[str]:
+        """Return the wiki domain ids that have a current formal pointer.
+
+        Used at startup to tell an empty store apart from a domain mismatch
+        (B12): if the configured domain has no pointer but other domains do,
+        the dashboard reports ``no_current_pointer`` because it queries the
+        wrong domain, not because there is no content.
+        """
+        with self.connection() as connection:
+            rows = connection.execute(
+                "SELECT DISTINCT wiki_domain_id FROM wiki_current_formal_revision ORDER BY wiki_domain_id"
+            ).fetchall()
+        return [str(row["wiki_domain_id"]) for row in rows]
+
     def get_formal_revision(self, revision_id: str) -> WikiFormalRevision | None:
         with self.connection() as connection:
             row = connection.execute(

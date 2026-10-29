@@ -17,6 +17,11 @@ _FORBIDDEN_FIELDS = {
     "hostname",
 }
 _PRINCIPAL_STATUSES = {"active", "disabled"}
+# Principal roles. ``service`` is included so service principals (e.g. a
+# workflow agent owned by ``service:centre``) can be registered directly instead
+# of tripping ``invalid_role`` while ``register_workflow_agent`` already accepts
+# a ``service:xxx`` principal id (B10).
+_PRINCIPAL_ROLES = {"researcher", "project_owner", "service"}
 _AGENT_STATUSES = {"active", "retired"}
 _INSTANCE_STATUSES = {"starting", "online", "offline", "revoked"}
 
@@ -106,7 +111,7 @@ class RegistryService:
         self._reject_forbidden(payload)
         principal_id = self._required(payload, "principal_id")
         role = payload.get("role")
-        if role not in {"researcher", "project_owner"}:
+        if role not in _PRINCIPAL_ROLES:
             raise RegistryError("invalid_role")
         status = payload.get("status", "active")
         if status not in _PRINCIPAL_STATUSES:
@@ -114,6 +119,11 @@ class RegistryService:
         return self._write(caller, payload, "register_principal", principal_id, lambda: self._upsert_principal(payload))
 
     def register_workflow_agent(self, caller: Caller, payload: dict[str, Any]) -> dict[str, Any]:
+        # ``principal_id`` is required for ``endpoint`` agents (they belong to a
+        # principal) and must be empty for ``centre`` agents (self-owned). The
+        # MCP tool therefore exposes it as optional at the schema level, but for
+        # ``endpoint`` a missing value fails with ``principal_required`` (B11);
+        # the tool description documents this so callers are not surprised.
         self._reject_forbidden(payload)
         kind = payload.get("kind")
         principal_id = payload.get("principal_id")

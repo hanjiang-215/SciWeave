@@ -140,7 +140,13 @@ def create_registry_server(config: RegistryConfig) -> FastMCP:
             lambda: service.register_principal(caller, payload), write=True,
         )
 
-    @server.tool(description="Register or update a workflow agent owned by the caller or Project Owner.")
+    @server.tool(
+        description=(
+            "Register or update a workflow agent owned by the caller or Project Owner. "
+            "principal_id is required for kind=endpoint (the owning principal) and "
+            "must be omitted for kind=centre (self-owned)."
+        )
+    )
     def register_workflow_agent(
         agent_id: str,
         workflow_id: str,

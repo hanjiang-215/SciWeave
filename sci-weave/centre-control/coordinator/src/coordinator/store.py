@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import threading
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -90,6 +91,62 @@ class HandoffDispatch:
     updated_at: str
 
 
+class _LockedConnection:
+    """Serialize one sqlite3 connection across the poller thread and the threaded
+    management-MCP worker threads.
+
+    The coordinator owns a single sqlite3 connection (open without
+    ``check_same_thread=False`` historically) that is used both by the dispatch
+    poller thread and every management-MCP ``dispatch_root_task`` call served on a
+    ThreadingHTTPServer worker thread. sqlite3 raises ``ProgrammingError: SQLite
+    objects created in a thread can only be used in that same thread`` when a
+    connection crosses threads, which surfaced as a swallowed ``dispatch_failed``.
+    Wrapping the connection with an ``RLock`` and ``check_same_thread=False`` lets
+    the one connection be shared safely and keeps statements serialized.
+    """
+
+    def __init__(self, conn: sqlite3.Connection) -> None:
+        self._conn = conn
+        self._lock = threading.RLock()
+
+    def execute(self, *args, **kwargs):
+        with self._lock:
+            return self._conn.execute(*args, **kwargs)
+
+    def executescript(self, *args, **kwargs):
+        with self._lock:
+            return self._conn.executescript(*args, **kwargs)
+
+    def executemany(self, *args, **kwargs):
+        with self._lock:
+            return self._conn.executemany(*args, **kwargs)
+
+    def commit(self):
+        with self._lock:
+            return self._conn.commit()
+
+    def rollback(self):
+        with self._lock:
+            return self._conn.rollback()
+
+    def close(self):
+        with self._lock:
+            return self._conn.close()
+
+    def __getattr__(self, name):
+        # row_factory, isolation_level, etc. — guarded where they mutate shared state.
+        return getattr(self._conn, name)
+
+    @property
+    def row_factory(self):
+        return self._conn.row_factory
+
+    @row_factory.setter
+    def row_factory(self, value):
+        with self._lock:
+            self._conn.row_factory = value
+
+
 class CoordinatorStore:
     """SQLite state store for PendingHandoff, HandoffDispatch, completed facts and domain state.
 
@@ -98,7 +155,10 @@ class CoordinatorStore:
     """
 
     def __init__(self, connection: sqlite3.Connection) -> None:
-        self.conn = connection
+        if isinstance(connection, _LockedConnection):
+            self.conn = connection
+        else:
+            self.conn = _LockedConnection(connection)
         self.conn.row_factory = sqlite3.Row
         self.conn.execute("PRAGMA busy_timeout = 5000")
         self.conn.executescript(

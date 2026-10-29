@@ -1,0 +1,2 @@
+module = "wiki"
+summary = "wiki 看板域一致性缺失，配置域≠数据域时静默 no_current_pointer"

@@ -1,0 +1,2 @@
+module = "mapping"
+summary = "看板任务状态无回写映射，status 恒 unknown"

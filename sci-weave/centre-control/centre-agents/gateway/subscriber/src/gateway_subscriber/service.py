@@ -46,6 +46,7 @@ class SubscriberService:
         target = envelope.get("target", {})
         task_node_id = self._required_text(target, "id")
         event_id = str(envelope.get("event_id") or message.key or message.offset)
+        mapping_domain_id = self._optional_text(envelope, "mapping_domain_id")
         payload = envelope.get("payload", {})
         if isinstance(payload, dict):
             trigger_revision = self._optional_text(payload, "formal_revision_id") or self._optional_text(envelope, "formal_revision_id")
@@ -80,9 +81,12 @@ class SubscriberService:
             connection.execute(
                 """INSERT INTO execution_records
                    (execution_id, task_node_id, session_id, status, trigger,
-                    trigger_ref, business_key, created_at, updated_at)
-                   VALUES (?, ?, ?, 'queued', 'queue', ?, ?, ?, ?)""",
-                (execution_id, task_node_id, session_id, event_id[:200], business_key, now, now),
+                    trigger_ref, business_key, mapping_domain_id, created_at, updated_at)
+                   VALUES (?, ?, ?, 'queued', 'queue', ?, ?, ?, ?, ?)""",
+                (
+                    execution_id, task_node_id, session_id, event_id[:200], business_key,
+                    mapping_domain_id or None, now, now,
+                ),
             )
             connection.execute(
                 """INSERT INTO audit_events
@@ -127,7 +131,7 @@ class SubscriberService:
         row = connection.execute(
             """SELECT execution_id, task_node_id, session_id,
                       status AS execution_status, trigger, trigger_ref,
-                      business_key, created_at, updated_at
+                      business_key, mapping_domain_id, created_at, updated_at
                FROM execution_records WHERE execution_id = ?""",
             (execution_id,),
         ).fetchone()
@@ -139,6 +143,7 @@ class SubscriberService:
             "trigger": row["trigger"],
             "trigger_ref": row["trigger_ref"],
             "business_key": row["business_key"],
+            "mapping_domain_id": row["mapping_domain_id"],
             "created_at": row["created_at"],
             "updated_at": row["updated_at"],
             "duplicate": duplicate,
