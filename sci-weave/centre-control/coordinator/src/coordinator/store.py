@@ -74,6 +74,9 @@ class PendingHandoff:
     target_node_version_ref: str
     upstream_source_refs: tuple[tuple[str, str], ...]
     executor_refs: tuple[str, ...]
+    # ai4-0k36: the executor the coordinator actually selected for this handoff
+    # (None when none was available). Distinct from ``executor_refs``, which is
+    # the declared list from the mapping.
     executor_agent_id: str | None
     status: str
     last_trigger_revision_id: str | None
@@ -355,6 +358,21 @@ class CoordinatorStore:
         )
         self.conn.commit()
         return self.get_pending_handoff(mapping_domain_id, task_node_id, target_node_version_ref)
+
+    def set_pending_handoff_executor(
+        self, pending_handoff_id: str, executor_agent_id: str | None
+    ) -> None:
+        """Record the executor the coordinator actually selected (ai4-0k36).
+
+        The insert path stores ``executor_refs[0]`` because no selection has
+        happened yet; writing the real choice here keeps the column honest once
+        ``_select_executor`` has answered (including "nobody available" as NULL).
+        """
+        self.conn.execute(
+            "UPDATE pending_handoff SET executor_agent_id = ?, updated_at = ? WHERE pending_handoff_id = ?",
+            (executor_agent_id, now_iso(), pending_handoff_id),
+        )
+        self.conn.commit()
 
     def _guard_transition(self, pending: PendingHandoff, next_status: str) -> None:
         # Same-state rewrite is an idempotent recompute (e.g. waiting kept

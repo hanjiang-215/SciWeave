@@ -1310,3 +1310,28 @@ def test_main_passes_max_attempts_from_config():
     spec.loader.exec_module(module)
     source = inspect.getsource(module.build)
     assert "max_attempts=config.max_attempts" in source
+
+
+def test_pending_handoff_records_the_executor_actually_selected():
+    """ai4-0k36: the stored executor must be the chosen one, not executor_refs[0]."""
+    connection = sqlite3.connect(":memory:")
+    snapshot_port = FakeSnapshotPort()
+    snapshot = FormalSnapshot(
+        mapping_domain_id="map-1",
+        formal_revision_id="rev-1",
+        nodes=(node("T1", "v1", ("agent-a1", "agent-a2"), task_owner_id="owner-1"),),
+        latest_published_by="owner-1",
+    )
+    snapshot_port.set("map-1", "rev-1", snapshot)
+    publisher = FakeHandoffPublisher()
+    notifications = FakeNotificationPublisher()
+    service = make_service(
+        connection, snapshot_port, publisher, notifications, FakeAgentAvailability({"agent-a2"})
+    )
+    service.store.set_latest_revision("map-1", "rev-1")
+    assert service.dispatch_root_task("map-1", "T1", "v1", trigger_revision_id="rev-1") is True
+    pending = service.store.get_pending_handoff("map-1", "T1", "v1")
+    # a2 was picked even though a1 is declared first, and the row says so.
+    assert pending.executor_agent_id == "agent-a2"
+    assert pending.executor_refs == ("agent-a1", "agent-a2")
+    connection.close()

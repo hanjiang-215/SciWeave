@@ -517,6 +517,11 @@ class CoordinatorService:
         )
         if pending is None:
             return False
+        # ai4-0k36: the pending row stores executor_refs[0] at insert time (no
+        # selection yet); record what was actually chosen so the column means what
+        # its name promises, including "nobody available" as NULL.
+        if pending.executor_agent_id != executor_agent_id:
+            self.store.set_pending_handoff_executor(pending.pending_handoff_id, executor_agent_id)
         if executor_agent_id is None:
             # `_select_executor` already decided which of the three kinds the
             # owner needs to hear about; guessing one here would send them to
