@@ -277,11 +277,35 @@ def _valid_document(document, submitter):
 
 
 def _contains(actual, expected):
-    by_id = {doc.get("@id"): doc for doc in actual if isinstance(doc, dict)}
+    """True only when every expected document is present in full and unaltered.
+
+    Matching by a weak field (``reference_id`` / ``wiki_revision_id``) let two
+    documents with the same id but different content pass, and ``None == None``
+    matched any document without those fields (ai4-hhs4). Match by ``@id`` and
+    compare the whole document through canonical JSON instead.
+    """
+    by_id = {
+        doc.get("@id"): doc
+        for doc in actual
+        if isinstance(doc, dict) and isinstance(doc.get("@id"), str)
+    }
     for doc in expected:
-        identity = doc.get("@id") or f"{doc.get('@type')}/{doc.get('wiki_revision_id') or doc.get('reference_id')}"
-        if not any(item == doc or item.get("wiki_revision_id") == doc.get("wiki_revision_id") or item.get("reference_id") == doc.get("reference_id") for item in actual if isinstance(item, dict)):
+        if not isinstance(doc, dict):
             return False
+        target = canonical_json(doc)
+        identity = doc.get("@id")
+        if isinstance(identity, str):
+            present = by_id.get(identity)
+            if present is None or canonical_json(present) != target:
+                return False
+        else:
+            # No stable @id on the expected doc: require an exact canonical match
+            # against some actual doc -- never a partial-field or None==None match.
+            if not any(
+                isinstance(item, dict) and canonical_json(item) == target
+                for item in actual
+            ):
+                return False
     return True
 
 

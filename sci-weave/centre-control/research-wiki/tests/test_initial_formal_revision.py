@@ -148,3 +148,28 @@ class PrereviewBaseKeyTests(unittest.TestCase):
                 )
             current = store.current_prereview_report("c1", "h1")
             self.assertEqual(current["report_id"], "r2")
+
+
+class ContainsReconciliationTests(unittest.TestCase):
+    """ai4-hhs4: snapshot reconciliation must compare whole documents, not ids."""
+
+    def test_document_with_same_id_but_altered_body_is_rejected(self):
+        from llm_wiki.candidate_submission import _contains
+
+        actual = ({"@id": "WikiRevision/r1", "title": "A", "body_markdown": "tampered"},)
+        expected = ({"@id": "WikiRevision/r1", "title": "A", "body_markdown": "original"},)
+        self.assertFalse(_contains(actual, expected))
+
+    def test_identical_document_is_accepted(self):
+        from llm_wiki.candidate_submission import _contains
+
+        doc = {"@id": "WikiRevision/r1", "title": "A", "body_markdown": "body"}
+        self.assertTrue(_contains((dict(doc),), (dict(doc),)))
+
+    def test_missing_null_reference_id_does_not_match_anything(self):
+        from llm_wiki.candidate_submission import _contains
+
+        # Both sides carry reference_id=None; the old weak matcher accepted this.
+        actual = ({"@type": "ResourceReference", "reference_id": None, "url": "x"},)
+        expected = ({"@type": "WikiRevision", "reference_id": None, "title": "A"},)
+        self.assertFalse(_contains(actual, expected))
