@@ -4,6 +4,7 @@ import { RouterLink } from 'vue-router'
 import StatusBadge from '@/components/StatusBadge.vue'
 import SourceHealth from '@/components/SourceHealth.vue'
 import { useDashboardStore } from '@/stores/dashboard'
+import { formatInstant } from '@/domain/dashboard'
 import type { WikiCandidateSummary, WikiFormalDocumentSummary, WikiReferenceSummary } from '@/domain/dashboard'
 
 const store = useDashboardStore()
@@ -23,7 +24,7 @@ function referenceClass(reference: WikiReferenceSummary): string {
   return `reference--${reference.qualification}`
 }
 function timeLabel(value: string): string {
-  return new Intl.DateTimeFormat('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Shanghai' }).format(new Date(value))
+  return formatInstant(value, 'short')
 }
 </script>
 

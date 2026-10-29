@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import type { DataSource } from '@/domain/dashboard'
-import { sourceLabel } from '@/domain/dashboard'
+import { formatInstant, sourceLabel } from '@/domain/dashboard'
 
 withDefaults(defineProps<{ sources: DataSource[]; compact?: boolean }>(), { compact: false })
 
 function displayTime(value?: string): string {
   if (!value) return '更新时间未知'
-  return new Intl.DateTimeFormat('zh-CN', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Shanghai' }).format(new Date(value))
+  return formatInstant(value, 'time')
 }
 </script>
 

@@ -3,7 +3,7 @@ import { computed } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
 import EmptyState from '@/components/EmptyState.vue'
 import StatusBadge from '@/components/StatusBadge.vue'
-import { statusDescription } from '@/domain/dashboard'
+import { formatInstant, statusDescription } from '@/domain/dashboard'
 import { useDashboardStore } from '@/stores/dashboard'
 
 const route = useRoute()
@@ -11,7 +11,7 @@ const store = useDashboardStore()
 const task = computed(() => store.snapshot?.tasks.find((item) => item.id === route.params.taskId))
 const prerequisites = computed(() => task.value?.prerequisiteIds.map((id) => store.snapshot?.tasks.find((item) => item.id === id)).filter((item) => item !== undefined) ?? [])
 const executions = computed(() => store.snapshot?.executions.filter((item) => item.taskId === route.params.taskId) ?? [])
-function timeLabel(value: string): string { return new Intl.DateTimeFormat('zh-CN', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Shanghai' }).format(new Date(value)) }
+function timeLabel(value: string): string { return formatInstant(value, 'medium') }
 </script>
 
 <template>

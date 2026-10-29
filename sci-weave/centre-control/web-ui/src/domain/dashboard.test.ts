@@ -1,8 +1,10 @@
 import {
   attentionItems,
   filterTasks,
+  formatInstant,
   sourceLabel,
   type DashboardSnapshot,
+  type TaskNode,
 } from './dashboard'
 
 const snapshot: DashboardSnapshot = {
@@ -40,5 +42,31 @@ describe('dashboard domain', () => {
     expect(sourceLabel({ status: 'stale' })).toEqual('数据可能过期')
     expect(sourceLabel({ status: 'unavailable' })).toEqual('数据暂不可用')
     expect(sourceLabel({ status: 'partial' })).toEqual('部分数据')
+  })
+})
+
+describe('formatInstant', () => {
+  it('renders a valid timestamp and never throws on garbage', () => {
+    expect(formatInstant('2026-10-22T09:00:00Z')).toBeTruthy()
+    // The old code called Intl.format(new Date('nope')) and threw RangeError,
+    // aborting the whole render for one bad row.
+    expect(() => formatInstant('not-a-date')).not.toThrow()
+    expect(formatInstant('not-a-date')).toBe('时间未知')
+    expect(formatInstant(undefined)).toBe('—')
+  })
+})
+
+describe('attentionItems ordering across time zones', () => {
+  it('orders by instant, not by the raw string', () => {
+    const make = (id: string, updatedAt: string): TaskNode => ({
+      id, projectId: 'p1', name: id, status: 'waiting', owner: 'o',
+      prerequisiteIds: [], attentionRank: 1, updatedAt,
+    })
+    const withTasks = (tasks: TaskNode[]): DashboardSnapshot => ({ ...snapshot, tasks })
+    // 02:30Z is 10:30+08:00 -- newer in real time but sorts BEFORE +08:00 as text.
+    const ordered = attentionItems(
+      withTasks([make('task-early', '2026-10-22T10:00:00+08:00'), make('task-late', '2026-10-22T02:30:00Z')]),
+    )
+    expect(ordered.map((item) => item.id)).toEqual(['task-late', 'task-early'])
   })
 })
