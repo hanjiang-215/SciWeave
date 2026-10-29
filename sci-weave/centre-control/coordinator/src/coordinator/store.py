@@ -38,7 +38,11 @@ class InvalidPendingTransition(Exception):
 _PENDING_TRANSITIONS = {
     PENDING_WAITING: {PENDING_READY, PENDING_DONE, PENDING_DISPATCHED_UNKNOWN, PENDING_SUPERSEDED, PENDING_FAILED},
     PENDING_READY: {PENDING_DONE, PENDING_DISPATCHED_UNKNOWN, PENDING_SUPERSEDED, PENDING_FAILED, PENDING_WAITING},
-    PENDING_DISPATCHED_UNKNOWN: {PENDING_DONE, PENDING_FAILED, PENDING_SUPERSEDED, PENDING_WAITING},
+    # A dispatch whose outcome was never confirmed can be re-driven by
+    # recompute once its gate is satisfied again: the pending fact returns to
+    # ready and the dispatch retry policy (not a duplicate publish) owns the
+    # actual re-send (ai4-zpyg).
+    PENDING_DISPATCHED_UNKNOWN: {PENDING_DONE, PENDING_FAILED, PENDING_SUPERSEDED, PENDING_WAITING, PENDING_READY},
     PENDING_DONE: frozenset(),  # terminal; no rollback
     PENDING_SUPERSEDED: frozenset(),  # terminal
     PENDING_FAILED: {PENDING_SUPERSEDED},  # human may supersede a failure

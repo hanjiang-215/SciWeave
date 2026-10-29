@@ -110,7 +110,15 @@ def build(config: CoordinatorConfig) -> "CoordinatorRuntime":
         kafka_bootstrap,
         governance_group,
     )
-    service = CoordinatorService(store, snapshot, publisher, notifications, registry)
+    service = CoordinatorService(
+        store,
+        snapshot,
+        publisher,
+        notifications,
+        registry,
+        max_attempts=config.max_attempts,
+    )
+    logger.info("coordinator dispatch max_attempts=%d", config.max_attempts)
     runtime = CoordinatorRuntime(
         service=service,
         publisher=publisher,

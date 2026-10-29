@@ -1251,3 +1251,62 @@ def test_unconfigured_notification_transport_keeps_the_dispatch_retryable():
     assert [d.status for d in notifications] == [DISPATCH_FAILED]
     assert notifications[0].error_summary.startswith("notification_transport_unconfigured")
     connection.close()
+
+def test_repeating_a_ready_dispatch_does_not_bypass_max_attempts():
+    """ai4-ubcp: a re-dispatched node must not republish outside the retry policy.
+
+    After a failed publish the dispatch is result_unknown with attempt_count=1.
+    Re-running dispatch_root_task for the same trigger must NOT call publish
+    again (that reset attempt_count and made max_attempts unreachable); the
+    retry poll owns the row instead.
+    """
+    connection = sqlite3.connect(":memory:")
+    snapshot_port = FakeSnapshotPort()
+    snapshot = FormalSnapshot(
+        mapping_domain_id="map-1",
+        formal_revision_id="rev-1",
+        nodes=(node("T1", "v1", ("agent-1",)),),
+        latest_published_by="owner-1",
+    )
+    snapshot_port.set("map-1", "rev-1", snapshot)
+    publisher = FakeHandoffPublisher()
+    service = make_service(
+        connection, snapshot_port, publisher, FakeNotificationPublisher(),
+        FakeAgentAvailability({"agent-1"}),
+    )
+    service.store.set_latest_revision("map-1", "rev-1")
+    publisher.fail_next = 100  # every publish fails
+
+    service.dispatch_root_task("map-1", "T1", "v1", trigger_revision_id="rev-1")
+    attempts_after_first = publisher.fail_next
+    first = service.store.list_dispatches(statuses=(DISPATCH_RESULT_UNKNOWN,))
+    assert len(first) == 1
+    assert first[0].attempt_count == 1
+
+    # The same trigger fires again (recompute): no new publish attempt, and the
+    # recorded attempt_count is untouched.
+    published = service.dispatch_root_task("map-1", "T1", "v1", trigger_revision_id="rev-1")
+    assert published is False
+    assert publisher.fail_next == attempts_after_first  # publish() was not called
+    still_unknown = service.store.list_dispatches(statuses=(DISPATCH_RESULT_UNKNOWN,))
+    assert len(still_unknown) == 1
+    assert still_unknown[0].attempt_count == 1
+    connection.close()
+
+
+def test_main_passes_max_attempts_from_config():
+    """ai4-ubcp: SCIWEAVE_COORDINATOR_MAX_ATTEMPTS must reach the service.
+
+    Guards the wiring itself: config.from_environment parsed max_attempts but
+    build() once dropped it on the floor, so the env var silently did nothing.
+    """
+    import importlib.util
+    import inspect
+    from pathlib import Path
+
+    main_path = Path(__file__).resolve().parents[1] / "src" / "main.py"
+    spec = importlib.util.spec_from_file_location("coordinator_entry_point_build", main_path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    source = inspect.getsource(module.build)
+    assert "max_attempts=config.max_attempts" in source
