@@ -85,4 +85,18 @@ describe('dashboard store', () => {
     await vi.advanceTimersByTimeAsync(2_000)
     expect(getSnapshot).toHaveBeenCalledTimes(1)
   })
+
+  it('treats an aborted request as cancelled rather than failed', async () => {
+    const store = useDashboardStore()
+    const abortError = Object.assign(new Error('aborted'), { name: 'AbortError' })
+    const port: DashboardQueryPort = {
+      getSnapshot: vi.fn().mockResolvedValueOnce(fixtureSnapshot).mockRejectedValueOnce(abortError),
+    }
+    store.setQueryPort(port)
+    await store.load()
+    await store.refresh()
+    expect(store.state).toBe('ready')
+    expect(store.errorMessage).toBe('')
+    expect(store.snapshot).toEqual(fixtureSnapshot)
+  })
 })
