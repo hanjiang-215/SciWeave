@@ -111,6 +111,40 @@ class SchemaV1Tests(unittest.TestCase):
         with self.assertRaises(ManifestError):
             load_manifest(self.root)
 
+    def test_suite_capabilities_survive_an_mcp_section(self) -> None:
+        """A card's capability names must not overwrite the suite's platform model."""
+        (self.root / "mcp/demo").mkdir(parents=True)
+        (self.root / "mcp/demo/mcp.json").write_text('{"name":"demo"}\n', encoding="utf-8")
+        self.replace(
+            "\nmcp: []\nhooks: []\ncron: []\ninstall:",
+            "\nmcp:\n  - name: demo\n    card: mcp/demo/mcp.json\n    capabilities: [read]\nhooks: []\ncron: []\ninstall:",
+        )
+        suite = load_manifest(self.root)
+        self.assertEqual([item.name for item in suite.capabilities], ["read"])
+        self.assertTrue(all(hasattr(item, "platforms") for item in suite.capabilities))
+        self.assertEqual(suite.mcp[0].capabilities, ("read",))
+
+    def test_export_destination_must_stay_under_the_generated_harness_root(self) -> None:
+        self.replace("harness_input: .sciweave/harness/demo", "harness_input: .sciweave/project/demo")
+        codes = {finding.code for finding in errors(validate_suite(self.root))}
+        self.assertIn("export_harness_input_outside_harness", codes)
+
+    def test_export_include_must_reference_a_payload(self) -> None:
+        self.replace("include: [suite.yaml, skills]", "include: [suite.yaml, skills, missing-dir]")
+        codes = {finding.code for finding in errors(validate_suite(self.root))}
+        self.assertIn("export_include_missing", codes)
+
+    def test_export_must_include_every_declared_skill_and_card(self) -> None:
+        """Dropping a payload from include must fail check, not ship a partial export."""
+        (self.root / "mcp/demo").mkdir(parents=True)
+        (self.root / "mcp/demo/mcp.json").write_text('{"name":"demo"}\n', encoding="utf-8")
+        self.replace(
+            "\nmcp: []\nhooks: []\ncron: []\ninstall:",
+            "\nmcp:\n  - name: demo\n    card: mcp/demo/mcp.json\n    capabilities: [read]\nhooks: []\ncron: []\ninstall:",
+        )
+        codes = {finding.code for finding in errors(validate_suite(self.root))}
+        self.assertIn("export_payload_not_included", codes)
+
     def test_every_declared_capability_requires_a_windows_status(self) -> None:
         self.replace("      windows: {status: manual, limitations: [manual setup]}\n", "")
         codes = {finding.code for finding in errors(validate_suite(self.root))}

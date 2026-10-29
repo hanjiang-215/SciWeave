@@ -415,12 +415,12 @@ def load_manifest(path: Path | str) -> SuiteManifest:
     for index, item in enumerate(_refs(data.get("mcp"), "suite.mcp", allow_empty=True)):
         path_label = f"suite.mcp[{index}]"
         _closed(item, frozenset({"name", "card", "capabilities"}), path_label)
-        capabilities = _strings(item.get("capabilities"), "invalid_capabilities", f"{path_label}.capabilities")
+        mcp_capabilities = _strings(item.get("capabilities"), "invalid_capabilities", f"{path_label}.capabilities")
         mcp.append(
             MCPRef(
                 _required_text(item, "name", path_label),
                 _relative_path(item.get("card"), f"{path_label}.card"),
-                capabilities,
+                mcp_capabilities,
             )
         )
 

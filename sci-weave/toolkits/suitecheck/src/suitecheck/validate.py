@@ -232,8 +232,6 @@ def _configuration_findings(suite: SuiteManifest) -> list[Finding]:
 def _manifest_findings(suite: SuiteManifest) -> list[Finding]:
     findings: list[Finding] = []
     for capability in suite.capabilities:
-        if not hasattr(capability, "platforms"):
-            continue
         if "windows" not in capability.platforms:
             findings.append(_error("windows_status_missing", capability.name, "each capability must declare Windows status"))
     names: dict[str, tuple[str, bool]] = {}
@@ -244,6 +242,60 @@ def _manifest_findings(suite: SuiteManifest) -> list[Finding]:
             findings.append(_error("env_requirement_conflict", item.name, "environment variable has conflicting requirements"))
         names[item.name] = current
     return findings
+
+
+def _export_findings(suite: SuiteManifest) -> list[Finding]:
+    """The generated directory is the only place an export may write.
+
+    An export that silently drops declared payloads is worse than one that
+    fails: the Harness gets a directory that looks complete and is not. So the
+    include list must actually cover every declared skill and MCP card.
+    """
+    if suite.export is None:
+        return []
+    findings: list[Finding] = []
+    target = Path(suite.export.harness_input)
+    parts = target.parts
+    if target.is_absolute() or len(parts) < 3 or parts[:2] != (".sciweave", "harness"):
+        findings.append(
+            _error(
+                "export_harness_input_outside_harness",
+                suite.export.harness_input,
+                "harness_input must be .sciweave/harness/<suite-id>",
+            )
+        )
+    elif len(parts) == 3 and parts[2] in {"", ".", ".."}:
+        findings.append(
+            _error("export_harness_input_not_suite_scoped", suite.export.harness_input, "harness_input must name a <suite-id>")
+        )
+    excluded = set(suite.export.exclude)
+    for relative in suite.export.include:
+        if relative in excluded:
+            continue
+        if not (suite.root / relative).exists():
+            findings.append(_error("export_include_missing", relative, "include entry does not exist in the suite"))
+    for kind, refs in (("skill", suite.skills), ("mcp", suite.mcp)):
+        for ref in refs:
+            path = getattr(ref, "path", None) or getattr(ref, "card", None)
+            if path is None or path in excluded:
+                continue
+            if not _exported(suite, path):
+                findings.append(
+                    _error(
+                        "export_payload_not_included",
+                        f"{kind} {ref.name}",
+                        f"{path} is declared but no include entry exports it",
+                    )
+                )
+    return findings
+
+
+def _exported(suite: SuiteManifest, path: str) -> bool:
+    """True when ``path`` is copied as-is or sits inside an exported directory."""
+    for relative in suite.export.include:
+        if path == relative or path.startswith(relative.rstrip("/") + "/"):
+            return True
+    return False
 
 
 def _boundary_findings(suite: SuiteManifest) -> list[Finding]:
@@ -267,6 +319,7 @@ def validate_suite(suite_or_path: SuiteManifest | Path | str) -> list[Finding]:
     findings.extend(_boundary_findings(suite))
     findings.extend(_manifest_findings(suite))
     findings.extend(_configuration_findings(suite))
+    findings.extend(_export_findings(suite))
     findings.extend(_skill_findings(suite))
     findings.extend(_mcp_findings(suite))
     findings.extend(_hook_findings(suite))

@@ -1,14 +1,23 @@
-"""Export a declarative suite into a project-scoped Harness input directory."""
+"""Export a declarative suite into a project-scoped Harness input directory.
+
+Three boundaries are enforced here, because each is a way an export can look
+successful while being wrong:
+
+* the project root is explicit — never the shell's current directory;
+* the destination is a generated directory under ``.sciweave/harness/``;
+* no secret value reaches the output. Only variable *names* travel, so
+  ``configuration.md`` is guidance, not configuration.
+"""
 
 from __future__ import annotations
 
 import json
-import os
+import re
 import shutil
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Union
+from typing import Iterator, Union
 
 from .manifest import MANIFEST_NAME, ManifestError, load_manifest
 from .project_layout import ProjectRootRequired, initialize_project
@@ -24,9 +33,63 @@ class ExportResult:
     manifest_path: Path
 
 
-_SKIP_NAMES = {".env", ".venv", "__pycache__", ".git"}
-_SKIP_DIR_NAMES = {".venv", "__pycache__", ".git", "tests"}
-_SECRET_MARKERS = ("TOKEN=", "SECRET=", "PASSWORD=", "API_KEY=", "PASSWD=")
+#: Runtime artifacts that are never part of a suite's published surface.
+_IGNORED = shutil.ignore_patterns(
+    ".env*", ".venv", "venv", "__pycache__", "*.pyc", ".git", "*.sqlite", "*.sqlite3", "*.log", "sessions",
+)
+
+#: ``NAME=value`` at the start of a line, where NAME looks like a credential.
+#: The value is captured whole, quoted or bare, so prose such as
+#: ``PURGE_TOKEN = "PURGE SCIWEAVE DATA"`` is not mistaken for a credential.
+_SECRET_ASSIGNMENT = re.compile(
+    r"(?m)^[ \t]*(?:export[ \t]+)?"
+    r"([A-Z][A-Z0-9_]*(?:TOKEN|SECRET|PASSWORD|PASSWD|API_KEY|CREDENTIAL|PRIVATE_KEY)[A-Z0-9_]*)"
+    r"[ \t]*=[ \t]*(?P<value>\"[^\"]*\"|'[^']*'|[^\s#]+)"
+)
+
+#: Values that document a variable instead of carrying one. A truncated value
+#: (``eyJ...``) is documentation of a shape, not a credential.
+_PLACEHOLDER = re.compile(
+    r"^(?:replace[-_]?with.*|change[-_]?me|todo|<[^>]*>|\$\{[^}]*\}|\$[A-Z_]+|[x*.\-]+|.*(?:\.\.\.|…))$",
+    re.IGNORECASE,
+)
+
+#: A credential pasted into an Authorization header. Real tokens are long; a
+#: short word-like stand-in such as ``buffer-token`` is a test fixture.
+_BEARER = re.compile(r"(?i)\bbearer\s+(?!<|\$\{|replace-)[A-Za-z0-9._~+/-]{20,}=*")
+
+
+def _language_files(root: Path) -> Iterator[tuple[Path, str]]:
+    """Yield every decodable text file under ``root``; skip binaries quietly."""
+    for path in sorted(root.rglob("*")):
+        if not path.is_file():
+            continue
+        try:
+            yield path, path.read_text(encoding="utf-8")
+        except (UnicodeDecodeError, OSError):
+            continue
+
+
+def _looks_like_secret(value: str) -> bool:
+    """A credential value: no prose, not a placeholder, not a bare reference."""
+    literal = value.strip("\"'")
+    if not literal:
+        return False
+    if any(character.isspace() for character in literal):
+        return False  # prose, e.g. a confirmation phrase
+    return not _PLACEHOLDER.match(literal)
+
+
+def _secret_offenders(root: Path) -> list[str]:
+    """Return files that contain what looks like a real credential value."""
+    offenders: list[str] = []
+    for path, text in _language_files(root):
+        if path.name == "manifest.json":
+            continue
+        assignment = any(_looks_like_secret(match.group("value")) for match in _SECRET_ASSIGNMENT.finditer(text))
+        if assignment or _BEARER.search(text):
+            offenders.append(str(path.relative_to(root)))
+    return sorted(set(offenders))
 
 
 def _safe_relative(root: Path, relative: str) -> Path:
@@ -43,20 +106,48 @@ def _safe_relative(root: Path, relative: str) -> Path:
     return source
 
 
-def _copy_tree(source: Path, destination: Path) -> None:
+def _copy(source: Path, destination: Path) -> None:
     if source.is_dir():
-        shutil.copytree(
-            source,
-            destination,
-            dirs_exist_ok=True,
-            ignore=shutil.ignore_patterns(".env", ".env.example", ".venv", "__pycache__", "tests", "*.sqlite", "*.sqlite3", "*.log"),
-        )
+        shutil.copytree(source, destination, dirs_exist_ok=True, ignore=_IGNORED)
+        return
+    if _IGNORED(str(source.parent), [source.name]):
         return
     destination.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(source, destination)
 
 
+def _previous(output: Path) -> Path:
+    return output.with_name(f".{output.name}.previous")
+
+
+def _recover(output: Path) -> None:
+    """Restore a directory left behind by an interrupted refresh."""
+    backup = _previous(output)
+    if backup.is_dir() and not output.exists():
+        backup.rename(output)
+    elif backup.exists():
+        shutil.rmtree(backup, ignore_errors=True)
+
+
+def _refresh(staging: Path, output: Path) -> None:
+    """Swap the generated directory in, keeping the old one until the swap wins."""
+    _recover(output)
+    backup: Path | None = None
+    if output.exists():
+        backup = _previous(output)
+        output.rename(backup)
+    try:
+        staging.replace(output)
+    except OSError:
+        if backup is not None and not output.exists():
+            backup.rename(output)
+        raise
+    if backup is not None:
+        shutil.rmtree(backup, ignore_errors=True)
+
+
 def export_suite(suite_root: Union[Path, str], project_root: Union[Path, str, None]) -> ExportResult:
+    """Copy ``suite_root`` into ``<project>/.sciweave/harness/<suite-id>/``."""
     if project_root is None or not str(project_root).strip():
         raise ProjectRootRequired("an explicit Harness project root is required")
     try:
@@ -79,22 +170,13 @@ def export_suite(suite_root: Union[Path, str], project_root: Union[Path, str, No
     try:
         inputs: list[str] = []
         for relative in (MANIFEST_NAME, *suite.export.include, suite.export.configuration):
-            if relative in suite.export.exclude or Path(relative).name in _SKIP_NAMES:
+            if relative in suite.export.exclude:
                 continue
-            source = _safe_relative(suite.root, relative)
-            destination = staging / relative
-            _copy_tree(source, destination)
-            inputs.append(relative.replace(os.sep, "/"))
-        for leaked in staging.rglob(".env"):
-            leaked.unlink()
-        rendered_files = [
-            path for path in staging.rglob("*")
-            if path.is_file() and path.name != "manifest.json" and path.suffix not in {".example", ".md"}
-        ]
-        rendered = "\n".join(path.read_text(encoding="utf-8", errors="replace") for path in rendered_files)
-        if any(marker in rendered for marker in _SECRET_MARKERS):
-            offenders = [str(path.relative_to(staging)) for path in rendered_files if any(marker in path.read_text(encoding="utf-8", errors="replace") for marker in _SECRET_MARKERS)]
-            raise ExportError("export would include a secret assignment: " + ", ".join(offenders))
+            _copy(_safe_relative(suite.root, relative), staging / relative)
+            inputs.append(Path(relative).as_posix())
+        offenders = _secret_offenders(staging)
+        if offenders:
+            raise ExportError("export would carry a secret value; refusing to write Harness input: " + ", ".join(offenders))
         manifest = {
             "schema_version": 1,
             "suite": suite.suite,
@@ -111,7 +193,6 @@ def export_suite(suite_root: Union[Path, str], project_root: Union[Path, str, No
                     },
                 }
                 for item in suite.capabilities
-                if hasattr(item, "platforms")
             ],
             "environment": [
                 {"name": item.name, "purpose": item.purpose, "required": item.required}
@@ -120,14 +201,9 @@ def export_suite(suite_root: Union[Path, str], project_root: Union[Path, str, No
             "configuration": suite.export.configuration,
         }
         (staging / "manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-        if output.exists():
-            shutil.rmtree(output)
-        output.parent.mkdir(parents=True, exist_ok=True)
-        staging.replace(output)
-    except Exception:
-        shutil.rmtree(staging, ignore_errors=True)
-        raise
+        _refresh(staging, output)
     finally:
+        shutil.rmtree(staging, ignore_errors=True)
         if staging_parent.exists() and not any(staging_parent.iterdir()):
             staging_parent.rmdir()
     return ExportResult(output, output / "manifest.json")

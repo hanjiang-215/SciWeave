@@ -73,7 +73,7 @@ capabilities:
       macos: {status: unverified, limitations: [not tested in this release]}
 export:
   harness_input: .sciweave/harness/researcher-agent-toolkit
-  include: [suite.yaml, install-suite, upgrade-suite, register-instance, audit-buffer, use-research-map, use-research-wiki, promote-draft, push-task-agent-to-rework, deploy-task-agent]
+  include: [suite.yaml, install-suite, upgrade-suite, register-instance, audit-buffer, use-research-map, use-research-wiki, promote-draft, push-task-agent-to-rework, deploy-task-agent, mcp]
   exclude: [.env, data, runtime/.venv]
   configuration: configuration.md
 skills:

@@ -356,14 +356,14 @@ class CliTests(SuiteFixture):
         (root / "skills/alpha/SKILL.md").unlink()
         self.assertEqual(cli_main(["check", str(root)]), 1)
 
-    def test_dry_run_prints_the_commands_without_running_them(self) -> None:
+    def test_run_lists_commands_without_running_them(self) -> None:
         root = self.build()
         marker = root / "ran"
         (root / "install.sh").write_text(f"#!/usr/bin/env sh\ntouch {marker}\n", encoding="utf-8")
         (root / "install.sh").chmod(0o755)
         text = (root / "suite.yaml").read_text(encoding="utf-8").replace("./install.sh", "./install.sh")
         (root / "suite.yaml").write_text(text, encoding="utf-8")
-        self.assertEqual(cli_main(["run", "install", str(root), "--dry-run"]), 2)
+        self.assertEqual(cli_main(["run", "install", str(root)]), 0)
         self.assertFalse(marker.exists())
 
 
