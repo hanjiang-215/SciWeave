@@ -63,11 +63,33 @@ def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
+def _parse_timestamp(value: str) -> float | None:
+    """Return a POSIX timestamp for an ISO string, or None when unparseable."""
+    try:
+        parsed = datetime.fromisoformat(str(value))
+    except (TypeError, ValueError):
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.timestamp()
+
+
+def _audit_worker_lost(
+    connection: sqlite3.Connection, task_node_id: str, command_id: str | None, execution_id: str
+) -> None:
+    connection.execute(
+        """INSERT INTO audit_events (event_type, task_node_id, command_id, execution_id, details, created_at)
+           VALUES ('worker_lost', ?, ?, ?, '{}', ?)""",
+        (task_node_id, command_id, execution_id, utc_now()),
+    )
+
+
 class ExecutionStore:
     def __init__(self, path: str | Path):
         self.path = str(path)
         self.connection = sqlite3.connect(self.path, check_same_thread=False)
         self.lock = threading.RLock()
+        self._tx_depth = 0
         self.connection.row_factory = sqlite3.Row
         self.connection.execute("PRAGMA foreign_keys = ON")
         self.connection.execute("PRAGMA journal_mode = WAL")
@@ -189,16 +211,100 @@ class ExecutionStore:
 
     @contextmanager
     def transaction(self) -> Iterator[sqlite3.Connection]:
+        """Run one write transaction while holding the write lock from the start.
+
+        ai4-qt7x: SQLite's implicit BEGIN is DEFERRED, so a read-then-write
+        transaction (claim: SELECT the queued row, then INSERT the lease) could
+        interleave with another process's write and fail with "database is
+        locked" instead of serializing. BEGIN IMMEDIATE takes the write lock up
+        front. The RLock is re-entrant, so nested ``transaction()`` blocks reuse
+        the outer transaction instead of opening a second one.
+        """
         with self.lock:
+            outer = self._tx_depth == 0
+            if outer:
+                self.connection.execute("BEGIN IMMEDIATE")
+            self._tx_depth += 1
             try:
                 yield self.connection
-                self.connection.commit()
             except Exception:
-                self.connection.rollback()
+                self._tx_depth -= 1
+                if outer:
+                    self.connection.rollback()
                 raise
+            self._tx_depth -= 1
+            if outer:
+                self.connection.commit()
 
     def close(self) -> None:
         self.connection.close()
+
+    # ------------------------------------------------------- lease recovery
+    # ai4-qt7x: leases are inserted when a Worker starts and deleted when it
+    # finishes. Nothing reaped them before, so a Worker killed mid-run held its
+    # task_node_id forever (every later claim hit the primary key and returned)
+    # and nothing re-dispatched an execution left queued by a dead process.
+
+    def reap_orphan_leases(self) -> int:
+        """Delete leases whose execution is no longer running; return the count."""
+        with self.transaction() as connection:
+            cursor = connection.execute(
+                """DELETE FROM worker_leases
+                   WHERE execution_id NOT IN (
+                       SELECT execution_id FROM execution_records WHERE status = 'running'
+                   )"""
+            )
+            return cursor.rowcount if cursor.rowcount and cursor.rowcount > 0 else 0
+
+    def reclaim_stale_leases(self, *, older_than_seconds: float) -> list[str]:
+        """Fail executions whose Worker is gone, then release their leases.
+
+        A lease older than the threshold belongs to a process that can no longer
+        be trusted to report: mark the execution ``failed`` with
+        ``worker_lost`` so the owner sees why, and drop the lease so the target
+        can be claimed again. Deliberately coarse (there is no heartbeat), so the
+        threshold must exceed the longest expected run.
+        """
+        cutoff = datetime.now(timezone.utc).timestamp() - older_than_seconds
+        reclaimed: list[str] = []
+        with self.transaction() as connection:
+            rows = connection.execute(
+                """SELECT l.execution_id, l.task_node_id, l.acquired_at, e.command_id
+                   FROM worker_leases l
+                   LEFT JOIN execution_records e ON e.execution_id = l.execution_id"""
+            ).fetchall()
+            for row in rows:
+                acquired = _parse_timestamp(row["acquired_at"])
+                if acquired is None or acquired >= cutoff:
+                    continue
+                updated = connection.execute(
+                    """UPDATE execution_records
+                       SET status = 'failed', error_summary = 'worker_lost', updated_at = ?
+                       WHERE execution_id = ? AND status = 'running'""",
+                    (utc_now(), row["execution_id"]),
+                )
+                connection.execute(
+                    "DELETE FROM worker_leases WHERE execution_id = ?", (row["execution_id"],)
+                )
+                _audit_worker_lost(
+                    connection, row["task_node_id"], row["command_id"], row["execution_id"]
+                )
+                if updated.rowcount:
+                    reclaimed.append(row["execution_id"])
+        return reclaimed
+
+    def queued_execution_ids_without_lease(self) -> list[str]:
+        """Executions stuck in ``queued`` with no Worker claiming them."""
+        with self.lock:
+            rows = self.connection.execute(
+                """SELECT e.execution_id FROM execution_records e
+                   WHERE e.status = 'queued'
+                     AND NOT EXISTS (
+                         SELECT 1 FROM worker_leases l WHERE l.execution_id = e.execution_id
+                     )
+                   ORDER BY e.created_at, e.execution_id"""
+            ).fetchall()
+        return [row["execution_id"] for row in rows]
 
     # ------------------------------------------------------------ outbox
     def record_outbox_event(
