@@ -91,9 +91,12 @@ class WikiFormalQueryResult:
     def __post_init__(self) -> None:
         if self.status != "available" and (self.body_markdown is not None or self.references):
             raise ValueError("only an available result may carry formal content")
+        # body_markdown is NOT an identity field: the default/genesis formal
+        # revision legitimately has an empty body. Content integrity is
+        # confirmed by content_digest plus the exact commit read-back, so an
+        # available result only requires the identity tuple to be present.
         if self.status == "available" and not all((
             self.formal_wiki_revision_id, self.terminus_store_id, self.database,
             self.formal_branch_id, self.formal_commit_hash, self.content_digest,
-            self.body_markdown,
         )):
-            raise ValueError("available formal query needs confirmed identity and content")
+            raise ValueError("available formal query needs confirmed identity")

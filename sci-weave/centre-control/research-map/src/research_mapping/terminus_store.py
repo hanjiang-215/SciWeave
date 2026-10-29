@@ -46,6 +46,17 @@ def _normalize_set_fields(document):
     return normalized
 
 
+# 创世标记要真正落成一次提交，而 TerminusDB 12.0.8 对空写入不产生提交。
+# 往 schema 图写一个标记类可以生成带 author/message 的提交，同时 instance 图保持为空，
+# 这样 read_exact_snapshot 读到的仍是空快照。
+_FORMAL_BOOTSTRAP_MARKER_CLASS = {
+    "@type": "Class",
+    "@id": "SciweaveFormalBootstrap",
+    "@key": {"@type": "Lexical", "@fields": ["id"]},
+    "id": "xsd:string",
+}
+
+
 def _contains_documents(actual, expected):
     """Confirm every submitted document exists unchanged in the exact commit."""
     by_id = {document.get("@id"): document for document in actual if isinstance(document, dict)}
@@ -318,7 +329,13 @@ class TerminusDBStore:
                 if head is None:
                     return SnapshotRead.unavailable(errors.STORE_RESULT_UNKNOWN)
                 if head.get("message") != marker or head.get("author") != "sciweave":
-                    return SnapshotRead.unavailable("formal_branch_conflict")
+                    # 分支在、但没有我们的标记提交：只有在 instance 图为空、没有数据可丢的情况下
+                    # 才认领它（补齐标记提交）；否则仍是真冲突。历史上写空数组没能生成提交，
+                    # 就会留下这种"空分支无标记"的状态。
+                    adopted = self._adopt_markerless_empty_branch(branch, marker)
+                    if adopted is None:
+                        return SnapshotRead.unavailable("formal_branch_conflict")
+                    head = adopted
                 commit = head.get("identifier")
                 if not isinstance(commit, str) or not commit:
                     return SnapshotRead.unavailable(errors.STORE_RESULT_UNKNOWN)
@@ -327,9 +344,13 @@ class TerminusDBStore:
                     return snapshot if snapshot.status != SNAPSHOT_CONFIRMED else SnapshotRead.unavailable("formal_snapshot_not_empty")
                 return snapshot
             status, response_headers, _ = self._request_opener(
-                "POST", self._branch_document_url(branch) + "?author=sciweave&message=" + quote(marker, safe=""),
+                "POST",
+                self._branch_document_url(branch)
+                + "?author=sciweave&message=" + quote(marker, safe="")
+                + "&graph_type=schema",
                 {"Accept": "application/json", "Content-Type": "application/json", **({"Authorization": self._authorization} if self._authorization else {})},
-                b"[]", self.timeout,
+                json.dumps([_FORMAL_BOOTSTRAP_MARKER_CLASS], separators=(",", ":")).encode(),
+                self.timeout,
             )
             if not 200 <= status < 300:
                 return SnapshotRead.unavailable(errors.STORE_RESULT_UNKNOWN if status >= 500 else "formal_store_rejected")
@@ -345,6 +366,47 @@ class TerminusDBStore:
             return snapshot
         except (OSError, TimeoutError, urllib.error.URLError, ValueError, json.JSONDecodeError):
             return SnapshotRead.unavailable(errors.STORE_RESULT_UNKNOWN)
+
+    def _adopt_markerless_empty_branch(self, branch, marker):
+        """Claim an existing branch that has no marker commit.
+
+        Only safe when the instance graph is empty: nothing can be lost. This
+        recovers the state left behind by the old bootstrap, which wrote an
+        empty document list (TerminusDB 12.0.8 creates no commit for that) and
+        then failed its own marker check.
+        """
+        head = self._head(branch)
+        if head is None:
+            return None
+        commit = head.get("identifier")
+        if not isinstance(commit, str) or not commit:
+            return None
+        current = self.read_exact_snapshot(self.store_id, self.database, branch, commit)
+        if current.status != SNAPSHOT_CONFIRMED or current.documents:
+            return None
+        status, _, _ = self._request_opener(
+            "POST",
+            self._branch_document_url(branch)
+            + "?author=sciweave&message=" + quote(marker, safe="")
+            + "&graph_type=schema",
+            {
+                "Accept": "application/json",
+                "Content-Type": "application/json",
+                **({"Authorization": self._authorization} if self._authorization else {}),
+            },
+            json.dumps([_FORMAL_BOOTSTRAP_MARKER_CLASS], separators=(",", ":")).encode(),
+            self.timeout,
+        )
+        if not 200 <= status < 300:
+            return None
+        new_head = self._head(branch)
+        if (
+            new_head is None
+            or new_head.get("message") != marker
+            or new_head.get("author") != "sciweave"
+        ):
+            return None
+        return new_head
 
     def create_formal_snapshot(
         self, store_id: str, database: str, branch_id: str, commit_hash: str, operation_id: str

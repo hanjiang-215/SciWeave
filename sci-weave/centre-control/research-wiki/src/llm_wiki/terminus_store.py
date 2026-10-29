@@ -17,6 +17,21 @@ from .formal_domain import WikiSnapshotRead
 Opener = Callable[[str, dict[str, str], float], tuple[int, Mapping[str, str], bytes]]
 
 
+# 新库里没有 WikiRevision 这个类，直接写实例文档会被 TerminusDB 以
+# SchemaCheckFailure 拒绝（ascribed_type_does_not_exist），随后被报成
+# store_result_unknown。先把类声明进 schema 图，再写实例。
+_WIKI_REVISION_SCHEMA = {
+    "@type": "Class",
+    "@id": "WikiRevision",
+    "@key": {"@type": "Lexical", "@fields": ["wiki_revision_id"]},
+    "wiki_revision_id": "xsd:string",
+    "title": "xsd:string",
+    "body_markdown": "xsd:string",
+    "lifecycle_state": "xsd:string",
+}
+
+
+
 class ExactResourceVersionStore(Protocol):
     """Boundary for reading one immutable ResourceVersion.
 
@@ -337,6 +352,14 @@ class TerminusDBWikiCandidateStore(TerminusDBResourceStore):
                 return CandidateSnapshotResult("unknown", reason_code="store_result_unknown")
             if snapshot.documents:
                 return CandidateSnapshotResult("failed", reason_code="default_formal_branch_not_empty")
+            # 先把 WikiRevision 类声明进 schema 图；新库没有它会拒绝实例写入。
+            self._request(
+                "POST",
+                self._candidate_document_url("main")
+                + "?author=sciweave&message=" + quote(marker + ":schema", safe="")
+                + "&graph_type=schema",
+                json.dumps([_WIKI_REVISION_SCHEMA], ensure_ascii=False, separators=(",", ":")).encode("utf-8"),
+            )
             status, _, _ = self._request(
                 "POST", self._candidate_document_url("main") + "?author=sciweave&message=" + quote(marker, safe=""),
                 json.dumps(expected, ensure_ascii=False, separators=(",", ":")).encode("utf-8"),
