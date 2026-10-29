@@ -23,6 +23,7 @@ from .mcp_servers import MCPServerConfigError, ServerSpec, fast_agent_servers, r
 from .notifications import NotificationIntent, build_intent, notification_problem
 from .skills import LOCAL_VARIABLE as LOCAL_SKILLS_VARIABLE, SHIPPED_VARIABLE as SHIPPED_SKILLS_VARIABLE, SkillsConfig, SkillsConfigError, load_skills
 from .worker_dispatch import WorkerDispatchError, WorkerRun, WorkerSubprocess
+from .project_systemd import ProjectBindingError, ProjectBindingStaleError, ProjectPaths, ProjectSystemdManager
 from .workflow_agent import WorkflowAgent, WorkflowPlan, plan_for
 from .runtime import (
     Execution,
