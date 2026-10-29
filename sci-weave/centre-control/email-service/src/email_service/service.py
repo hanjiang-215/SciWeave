@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 import sqlite3
 import threading
@@ -22,6 +23,8 @@ from .ports import (
     TransientSenderFailure,
 )
 from .registry_client import resolve_recipient
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -394,9 +397,16 @@ class EmailDeliveryService:
             except EmailServiceError:
                 item["status"] = "permanent_failure"
                 item["error_summary"] = "sender_failure"
-            except Exception:
+            except Exception as exc:
+                # A sender we did not anticipate must not vanish into a generic
+                # "sender_failure" without a trace; keep the delivery outcome the
+                # same but record what happened (ai4-onvr).
+                logger.exception(
+                    "unexpected sender error for notification=%s recipient=%s",
+                    notification_id, recipient.get("email"),
+                )
                 item["status"] = "permanent_failure"
-                item["error_summary"] = "sender_failure"
+                item["error_summary"] = f"sender_failure:{type(exc).__name__}"
             else:
                 item["status"] = "sent"
                 item["error_summary"] = None
