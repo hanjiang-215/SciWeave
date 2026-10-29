@@ -1,6 +1,6 @@
 ---
 id: ai4-msyb
-status: open
+status: closed
 deps: []
 links: []
 created: 2026-10-29T05:04:43Z
