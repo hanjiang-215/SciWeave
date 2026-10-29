@@ -111,6 +111,29 @@ class SchemaV1Tests(unittest.TestCase):
         with self.assertRaises(ManifestError):
             load_manifest(self.root)
 
+    def test_every_declared_capability_requires_a_windows_status(self) -> None:
+        self.replace("      windows: {status: manual, limitations: [manual setup]}\n", "")
+        codes = {finding.code for finding in errors(validate_suite(self.root))}
+        self.assertIn("windows_status_missing", codes)
+
+    def test_duplicate_environment_names_are_reported_as_conflicts(self) -> None:
+        path = self.root / "suite.yaml"
+        text = path.read_text(encoding="utf-8")
+        text = text.replace(
+            "      required: true\n  services: []",
+            "      required: true\n    - name: DEMO_URL\n      purpose: A different purpose\n      required: false\n  services: []",
+        )
+        path.write_text(text, encoding="utf-8")
+        codes = {finding.code for finding in errors(validate_suite(self.root))}
+        self.assertIn("env_requirement_conflict", codes)
+
+    def test_configuration_is_rejected_when_it_contains_a_secret_value(self) -> None:
+        (self.root / "configuration.md").write_text(
+            "# Config\n\nSet DEMO_TOKEN=real-secret-value\n", encoding="utf-8"
+        )
+        codes = {finding.code for finding in errors(validate_suite(self.root))}
+        self.assertIn("configuration_secret_value", codes)
+
 
 if __name__ == "__main__":
     unittest.main()

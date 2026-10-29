@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import stat
 from dataclasses import dataclass
 from pathlib import Path
@@ -205,6 +206,46 @@ def _command_findings(suite: SuiteManifest) -> list[Finding]:
     return findings
 
 
+_SECRET_VALUE = re.compile(
+    r"(?i)(?:^|\s)(?:[A-Z][A-Z0-9_]*(?:TOKEN|SECRET|PASSWORD|PASSWD|API_KEY|CREDENTIAL)[A-Z0-9_]*)\s*=\s*\S+"
+)
+
+
+def _configuration_findings(suite: SuiteManifest) -> list[Finding]:
+    if suite.export is None:
+        return []
+    findings: list[Finding] = []
+    path = suite.root / suite.export.configuration
+    if not path.is_file():
+        findings.append(_error("configuration_missing", suite.suite, f"{path.name} does not exist"))
+        return findings
+    text = path.read_text(encoding="utf-8", errors="replace")
+    if _SECRET_VALUE.search(text) or re.search(r"(?i)bearer\s+[A-Za-z0-9._~-]{8,}", text):
+        findings.append(_error("configuration_secret_value", suite.suite, "configuration guidance must contain names, not secret values"))
+    declared = {item.name: item for item in suite.env}
+    for name in re.findall(r"(?m)^\s*[-*]?\s*`?([A-Z][A-Z0-9_]*)`?", text):
+        if name not in declared and name.endswith(("TOKEN", "SECRET", "PASSWORD", "KEY")):
+            findings.append(_error("configuration_undeclared_secret", name, "secret-like variable is not declared in suite.requires.env"))
+    return findings
+
+
+def _manifest_findings(suite: SuiteManifest) -> list[Finding]:
+    findings: list[Finding] = []
+    for capability in suite.capabilities:
+        if not hasattr(capability, "platforms"):
+            continue
+        if "windows" not in capability.platforms:
+            findings.append(_error("windows_status_missing", capability.name, "each capability must declare Windows status"))
+    names: dict[str, tuple[str, bool]] = {}
+    for item in suite.env:
+        previous = names.get(item.name)
+        current = (item.purpose, item.required)
+        if previous is not None and previous != current:
+            findings.append(_error("env_requirement_conflict", item.name, "environment variable has conflicting requirements"))
+        names[item.name] = current
+    return findings
+
+
 def _boundary_findings(suite: SuiteManifest) -> list[Finding]:
     findings: list[Finding] = []
     if not suite.boundary.get("may_modify"):
@@ -224,6 +265,8 @@ def validate_suite(suite_or_path: SuiteManifest | Path | str) -> list[Finding]:
     suite = suite_or_path if isinstance(suite_or_path, SuiteManifest) else load_manifest(suite_or_path)
     findings: list[Finding] = []
     findings.extend(_boundary_findings(suite))
+    findings.extend(_manifest_findings(suite))
+    findings.extend(_configuration_findings(suite))
     findings.extend(_skill_findings(suite))
     findings.extend(_mcp_findings(suite))
     findings.extend(_hook_findings(suite))
