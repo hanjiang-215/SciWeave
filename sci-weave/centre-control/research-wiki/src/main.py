@@ -71,17 +71,8 @@ def _health_report(sqlite_store: SqliteStore, configured_domain: str):
     return report
 
 
-def main(argv: list[str] | None = None) -> int:
-    arguments = sys.argv if argv is None else argv
-    config = WikiConfig.from_environment()
-    sqlite_store = SqliteStore(config.sqlite_path)
-    sqlite_store.initialize()
-    # ai4-n7js: the candidate -> review -> formalize chain needs the candidate
-    # store. With the read-only resource store every write tool answered
-    # result_unknown / candidate_head_changed and no candidate could be
-    # created, approved or formalized -- silently, because those failures are
-    # result codes rather than exceptions.
-    terminus_store = TerminusDBWikiCandidateStore(
+def _build_candidate_store(config: WikiConfig) -> TerminusDBWikiCandidateStore:
+    return TerminusDBWikiCandidateStore(
         store_id=config.terminusdb_store,
         database=config.terminusdb_database,
         base_url=config.terminusdb_url,
@@ -89,6 +80,40 @@ def main(argv: list[str] | None = None) -> int:
         username=config.terminusdb_username,
         password=config.terminusdb_password,
     )
+
+
+def main(argv: list[str] | None = None) -> int:
+    arguments = sys.argv if argv is None else argv
+    config = WikiConfig.from_environment()
+    sqlite_store = SqliteStore(config.sqlite_path)
+    sqlite_store.initialize()
+    # ai4-4g9s: ``reap-branches`` deletes candidate branches no longer backing an
+    # active submission. Opt-in and explicit; supports --dry-run to preview.
+    if len(arguments) > 1 and arguments[1] == "reap-branches":
+        from llm_wiki.branch_reaper import reap_candidate_branches
+
+        dry_run = "--dry-run" in arguments
+        store = _build_candidate_store(config)
+        result = reap_candidate_branches(
+            sqlite_store=sqlite_store,
+            terminus_store=store,
+            wiki_domain_id=config.domain_id,
+            dry_run=dry_run,
+        )
+        print(json.dumps({
+            "dry_run": dry_run,
+            "deleted": result.deleted,
+            "failed": result.failed,
+            "kept_active": result.kept_active,
+            "skipped": result.skipped,
+        }, ensure_ascii=False))
+        return 0 if not result.failed else 1
+    # ai4-n7js: the candidate -> review -> formalize chain needs the candidate
+    # store. With the read-only resource store every write tool answered
+    # result_unknown / candidate_head_changed and no candidate could be
+    # created, approved or formalized -- silently, because those failures are
+    # result codes rather than exceptions.
+    terminus_store = _build_candidate_store(config)
     if sqlite_store.get_current_formal_revision_id(config.domain_id) is None:
         if _warn_if_domain_mismatch(sqlite_store, config.domain_id):
             # Content exists under another domain: do not seed a fresh default

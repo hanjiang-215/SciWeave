@@ -299,10 +299,13 @@ def _contains(actual, expected):
             if present is None or canonical_json(present) != target:
                 return False
         else:
-            # No stable @id on the expected doc: require an exact canonical match
-            # against some actual doc -- never a partial-field or None==None match.
+            # No stable @id on the expected doc: require a full match against some
+            # actual doc -- but ignore the @id the store assigns on write, since the
+            # caller-supplied document never carries it. Never a partial-field or
+            # None==None match.
             if not any(
-                isinstance(item, dict) and canonical_json(item) == target
+                isinstance(item, dict)
+                and canonical_json({k: v for k, v in item.items() if k != "@id"}) == target
                 for item in actual
             ):
                 return False

@@ -27,11 +27,31 @@ class CandidateSnapshotStore(Protocol):
     ) -> CandidateSnapshotResult: ...
 
 
+def _normalize_set_fields(document):
+    """Return a copy of ``document`` with list-valued (Set) fields sorted.
+
+    TerminusDB stores ``@type: Set`` fields as unordered sets and returns their
+    members in a canonical (sorted) order. A candidate submitted with a Set in a
+    different order is the same document, so the read-back comparison must not
+    depend on member order. Normalizing both sides keeps reconciliation
+    order-independent (otherwise any unsorted Set yields a false
+    ``store_result_unknown``).
+    """
+    if not isinstance(document, dict):
+        return document
+    normalized = dict(document)
+    for key, value in normalized.items():
+        if isinstance(value, list) and all(isinstance(item, str) for item in value):
+            normalized[key] = sorted(value)
+    return normalized
+
+
 def _contains_documents(actual, expected):
     """Confirm every submitted document exists unchanged in the exact commit."""
     by_id = {document.get("@id"): document for document in actual if isinstance(document, dict)}
     return all(
-        isinstance(document.get("@id"), str) and by_id.get(document["@id"]) == document
+        isinstance(document.get("@id"), str)
+        and _normalize_set_fields(by_id.get(document["@id"])) == _normalize_set_fields(document)
         for document in expected
     )
 
