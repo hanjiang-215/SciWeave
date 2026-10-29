@@ -530,13 +530,16 @@ class CoordinatorService:
                 snapshot, pending, trigger, notify_kind or NOTIFY_AGENT_UNAVAILABLE
             )
             # The waiting fact is retained: the handoff is not marked ready or
-            # done until an executor becomes available.
-            self.store.set_pending_handoff_status(
-                snapshot.mapping_domain_id,
-                pending.task_node_id,
-                pending.target_node_version_ref,
-                PENDING_WAITING,
-            )
+            # done until an executor becomes available. Skip the write when it is
+            # already waiting -- the row would be identical, and every recompute
+            # would otherwise commit a no-op UPDATE (ai4-xx5f).
+            if pending.status != PENDING_WAITING:
+                self.store.set_pending_handoff_status(
+                    snapshot.mapping_domain_id,
+                    pending.task_node_id,
+                    pending.target_node_version_ref,
+                    PENDING_WAITING,
+                )
             return False
         dedupe_key = self._dedupe(snapshot.mapping_domain_id, pending, MSG_HANDOFF_READY, trigger)
         dispatch = self.store.create_dispatch(

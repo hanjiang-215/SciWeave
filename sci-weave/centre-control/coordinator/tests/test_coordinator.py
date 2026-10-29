@@ -23,6 +23,7 @@ from coordinator.ports import (
     SnapshotUnavailableError,
     TaskNodeDoc,
 )
+SnapshotPortError = (SnapshotUnavailableError, SnapshotInconsistentError, NoSuchRevisionError)
 from coordinator.service import CoordinatorService
 from coordinator.store import (
     DISPATCH_DEAD,
@@ -50,12 +51,17 @@ class FakeSnapshotPort:
         self.snapshots[(mapping_domain_id, formal_revision_id)] = snapshot
 
     def fail_revision(self, mapping_domain_id: str, formal_revision_id: str, error: Exception) -> None:
+        if not isinstance(error, SnapshotPortError):
+            # ai4-v046: a plain Exception here would be re-raised fine, but a
+            # real adapter can only fail with one of the port's own errors --
+            # using anything else would test a shape production never produces.
+            raise TypeError(f"fail_revision expects a SnapshotPortError, got {type(error).__name__}")
         self.snapshots[(mapping_domain_id, formal_revision_id)] = error
 
     def get_formal_mapping_at_revision(self, mapping_domain_id: str, formal_revision_id: str) -> FormalSnapshot:
         self.calls.append((mapping_domain_id, formal_revision_id))
         value = self.snapshots.get((mapping_domain_id, formal_revision_id))
-        if isinstance(value, Exception):
+        if isinstance(value, SnapshotPortError):
             raise value
         if value is None:
             raise NoSuchRevisionError()
@@ -1334,4 +1340,66 @@ def test_pending_handoff_records_the_executor_actually_selected():
     # a2 was picked even though a1 is declared first, and the row says so.
     assert pending.executor_agent_id == "agent-a2"
     assert pending.executor_refs == ("agent-a1", "agent-a2")
+    connection.close()
+
+
+def test_a_snapshot_with_no_documents_is_not_treated_as_present():
+    """ai4-v046: ``isinstance(value, Exception)`` hid the empty-snapshot case;
+    a FormalSnapshot with zero nodes must still be honoured, not mistaken for a
+    failure or silently skipped."""
+    connection = sqlite3.connect(":memory:")
+    snapshot_port = FakeSnapshotPort()
+    snapshot_port.set(
+        "map-1",
+        "rev-1",
+        FormalSnapshot(
+            mapping_domain_id="map-1",
+            formal_revision_id="rev-1",
+            nodes=(),
+            latest_published_by="owner-1",
+        ),
+    )
+    service = make_service(
+        connection, snapshot_port, FakeHandoffPublisher(), FakeNotificationPublisher(), FakeAgentAvailability(set())
+    )
+    service.store.set_latest_revision("map-1", "rev-1")
+    service.startup_scan()
+    # No nodes means nothing to hand off, and no snapshot failure recorded.
+    assert service.store.list_pending_handoffs() == []
+    assert service.store.list_snapshot_failures() == []
+    assert snapshot_port.calls == [("map-1", "rev-1")]
+    connection.close()
+
+
+def test_recompute_does_not_rewrite_an_already_waiting_handoff(monkeypatch):
+    """ai4-v046: re-running dispatch for a handoff that is already waiting must
+    not commit an identical UPDATE every round."""
+    connection = sqlite3.connect(":memory:")
+    snapshot_port = FakeSnapshotPort()
+    snapshot = FormalSnapshot(
+        mapping_domain_id="map-1",
+        formal_revision_id="rev-1",
+        nodes=(node("T1", "v1", ("agent-a1",), task_owner_id="owner-1"),),
+        latest_published_by="owner-1",
+    )
+    snapshot_port.set("map-1", "rev-1", snapshot)
+    service = make_service(
+        connection, snapshot_port, FakeHandoffPublisher(), FakeNotificationPublisher(), FakeAgentAvailability(set())
+    )
+    service.store.set_latest_revision("map-1", "rev-1")
+    service.on_formal_revision_published("map-1", "rev-1")
+    pending = service.store.get_pending_handoff("map-1", "T1", "v1")
+    assert pending.status == PENDING_WAITING
+
+    calls: list[str] = []
+    original = service.store.set_pending_handoff_status
+
+    def recording(*args, **kwargs):
+        calls.append(kwargs.get("status", args[3] if len(args) > 3 else "?"))
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(service.store, "set_pending_handoff_status", recording)
+    # Same revision again: the node is still waiting, so no status write.
+    service.on_formal_revision_published("map-1", "rev-1")
+    assert PENDING_WAITING not in calls
     connection.close()
