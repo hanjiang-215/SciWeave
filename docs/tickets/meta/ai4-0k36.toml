@@ -1,0 +1,3 @@
+# ai4-0k36 的索引归属与简介（人工维护）
+module = "governance"
+summary = "pending_handoff.executor_agent_id 存的是声明第一个而非实际选中的执行者"
