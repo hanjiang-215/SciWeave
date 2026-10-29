@@ -258,10 +258,31 @@ _SEND_NOTIFICATION_FIELDS = frozenset(
 
 
 def _reject_undeclared_send_arguments(server: FastMCP, service: EmailDeliveryService, caller_from_token) -> None:
-    tool = server._tool_manager.get_tool("send_notification")
+    # ai4-ytpp: this relies on private FastMCP internals (``_tool_manager``,
+    # ``tool.fn_metadata.call_fn_with_arg_validation``). On a minor mcp upgrade
+    # those can move and the patch would silently stop running, so an undeclared
+    # argument would no longer be recorded as invalid. Fail loudly at startup
+    # instead: verify the exact attributes we patch exist and reject setting the
+    # patch if ``fn_metadata`` refuses it.
+    tool_manager = getattr(server, "_tool_manager", None)
+    get_tool = getattr(tool_manager, "get_tool", None)
+    if not callable(get_tool):
+        raise RuntimeError(
+            "email-service incompatible with the installed mcp version: "
+            "FastMCP._tool_manager.get_tool is missing; the send_notification "
+            "argument guard cannot be installed (pin mcp>=1.30,<2 or adapt the patch)"
+        )
+    tool = get_tool("send_notification")
     if tool is None:
         raise RuntimeError("send_notification tool is not registered")
-    original = tool.fn_metadata.call_fn_with_arg_validation
+    fn_metadata = getattr(tool, "fn_metadata", None)
+    original = getattr(fn_metadata, "call_fn_with_arg_validation", None)
+    if fn_metadata is None or not callable(original):
+        raise RuntimeError(
+            "email-service incompatible with the installed mcp version: "
+            "tool.fn_metadata.call_fn_with_arg_validation is missing; the "
+            "send_notification argument guard cannot be installed"
+        )
 
     async def call_fn_with_arg_validation(fn, fn_is_async, arguments_to_validate, arguments_to_pass_directly):
         arguments = arguments_to_validate or {}
@@ -274,7 +295,14 @@ def _reject_undeclared_send_arguments(server: FastMCP, service: EmailDeliverySer
         except ValidationError:
             service.record_invalid(caller_from_token(), arguments)
 
-    object.__setattr__(tool.fn_metadata, "call_fn_with_arg_validation", call_fn_with_arg_validation)
+    object.__setattr__(fn_metadata, "call_fn_with_arg_validation", call_fn_with_arg_validation)
+    # Confirm the patch actually took: a ``fn_metadata`` that silently ignores
+    # setattr would leave the guard uninstalled.
+    if getattr(fn_metadata, "call_fn_with_arg_validation", None) is not call_fn_with_arg_validation:
+        raise RuntimeError(
+            "email-service could not install the send_notification argument guard: "
+            "fn_metadata rejected call_fn_with_arg_validation"
+        )
 
 
 def _begin_audit(audit: sqlite3.Connection, record: CallRecord) -> str:

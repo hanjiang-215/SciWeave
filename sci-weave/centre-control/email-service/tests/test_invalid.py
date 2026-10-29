@@ -529,3 +529,60 @@ def test_storage_unavailable_does_not_send(invalid_mcp):
     )
     assert error_code(hidden) == "denied"
     assert invalid_mcp["sender"].sent == []
+
+
+class TestMailboxChannel:
+    """A from-address with no SMTP channel must not look like a working mailbox."""
+
+    def _clear(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        for name in (
+            "SCIWEAVE_EMAIL_SMTP_HOST",
+            "SCIWEAVE_EMAIL_SMTP_PORT",
+            "SCIWEAVE_EMAIL_SMTP_USERNAME",
+            "SCIWEAVE_EMAIL_SMTP_PASSWORD",
+            "SCIWEAVE_EMAIL_SMTP_SECURITY",
+            "SCIWEAVE_EMAIL_FROM_ADDRESS",
+        ):
+            monkeypatch.delenv(name, raising=False)
+
+    def _minimal_config(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Set the non-mailbox required variables so the mailbox branch is reached."""
+        import json as _json
+
+        monkeypatch.setenv("SCIWEAVE_EMAIL_SQLITE_PATH", ":memory:")
+        monkeypatch.setenv("SCIWEAVE_AUDIT_SQLITE_PATH", ":memory:")
+        monkeypatch.setenv("SCIWEAVE_EMAIL_HOST", "127.0.0.1")
+        monkeypatch.setenv("SCIWEAVE_EMAIL_PORT", "0")
+        monkeypatch.setenv("SCIWEAVE_EMAIL_ISSUER_URL", "http://127.0.0.1/issuer")
+        monkeypatch.setenv("SCIWEAVE_EMAIL_RESOURCE_URL", "http://127.0.0.1/email-service")
+        monkeypatch.setenv("SCIWEAVE_EMAIL_API_VERSION", API_VERSION)
+        monkeypatch.setenv(
+            "SCIWEAVE_EMAIL_TOKENS_JSON",
+            _json.dumps({"gateway": {"caller_id": "service:task-gateway", "caller_type": "service"}}),
+        )
+        monkeypatch.setenv("SCIWEAVE_EMAIL_REGISTRY_URL", "http://registry.test/mcp")
+        monkeypatch.setenv("SCIWEAVE_EMAIL_REGISTRY_TOKEN", "registry-token")
+        monkeypatch.setenv("SCIWEAVE_EMAIL_REGISTRY_TIMEOUT_SECONDS", "1")
+        monkeypatch.setenv("SCIWEAVE_EMAIL_RETRY_INITIAL_SECONDS", "1")
+        monkeypatch.setenv("SCIWEAVE_EMAIL_RETRY_MULTIPLIER", "2")
+        monkeypatch.setenv("SCIWEAVE_EMAIL_RETRY_MAX_SECONDS", "60")
+        monkeypatch.setenv("SCIWEAVE_EMAIL_DISPATCH_POLL_SECONDS", "0.05")
+        monkeypatch.setenv("SCIWEAVE_EMAIL_SENDING_TIMEOUT_SECONDS", "30")
+
+    def test_from_address_without_a_channel_is_kept_but_warns(self, monkeypatch, caplog) -> None:
+        import logging
+
+        self._clear(monkeypatch)
+        self._minimal_config(monkeypatch)
+        monkeypatch.setenv("SCIWEAVE_EMAIL_FROM_ADDRESS", FROM_ADDRESS)
+        with caplog.at_level(logging.WARNING, logger="email_service"):
+            mailbox = EmailServiceConfig.from_environment().mailbox
+        assert mailbox.from_address == FROM_ADDRESS
+        assert "no SMTP channel is configured" in caplog.text
+
+    def test_a_malformed_from_address_without_a_channel_is_rejected(self, monkeypatch) -> None:
+        self._clear(monkeypatch)
+        self._minimal_config(monkeypatch)
+        monkeypatch.setenv("SCIWEAVE_EMAIL_FROM_ADDRESS", "not-an-address")
+        with pytest.raises(ValueError, match="not an email address"):
+            EmailServiceConfig.from_environment()
