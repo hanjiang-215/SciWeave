@@ -363,7 +363,7 @@ class CliTests(SuiteFixture):
         (root / "install.sh").chmod(0o755)
         text = (root / "suite.yaml").read_text(encoding="utf-8").replace("./install.sh", "./install.sh")
         (root / "suite.yaml").write_text(text, encoding="utf-8")
-        self.assertEqual(cli_main(["run", "install", str(root), "--dry-run"]), 0)
+        self.assertEqual(cli_main(["run", "install", str(root), "--dry-run"]), 2)
         self.assertFalse(marker.exists())
 
 

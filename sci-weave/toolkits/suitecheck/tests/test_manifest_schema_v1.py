@@ -134,6 +134,13 @@ class SchemaV1Tests(unittest.TestCase):
         codes = {finding.code for finding in errors(validate_suite(self.root))}
         self.assertIn("configuration_secret_value", codes)
 
+    def test_configuration_path_with_spaces_is_valid(self) -> None:
+        source = self.root / "docs" / "config with spaces.md"
+        source.parent.mkdir()
+        source.write_text("# Config\n\nSet `DEMO_URL` from the environment.\n", encoding="utf-8")
+        self.replace("configuration: configuration.md", "configuration: docs/config with spaces.md")
+        self.assertNotIn("configuration_missing", {finding.code for finding in validate_suite(self.root)})
+
 
 if __name__ == "__main__":
     unittest.main()

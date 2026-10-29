@@ -5,10 +5,9 @@ Two subcommands, and the split is the point:
 * ``check`` is static. It reads manifests and payload files and reports
   findings. It never runs anything from a manifest, so it is safe to run in CI
   over a suite someone else wrote.
-* ``run install --dry-run`` / ``run check`` executes the commands a manifest
-  declares, because that is what the installing Agent does. ``--dry-run``
-  prints them instead, which is the only way to see what a zip would do before
-  running it.
+* ``run`` is retained only as a compatibility inspection command. It never
+  executes manifest-declared commands; installation and service lifecycle are
+  explicit responsibilities of the consuming Harness.
 
 Exit codes: 0 clean, 1 findings at error severity, 2 usage or manifest error.
 """
@@ -16,8 +15,6 @@ Exit codes: 0 clean, 1 findings at error severity, 2 usage or manifest error.
 from __future__ import annotations
 
 import argparse
-import shlex
-import subprocess
 import sys
 from pathlib import Path
 
@@ -75,21 +72,16 @@ def _check(targets: list[str]) -> int:
 
 
 def _run(target: str, section: str, *, dry_run: bool) -> int:
+    """Inspect legacy commands without granting them execution authority."""
     suite = load_manifest(target)
     commands = suite.install if section == "install" else suite.check
     if not commands:
         print(f"{suite.suite} declares no {section} command", file=sys.stderr)
         return 2
+    print(f"{suite.suite} declares {len(commands)} {section} command(s); suitecheck never executes them")
     for command in commands:
-        argv = shlex.split(command)
-        print(f"$ {command}" if not dry_run else command)
-        if dry_run:
-            continue
-        completed = subprocess.run(argv, cwd=suite.root)
-        if completed.returncode != 0:
-            print(f"failed with {completed.returncode}: {command}", file=sys.stderr)
-            return completed.returncode
-    return 0
+        print(f"  {command}")
+    return 2
 
 
 def main(argv: list[str] | None = None) -> int:

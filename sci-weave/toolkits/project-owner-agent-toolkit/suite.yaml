@@ -3,6 +3,7 @@ role: human
 actor: project_owner
 title: 项目负责人的 Agent套件
 version: 0.1.0
+schema_version: 1
 summary: >
   装在负责人自己的 harness 里、以 project_owner 身份工作的一套东西：读正式路线与候选，
   预览候选的改动与影响范围，记录批准/退回/驳回，把批准的候选正式化，并在路线需要继续时
@@ -35,6 +36,27 @@ requires:
     - EMAIL_MCP_URL
     - EMAIL_MCP_TOKEN
   services: []
+capabilities:
+  - name: read
+    platforms:
+      linux: {status: supported, limitations: []}
+      windows: {status: supported, limitations: [Harness input only; private Harness registration remains user-controlled]}
+      macos: {status: unverified, limitations: [not tested in this release]}
+  - name: candidate_review
+    platforms:
+      linux: {status: supported, limitations: []}
+      windows: {status: manual, limitations: [manual Harness registration and credential setup]}
+      macos: {status: unverified, limitations: [not tested in this release]}
+  - name: formalize
+    platforms:
+      linux: {status: supported, limitations: []}
+      windows: {status: manual, limitations: [manual Harness registration and credential setup]}
+      macos: {status: unverified, limitations: [not tested in this release]}
+export:
+  harness_input: .sciweave/harness/project-owner-agent-toolkit
+  include: [suite.yaml, decide-candidate, request-revision, dispatch-root-task, handle-merge-candidate, impact-preview, notification-status, mcp]
+  exclude: [.env, data]
+  configuration: configuration.md
 skills:
   - name: decide-candidate
     path: decide-candidate
