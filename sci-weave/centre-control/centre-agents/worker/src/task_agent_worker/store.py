@@ -166,6 +166,25 @@ class ExecutionStore:
             self.connection.execute(
                 "ALTER TABLE execution_records ADD COLUMN mapping_domain_id TEXT"
             )
+        # ai4-odwi: transactional outbox for governance events that must survive a
+        # crash between committing a terminal state and publishing it. The event
+        # row is written in the same transaction as the state change, then a relay
+        # publishes it and flips published_at; a crash leaves it pending for the
+        # next drain instead of dropping the event.
+        self.connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS governance_outbox (
+                outbox_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                event_type TEXT NOT NULL,
+                dedupe_key TEXT NOT NULL UNIQUE,
+                payload_json TEXT NOT NULL,
+                attempts INTEGER NOT NULL DEFAULT 0,
+                last_error TEXT,
+                created_at TEXT NOT NULL,
+                published_at TEXT
+            )
+            """
+        )
         self.connection.commit()
 
     @contextmanager
@@ -180,6 +199,58 @@ class ExecutionStore:
 
     def close(self) -> None:
         self.connection.close()
+
+    # ------------------------------------------------------------ outbox
+    def record_outbox_event(
+        self,
+        connection: sqlite3.Connection,
+        *,
+        event_type: str,
+        dedupe_key: str,
+        payload_json: str,
+        created_at: str,
+    ) -> None:
+        """Stage a governance event inside a caller-owned transaction (ai4-odwi).
+
+        Must be called with the same ``connection`` that commits the state change
+        so the event and the terminal state are durable together; a duplicate
+        dedupe_key is ignored so a retried write cannot stage twice.
+        """
+        connection.execute(
+            """INSERT OR IGNORE INTO governance_outbox
+               (event_type, dedupe_key, payload_json, created_at)
+               VALUES (?, ?, ?, ?)""",
+            (event_type, dedupe_key, payload_json, created_at),
+        )
+
+    def pending_outbox_events(self, limit: int = 100) -> list[sqlite3.Row]:
+        with self.lock:
+            return self.connection.execute(
+                """SELECT outbox_id, event_type, dedupe_key, payload_json, attempts
+                   FROM governance_outbox
+                   WHERE published_at IS NULL
+                   ORDER BY outbox_id
+                   LIMIT ?""",
+                (limit,),
+            ).fetchall()
+
+    def mark_outbox_published(self, outbox_id: int, published_at: str) -> None:
+        with self.lock:
+            self.connection.execute(
+                "UPDATE governance_outbox SET published_at = ? WHERE outbox_id = ?",
+                (published_at, outbox_id),
+            )
+            self.connection.commit()
+
+    def mark_outbox_failed(self, outbox_id: int, error: str) -> None:
+        with self.lock:
+            self.connection.execute(
+                """UPDATE governance_outbox
+                   SET attempts = attempts + 1, last_error = ?
+                   WHERE outbox_id = ?""",
+                (error, outbox_id),
+            )
+            self.connection.commit()
 
     def health(self) -> bool:
         with self.lock:

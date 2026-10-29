@@ -14,6 +14,7 @@ with error summary ``draft_submission_failed``.
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Protocol
 
@@ -79,6 +80,9 @@ class SubscriberWorkerRunner:
         Only one Worker runs per target at a time because the lease insert is
         atomic; different targets may run concurrently.
         """
+        # ai4-odwi: replay any completion event a previous crash left staged
+        # before doing new work, so the queue self-heals on the next iteration.
+        self.drain_outbox()
         claimed = self._claim(task_node_id)
         if claimed is None:
             return None
@@ -165,6 +169,7 @@ class SubscriberWorkerRunner:
         draft_id: str | None = None,
     ) -> dict[str, Any]:
         now = utc_now()
+        completion_event: dict[str, Any] | None = None
         with self.store.transaction() as connection:
             updated = connection.execute(
                 """UPDATE execution_records SET status = ?, result_summary = ?,
@@ -201,6 +206,26 @@ class SubscriberWorkerRunner:
                    VALUES (?, ?, ?, '{}', ?)""",
                 (event, claimed["task_node_id"], claimed["execution_id"], now),
             )
+            if status == "completed" and self.completion_publisher is not None:
+                # ai4-odwi: stage the task_completed event in the SAME
+                # transaction as the terminal state, so a crash after commit but
+                # before publish can never lose it -- the drain below or the next
+                # run_once() replays it from the outbox.
+                completion_event = {
+                    "execution_id": claimed["execution_id"],
+                    "task_node_id": claimed["task_node_id"],
+                    "mapping_domain_id": claimed.get("mapping_domain_id"),
+                    "business_key": claimed.get("business_key"),
+                    "draft_id": draft_id,
+                    "finished_at": now,
+                }
+                self.store.record_outbox_event(
+                    connection,
+                    event_type="task_completed",
+                    dedupe_key=f"task_completed:{claimed['execution_id']}",
+                    payload_json=json.dumps(completion_event, ensure_ascii=False),
+                    created_at=now,
+                )
         result = {
             **claimed,
             "status": status,
@@ -209,13 +234,31 @@ class SubscriberWorkerRunner:
             "draft_id": draft_id,
             "finished_at": now,
         }
-        # B6: a successful completion must release the downstream nodes. Publish
-        # after the terminal state is durably committed (outside the transaction
-        # above) so a subscriber crash between commit and publish only drops a
-        # best-effort event, never the execution state itself.
+        # Best-effort immediate delivery; anything still pending is retried by
+        # drain_outbox() (called at the start of every run_once and the CLI).
         if status == "completed" and self.completion_publisher is not None:
-            self.completion_publisher.publish(execution=result)
+            self.drain_outbox()
         return result
+
+    def drain_outbox(self) -> int:
+        """Publish any staged governance events not yet confirmed (ai4-odwi).
+
+        Returns the number of events successfully delivered. Idempotent: a row is
+        only marked published after the publisher returns without raising.
+        """
+        if self.completion_publisher is None:
+            return 0
+        delivered = 0
+        for row in self.store.pending_outbox_events():
+            try:
+                payload = json.loads(row["payload_json"])
+                self.completion_publisher.publish(execution=payload)
+            except Exception:  # noqa: BLE001 - leave it pending for the next drain
+                self.store.mark_outbox_failed(row["outbox_id"], "publish_failed")
+                continue
+            self.store.mark_outbox_published(row["outbox_id"], utc_now())
+            delivered += 1
+        return delivered
 
 
 class _Failed:
