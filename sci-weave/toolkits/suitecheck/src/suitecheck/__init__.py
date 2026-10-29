@@ -17,6 +17,7 @@ from .manifest import (
 )
 from .validate import Finding, Severity, validate_suite, find_suites
 from .project_layout import ProjectLayout, ProjectRootRequired, initialize_project
+from .exporter import ExportError, ExportResult, export_suite
 
 __all__ = [
     "MANIFEST_NAME",
@@ -32,4 +33,7 @@ __all__ = [
     "ProjectLayout",
     "ProjectRootRequired",
     "initialize_project",
+    "ExportError",
+    "ExportResult",
+    "export_suite",
 ]
