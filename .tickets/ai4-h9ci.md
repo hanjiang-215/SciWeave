@@ -1,0 +1,26 @@
+---
+id: ai4-h9ci
+status: open
+deps: [ai4-lewg, ai4-ykti]
+links: []
+created: 2026-10-29T14:26:58Z
+type: feature
+priority: 1
+assignee: Frank Qi
+tags: [toolkit, task-agent, systemd, project-runtime, ready-for-agent]
+---
+# 实现 Linux 项目绑定 Task Agent 服务生命周期
+
+依据工具包项目级部署与 Harness 导出设计规格，为每个项目运行实例提供独立的 Linux systemd --user 服务绑定、启动前路径校验和显式重绑行为。
+
+## Design
+
+Blocked by 项目级布局与清单模型。首期只承诺 Linux systemd --user 自动托管；项目标识、unit 命名转义和含空格路径写法作为实现决策记录。
+
+## Acceptance Criteria
+
+- [ ] 每个服务实例的标识包含稳定项目标识，并显式记录项目根、runtime、data 和环境文件位置。
+- [ ] 启动前校验项目根和关键路径；两个项目的代码、SQLite、会话、日志与服务状态完全隔离。
+- [ ] 项目根移动或原路径失效后，旧服务拒绝启动并报告需要显式重绑，不根据当前目录自动改指向。
+- [ ] 用户明确发起重绑后才写入新的项目根和路径配置。
+- [ ] Linux systemd 启动、自动重启、日志和多项目隔离有可重复验证。

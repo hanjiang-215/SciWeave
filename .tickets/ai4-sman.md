@@ -1,0 +1,26 @@
+---
+id: ai4-sman
+status: open
+deps: [ai4-zl0s, ai4-icse, ai4-7z58, ai4-h9ci]
+links: [ai4-fm4a, ai4-jckq]
+created: 2026-10-29T14:26:58Z
+type: feature
+priority: 2
+assignee: Frank Qi
+tags: [toolkit, project-owner, researcher, task-agent, integration, ready-for-agent]
+---
+# 迁移两套工具包到项目部署契约并验证平台边界
+
+依据工具包项目级部署与 Harness 导出设计规格，收口 Project Owner、Researcher 及内嵌 Task Agent 的清单、README、Skills、服务说明和旧安装语义，形成可验证的端到端交付。
+
+## Design
+
+Blocked by Harness 导出器、suitecheck、Harness/Windows 指导和 Linux 服务生命周期。与现有套件形态票、SciencePal 跨 Harness 接入票保持链接关系；本票只接入新项目级边界，不重复实现已有业务 MCP 或 SciencePal bridge。
+
+## Acceptance Criteria
+
+- [ ] Project Owner 与 Researcher 套件均可从显式项目根导出自包含 Harness 输入，并通过 suitecheck 只读校验。
+- [ ] Researcher 内嵌 Task Agent 的 runtime、data、会话、日志与服务实例按项目隔离，旧安装迁移和普通卸载语义有文档与测试。
+- [ ] Linux systemd 项目绑定、移动后显式重绑、升级保留与卸载保留均有端到端验证。
+- [ ] Windows 验证 Python 导出器、路径含空格、清单解析、无凭据输出；SciencePal .cmd 的成功/失败退出码单独验证。
+- [ ] 文档不会把未验证的 Windows Task Agent 后台服务或 Harness 自动执行能力宣称为支持；验证命令和结果回写本票。

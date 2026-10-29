@@ -2,7 +2,7 @@
 id: ai4-jckq
 status: in_progress
 deps: []
-links: [ai4-v869, ai4-roow, ai4-aaff, ai4-v19u]
+links: [ai4-v869, ai4-roow, ai4-aaff, ai4-v19u, ai4-sman, ai4-fm4a]
 created: 2026-10-27T04:00:51Z
 type: feature
 priority: 1
