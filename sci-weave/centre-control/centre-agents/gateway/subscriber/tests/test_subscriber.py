@@ -564,3 +564,49 @@ class CompletionOutboxTests(unittest.TestCase):
         runner.run_once("node-1")
         self.assertEqual(len(publisher.published), 1)
         self.assertEqual(self.store.pending_outbox_events(), [])
+
+
+class RunLoopIsolationTests(unittest.TestCase):
+    """ai4-onvr: one failing target must not skip the rest of the batch."""
+
+    def test_a_failing_runner_does_not_stop_other_targets(self) -> None:
+        from gateway_subscriber.cli import run_loop
+
+        class _Service:
+            def __init__(self) -> None:
+                self.handled: list[Any] = []
+
+            def handle_message(self, message) -> None:
+                self.handled.append(message)
+
+            def queued_targets(self):
+                return ["bad", "good"]
+
+        class _Runner:
+            def __init__(self) -> None:
+                self.ran: list[str] = []
+
+            def run_once(self, target):
+                self.ran.append(target)
+                if target == "bad":
+                    raise RuntimeError("worker exploded")
+                return None
+
+        class _Queue:
+            def __init__(self) -> None:
+                self.batch = [QueueMessage(topic="sciweave.task-handoff.agent-1", partition=0, offset=0, key=None, payload={})]
+                self.committed: list[Any] = []
+
+            def poll(self, timeout_ms):
+                batch, self.batch = self.batch, []
+                return batch
+
+            def commit(self, message):
+                self.committed.append(message)
+
+        service, runner, queue = _Service(), _Runner(), _Queue()
+        processed = run_loop(service, runner, queue, max_messages=1)
+
+        self.assertEqual(processed, 1)
+        self.assertEqual(runner.ran, ["bad", "good"])
+        self.assertEqual(len(queue.committed), 1)
