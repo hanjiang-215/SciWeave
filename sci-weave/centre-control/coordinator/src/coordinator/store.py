@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import json
+import logging
 import sqlite3
 import threading
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
+
+_log = logging.getLogger(__name__)
 
 PENDING_WAITING = "waiting"
 PENDING_READY = "ready"
@@ -241,7 +244,14 @@ class CoordinatorStore:
         if existing is not None:
             if existing.status == PENDING_DONE:
                 # ai4-zc85: done is terminal; a recompute after completion must
-                # not overwrite the published fact (nor blow up the loop).
+                # not overwrite the published fact (nor blow up the loop). Log a
+                # requested status that differs so a caller is not silently
+                # ignored (ai4-onvr).
+                if status != PENDING_DONE:
+                    _log.info(
+                        "pending %s is done; ignoring requested status %s for %s",
+                        task_node_id, status, mapping_domain_id,
+                    )
                 return existing
             self._guard_transition(existing, status)
             self.conn.execute(

@@ -206,7 +206,16 @@ class CoordinatorRuntime:
                     if self.event_router.handle(envelope) is not None:
                         handled += 1
                 except Exception:
-                    logger.exception("governance event could not be handled; continuing with the batch")
+                    # Keep going (a poison event must not pin the partition), but
+                    # log the event identity so the lost record can be replayed
+                    # (ai4-onvr). There is no automatic dead-letter queue yet.
+                    logger.exception(
+                        "governance event could not be handled; continuing with the batch "
+                        "(topic=%s partition=%s offset=%s)",
+                        getattr(envelope, "topic", "?"),
+                        getattr(envelope, "partition", "?"),
+                        getattr(envelope, "offset", "?"),
+                    )
         finally:
             self.events.commit()
         return handled

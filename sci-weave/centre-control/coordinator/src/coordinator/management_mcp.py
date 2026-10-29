@@ -210,6 +210,10 @@ def _handle_single(service: Any, request: Any) -> dict[str, Any] | None:
             arguments["target_node_version_ref"],
             trigger_revision_id=arguments["trigger_revision_id"],
         )
+    except ValueError as exc:
+        # e.g. "not a root node": the caller picked a non-root task, which is an
+        # actionable input error, not a backend failure they should retry.
+        result = {"status": "failed", "reason_code": "not_a_root_node", "accepted": False, "detail": str(exc)}
     except Exception:
         result = {"status": "failed", "reason_code": "dispatch_failed", "accepted": False}
     else:
