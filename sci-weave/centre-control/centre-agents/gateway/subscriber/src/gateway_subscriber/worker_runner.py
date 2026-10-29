@@ -66,12 +66,16 @@ class SubscriberWorkerRunner:
         runtime: RuntimeLike,
         draft_writer: DraftWriter | None = None,
         completion_publisher: "CompletionPublisher | None" = None,
+        stale_worker_seconds: float = 3600.0,
     ) -> None:
         self.store = store
         self.service = service
         self.runtime = runtime
         self.draft_writer = draft_writer
         self.completion_publisher = completion_publisher
+        # ai4-qt7x: leases carry no heartbeat, so this coarse threshold must
+        # exceed the longest expected single execution.
+        self.stale_worker_seconds = stale_worker_seconds
 
     def run_once(self, task_node_id: str) -> dict[str, Any] | None:
         """Claim and execute the next queued record of one target.
@@ -83,6 +87,12 @@ class SubscriberWorkerRunner:
         # ai4-odwi: replay any completion event a previous crash left staged
         # before doing new work, so the queue self-heals on the next iteration.
         self.drain_outbox()
+        # ai4-qt7x: a Worker killed mid-run left its lease behind, which would
+        # block this target forever (the claim below returns when a lease
+        # exists). Reap leases whose execution is gone and fail genuinely stale
+        # ones before claiming.
+        self.store.reap_orphan_leases()
+        self.store.reclaim_stale_leases(older_than_seconds=self.stale_worker_seconds)
         claimed = self._claim(task_node_id)
         if claimed is None:
             return None

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import multiprocessing
 import secrets
 import sqlite3
@@ -20,6 +21,8 @@ from .runtime import RuntimeAdapter, RuntimeOutcome, RuntimeRequest, TestRuntime
 
 API_VERSION = "v1"
 MCP_PROTOCOL_VERSION = "2025-03-26"
+
+_log = logging.getLogger(__name__)
 
 
 def _audit(
@@ -658,9 +661,59 @@ def make_handler(app: GatewayApplication):
     return Handler
 
 
-def serve(app: GatewayApplication, host: str, port: int) -> None:
+def serve(
+    app: GatewayApplication,
+    host: str,
+    port: int,
+    *,
+    sweep_interval_seconds: float = 30.0,
+    stale_worker_seconds: float = 3600.0,
+) -> None:
     server = ThreadingHTTPServer((host, port), make_handler(app))
+    stop = threading.Event()
+    # ai4-qt7x: a boot-time pass recovers executions orphaned by the previous
+    # process; the loop keeps covering crashes that happen while this one runs.
+    sweeper = threading.Thread(
+        target=_sweep_forever,
+        args=(app, stop, sweep_interval_seconds, stale_worker_seconds),
+        name="gateway-recovery",
+        daemon=True,
+    )
+    sweeper.start()
     try:
         server.serve_forever()
     finally:
+        stop.set()
         server.server_close()
+
+
+def sweep_once(app: GatewayApplication, *, stale_worker_seconds: float) -> dict[str, Any]:
+    """Reap dead Worker leases and re-dispatch anything left queued (ai4-qt7x)."""
+    report: dict[str, Any] = {
+        "orphan_leases": app.store.reap_orphan_leases(),
+        "reclaimed": app.store.reclaim_stale_leases(older_than_seconds=stale_worker_seconds),
+        "redispatched": [],
+    }
+    if app.runtime is None:
+        # No Worker runtime is configured, so re-dispatching would only pile up
+        # processes that cannot run; the queued records stay visible instead.
+        return report
+    for execution_id in app.store.queued_execution_ids_without_lease():
+        start_worker_process(app.store.path, execution_id, app.runtime)
+        report["redispatched"].append(execution_id)
+    return report
+
+
+def _sweep_forever(
+    app: GatewayApplication,
+    stop: threading.Event,
+    interval_seconds: float,
+    stale_worker_seconds: float,
+) -> None:
+    while not stop.is_set():
+        try:
+            sweep_once(app, stale_worker_seconds=stale_worker_seconds)
+        except Exception:  # noqa: BLE001 - a failed sweep must not kill the thread
+            _log.exception("gateway recovery sweep failed")
+        if stop.wait(max(interval_seconds, 1.0)):
+            return
