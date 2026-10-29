@@ -57,6 +57,63 @@ _FORMAL_BOOTSTRAP_MARKER_CLASS = {
 }
 
 
+# Candidate instance documents (@type TaskNode / DependencyEdge) must have their
+# classes declared in the branch schema graph before the instance write, or
+# TerminusDB 12.0.8 rejects them with api:SchemaCheckFailure
+# (ascribed_type_does_not_exist) once the schema graph holds any class. This
+# mirrors research-wiki's _WIKI_REVISION_SCHEMA approach. The formal bootstrap
+# marker class (SciweaveFormalBootstrap) is what first makes the schema graph
+# non-empty, so candidate writes always need these declared.
+_TASK_NODE_SCHEMA = {
+    "@type": "Class",
+    "@id": "TaskNode",
+    "@key": {"@type": "Lexical", "@fields": ["version_id"]},
+    "mapping_domain_id": "xsd:string",
+    "logical_id": "xsd:string",
+    "version_id": "xsd:string",
+    "title": "xsd:string",
+    "objective": "xsd:string",
+    "scope": "xsd:string",
+    "acceptance_criteria": {"@type": "Set", "@class": "xsd:string"},
+    "expected_outputs": {"@type": "Set", "@class": "xsd:string"},
+    "required_evidence": {"@type": "Set", "@class": "xsd:string"},
+    "executor_refs": {"@type": "Set", "@class": "xsd:string"},
+    "task_owner_id": "xsd:string",
+    "lifecycle_state": "xsd:string",
+    "proposal_id": {"@type": "Optional", "@class": "xsd:string"},
+    "base_formal_revision_id": {"@type": "Optional", "@class": "xsd:string"},
+    "created_by": "xsd:string",
+    "created_at": "xsd:string",
+}
+
+# source_node_version_ref / target_node_version_ref are inline NodeRef objects.
+# Declaring NodeRef as its own Class makes TerminusDB rewrite them into top-level
+# documents plus string references, breaking the exact read-back comparison.
+# sys:JSON keeps them as opaque inline objects that round-trip unchanged.
+_DEPENDENCY_EDGE_SCHEMA = {
+    "@type": "Class",
+    "@id": "DependencyEdge",
+    "@key": {"@type": "Lexical", "@fields": ["version_id"]},
+    "mapping_domain_id": "xsd:string",
+    "logical_id": "xsd:string",
+    "version_id": "xsd:string",
+    "source_node_version_ref": "sys:JSON",
+    "target_node_version_ref": "sys:JSON",
+    "dependency_kind": "xsd:string",
+    "required_outputs": {"@type": "Optional", "@class": "xsd:string"},
+    "blocks_until": {"@type": "Optional", "@class": "xsd:string"},
+    "activation_condition": {"@type": "Optional", "@class": "xsd:string"},
+    "alternative_group_id": {"@type": "Optional", "@class": "xsd:string"},
+    "lifecycle_state": "xsd:string",
+    "proposal_id": {"@type": "Optional", "@class": "xsd:string"},
+    "base_formal_revision_id": {"@type": "Optional", "@class": "xsd:string"},
+    "created_by": "xsd:string",
+    "created_at": "xsd:string",
+}
+
+_CANDIDATE_SCHEMA_CLASSES = [_TASK_NODE_SCHEMA, _DEPENDENCY_EDGE_SCHEMA]
+
+
 def _contains_documents(actual, expected):
     """Confirm every submitted document exists unchanged in the exact commit."""
     by_id = {document.get("@id"): document for document in actual if isinstance(document, dict)}
@@ -169,6 +226,11 @@ class TerminusDBStore:
                 # A branch at the requested base is not proof that this
                 # operation owns it; never append to a pre-existing branch.
                 return CandidateSnapshotResult("unknown", reason_code=errors.STORE_RESULT_UNKNOWN)
+
+            # 先把 TaskNode / DependencyEdge 类声明进该分支的 schema 图；否则在
+            # schema 图非空时，TerminusDB 会以 ascribed_type_does_not_exist 拒绝实例写入，
+            # 服务把它折成 store_rejected（实测 12.0.8）。声明幂等，重复调用安全。
+            self._declare_candidate_schema(branch, marker)
 
             headers = {"Content-Type": "application/json"}
             if self._authorization:
@@ -407,6 +469,25 @@ class TerminusDBStore:
         ):
             return None
         return new_head
+
+    def _declare_candidate_schema(self, branch, marker):
+        """Declare the candidate document classes in the branch schema graph.
+
+        Idempotent: TerminusDB accepts re-declaring an identical class with 200.
+        Non-fatal on failure — the subsequent instance write is still attempted
+        and will surface a real store_rejected if the schema could not be set.
+        """
+        try:
+            self._request(
+                "POST",
+                self._branch_document_url(branch)
+                + "?author=sciweave&message=" + quote(marker + ":schema", safe="")
+                + "&graph_type=schema",
+                json.dumps(_CANDIDATE_SCHEMA_CLASSES, ensure_ascii=False,
+                           separators=(",", ":")).encode("utf-8"),
+            )
+        except (OSError, TimeoutError, urllib.error.URLError, ValueError):
+            return
 
     def create_formal_snapshot(
         self, store_id: str, database: str, branch_id: str, commit_hash: str, operation_id: str
