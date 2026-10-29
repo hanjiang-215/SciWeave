@@ -108,3 +108,43 @@ class DomainConsistencyTests(unittest.TestCase):
             self.assertTrue(module._warn_if_domain_mismatch(store, "sciweave-wiki"))
             # configured domain matches -> no mismatch
             self.assertFalse(module._warn_if_domain_mismatch(store, "wiki-diabetes"))
+
+
+class PrereviewBaseKeyTests(unittest.TestCase):
+    """ai4-e82q: a moved base must not let an old report pass as current."""
+
+    def test_report_after_base_move_is_a_new_row(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = SqliteStore(str(Path(directory) / "wiki.db"))
+            store.initialize()
+            first = store.append_prereview_report(
+                report_id="r1", candidate_id="c1", candidate_head="h1",
+                base_formal_revision_id="base-A", rule_set_version="v1",
+                checks="{}", verdict="passed", conflict_matrix="{}", created_at="2026-01-01T00:00:00Z",
+            )
+            self.assertEqual(first["report_id"], "r1")
+            # base moved: the same head+rules is re-reviewed against a new base
+            second = store.append_prereview_report(
+                report_id="r2", candidate_id="c1", candidate_head="h1",
+                base_formal_revision_id="base-B", rule_set_version="v1",
+                checks="{}", verdict="passed", conflict_matrix="{}", created_at="2026-01-02T00:00:00Z",
+            )
+            self.assertEqual(second["report_id"], "r2")
+            self.assertEqual(second["base_formal_revision_id"], "base-B")
+            # current report is the newest one, not the stale base-A row
+            current = store.current_prereview_report("c1", "h1")
+            self.assertEqual(current["report_id"], "r2")
+
+    def test_current_report_uses_latest_not_arbitrary(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = SqliteStore(str(Path(directory) / "wiki.db"))
+            store.initialize()
+            for i, base in enumerate(("b0", "b1", "b2")):
+                store.append_prereview_report(
+                    report_id=f"r{i}", candidate_id="c1", candidate_head="h1",
+                    base_formal_revision_id=base, rule_set_version="v1",
+                    checks="{}", verdict="passed", conflict_matrix="{}",
+                    created_at=f"2026-01-0{i+1}T00:00:00Z",
+                )
+            current = store.current_prereview_report("c1", "h1")
+            self.assertEqual(current["report_id"], "r2")
