@@ -416,9 +416,16 @@ class MappingManagementService:
             _required(arguments, "operation_id"),
         )
         if outcome.status == "succeeded" and outcome.formal_revision_id:
+            # Prefer the domain persisted alongside the activation over the
+            # optional tool argument: callers legitimately omit
+            # ``mapping_domain_id`` (React's IDE/CLI only know the merge request),
+            # and publishing with an empty domain leaves the coordinator blind to
+            # the new revision so root-task dispatch silently no-ops for that
+            # domain. Fall back to the argument only when the outcome lacks it.
+            domain = outcome.mapping_domain_id or _text(arguments.get("mapping_domain_id")) or ""
             self._publish_safely(
                 formal_revision_event(
-                    mapping_domain_id=_text(arguments.get("mapping_domain_id")) or "",
+                    mapping_domain_id=domain,
                     formal_revision_id=outcome.formal_revision_id,
                     merge_request_id=arguments.get("merge_request_id"),
                 )

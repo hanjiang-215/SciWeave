@@ -271,16 +271,52 @@ class TerminusDBStore:
             if self._authorization:
                 headers["Authorization"] = self._authorization
             url = self._branch_document_url(branch) + "?author=sciweave&message=" + quote(marker, safe="")
-            status, response_headers, _ = self._request_opener(
+            status, response_headers, body = self._request_opener(
                 "POST", url, headers, canonical_snapshot.encode("utf-8"), self.timeout
             )
             if not 200 <= status < 300:
+                # A candidate branch is reset to base, so re-declaring an existing
+                # node (required when an edge's endpoint is a base node -- the
+                # validator insists every edge endpoint be declared in the change
+                # set) makes the batch POST fail with DocumentIdAlreadyExists.
+                # TerminusDB has no single upsert verb: POST creates only, PUT
+                # replaces only. Fall back to a per-document upsert: PUT then, on
+                # DocumentNotFound, POST. (ai4-su27)
+                if status == 400 and b"DocumentIdAlreadyExists" in (body or b""):
+                    fallback = self._upsert_documents(branch, documents, marker, headers)
+                    if fallback is not None:
+                        return self._reconcile(branch, marker, documents, digest, fallback)
                 if status >= 500:
                     return self._reconcile(branch, marker, documents, digest)
                 return CandidateSnapshotResult("failed", reason_code="store_rejected")
             return self._reconcile(branch, marker, documents, digest, response_headers)
         except (OSError, TimeoutError, urllib.error.URLError, ValueError, json.JSONDecodeError):
             return self._reconcile(branch, marker, documents, digest)
+
+    def _upsert_documents(self, branch, documents, marker, headers):
+        """Per-document insert-or-replace on the candidate branch.
+
+        TerminusDB's document API has no insert-or-replace verb: POST inserts
+        (fails DocumentIdAlreadyExists if the id exists) and PUT replaces (fails
+        DocumentNotFound if the id is absent). A candidate branch is reset to
+        base, so re-declared base nodes already exist while result nodes do not.
+        Try PUT first, fall back to POST for genuinely new documents. Each write
+        uses the same commit ``marker`` so the branch head message stays the
+        marker the caller reconciles against.
+        """
+        base_url = self._branch_document_url(branch)
+        for document in documents:
+            encoded = json.dumps(document, ensure_ascii=False, sort_keys=True).encode("utf-8")
+            url = base_url + "?author=sciweave&message=" + quote(marker, safe="")
+            status, _, _ = self._request_opener("PUT", url, headers, encoded, self.timeout)
+            if 200 <= status < 300:
+                continue
+            if status == 404:
+                status, _, _ = self._request_opener("POST", url, headers, encoded, self.timeout)
+                if 200 <= status < 300:
+                    continue
+            return None
+        return {}
 
     def _reconcile_if_present(self, branch, marker, documents, digest):
         branches = self._branches()

@@ -72,6 +72,13 @@ class ServerSpec:
     command: str | None = None
     args: tuple[str, ...] = ()
     cwd: str | None = None
+    #: Bearer token for a remote (http) MCP server, taken from the token variable
+    #: the card declares in ``environment``. fast-agent turns this into an
+    #: ``Authorization: Bearer <token>`` header. Without it a bearer-only server
+    #: (ours all are) is contacted unauthenticated, fast-agent then attempts OAuth
+    #: dynamic client registration, the server 404s, and the worker dies on start
+    #: (ai4-sue2).
+    access_token: str | None = None
 
 
 def load_cards(libs: str | Path) -> dict[str, MCPCard]:
@@ -160,7 +167,44 @@ def server_spec(card: MCPCard, environ: Mapping[str, str]) -> ServerSpec:
             card.name,
             "endpoint.url_env is required for a remote server; there is no default URL to fall back on",
         )
-    return ServerSpec(name=card.name, transport=transport, url=_env(environ, url_variable, card.name))
+    url = _env(environ, url_variable, card.name)
+    token_variable = _token_variable(card, url_variable)
+    access_token = None
+    if token_variable:
+        raw = (environ.get(token_variable) or "").strip()
+        if not raw:
+            raise MCPServerConfigError(
+                "missing_environment",
+                card.name,
+                f"{token_variable} is not set; the Centre Agent cannot authenticate to this server without it",
+            )
+        access_token = raw
+    return ServerSpec(
+        name=card.name, transport=transport, url=url, access_token=access_token
+    )
+
+
+def _token_variable(card: MCPCard, url_variable: str) -> str | None:
+    """The token variable a remote card declares for its server.
+
+    Preference order: an explicit ``environment`` entry named exactly
+    ``<url_variable minus _URL>_TOKEN`` (e.g. ``RESEARCH_MAPPING_MCP_URL`` ->
+    ``RESEARCH_MAPPING_MCP_TOKEN``), else the single ``environment`` entry ending
+    in ``_TOKEN`` that is not the url variable. A card that declares no token
+    variable is left unauthenticated on purpose (public server).
+    """
+    environment = card.document.get("environment") or []
+    if not isinstance(environment, (list, tuple)):
+        return None
+    names = [str(item) for item in environment if isinstance(item, str)]
+    if url_variable.endswith("_URL"):
+        guessed = url_variable[: -len("_URL")] + "_TOKEN"
+        if guessed in names:
+            return guessed
+    token_names = [name for name in names if name.endswith("_TOKEN") and name != url_variable]
+    if len(token_names) == 1:
+        return token_names[0]
+    return None
 
 
 def fast_agent_servers(
@@ -181,6 +225,8 @@ def fast_agent_servers(
         entry: dict[str, Any] = {"transport": spec.transport}
         if spec.url is not None:
             entry["url"] = spec.url
+        if spec.access_token is not None:
+            entry["access_token"] = spec.access_token
         if spec.command is not None:
             entry["command"] = spec.command
             entry["args"] = list(spec.args)
@@ -205,7 +251,7 @@ def render_fast_agent_config(servers: Mapping[str, Mapping[str, Any]] | None = N
         entry = servers[name]
         lines.append(f"    {name}:")
         lines.append(f"      transport: {entry['transport']}")
-        for key in ("url", "command", "cwd"):
+        for key in ("url", "command", "cwd", "access_token"):
             if entry.get(key):
                 lines.append(f"      {key}: {_quote(str(entry[key]))}")
         if entry.get("args"):
