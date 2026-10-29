@@ -1,0 +1,3 @@
+# ai4-v046 的索引归属与简介（人工维护）
+module = "governance"
+summary = "coordinator 测试 Fake 用 isinstance(Exception)，覆盖不到真实错误与空快照"

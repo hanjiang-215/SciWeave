@@ -1,0 +1,3 @@
+# ai4-ytpp 的索引归属与简介（人工维护）
+module = "infra"
+summary = "email-service 猴补丁 FastMCP 私有 API，升级可能静默失效"
