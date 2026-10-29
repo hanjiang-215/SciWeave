@@ -396,6 +396,42 @@ class WikiManagementMcpTransportTestCase(unittest.TestCase):
         self.assertEqual(json.loads(response.read().decode("utf-8"))["protocol"], "mcp-streamable-http")
 
 
+class WikiHealthDomainMismatchTests(unittest.TestCase):
+    """B12 / ai4-jmiv: a config/data domain mismatch is visible on /health."""
+
+    def _serve(self, health):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        sqlite = SqliteStore(str(Path(tmp.name) / "wiki.sqlite"))
+        sqlite.initialize()
+        service = WikiManagementService(
+            formal_query=type("N", (), {"get_current": lambda self, d: None})(),
+            candidate_service=object(),
+            caller_capabilities={},
+        )
+        server = create_wiki_management_mcp_server(
+            service, host="127.0.0.1", port=0, tokens={"tok": "reader"}, health=health
+        )
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        return server.server_address[1]
+
+    def test_health_reports_mismatch_as_degraded(self):
+        port = self._serve(
+            lambda: {"status": "degraded", "reason_code": "wiki_domain_mismatch", "known_domains": ["other"]}
+        )
+        body = json.loads(urllib.request.urlopen(f"http://127.0.0.1:{port}/health", timeout=5).read().decode())
+        self.assertEqual(body["status"], "degraded")
+        self.assertEqual(body["reason_code"], "wiki_domain_mismatch")
+
+    def test_health_stays_ready_without_a_provider_issue(self):
+        port = self._serve(lambda: {"wiki_domain_id": "d", "formal_pointer_present": True})
+        body = json.loads(urllib.request.urlopen(f"http://127.0.0.1:{port}/health", timeout=5).read().decode())
+        self.assertEqual(body["status"], "ready")
+        self.assertTrue(body["formal_pointer_present"])
+
+
 class _FakeWikiTerminus:
     """Minimal Wiki snapshot store used when only formal wiring is needed."""
 
