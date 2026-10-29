@@ -190,6 +190,7 @@ def _public_error(code: str) -> str:
         "source_not_configured": "来源地址未配置",
         "source_timeout": "查询超时",
         "source_invalid_response": "来源返回格式无效",
+        "source_redirect_rejected": "来源返回了跳转，已拒绝请求",
         "source_unavailable": "来源查询暂不可用",
         "source_stale": "来源数据可能过期",
         "source_partial": "来源只返回部分数据",
