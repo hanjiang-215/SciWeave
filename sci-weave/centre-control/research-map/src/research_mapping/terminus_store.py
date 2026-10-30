@@ -40,9 +40,18 @@ def _normalize_set_fields(document):
     if not isinstance(document, dict):
         return document
     normalized = dict(document)
-    for key, value in normalized.items():
+    for key, value in list(normalized.items()):
         if isinstance(value, list) and all(isinstance(item, str) for item in value):
             normalized[key] = sorted(value)
+        elif value is None:
+            # TerminusDB omits an empty ``@type: Set`` field entirely from the
+            # read-back, so an optional Set submitted as ``[]`` (or omitted) is
+            # returned as ``None`` or absent. Treating ``None`` as the empty
+            # list keeps ``_contains_documents`` from reporting a false
+            # ``store_result_unknown`` for every node that has no executors or
+            # every edge without optional fields. A non-empty value never
+            # collapses to empty here, so real differences still show.
+            normalized[key] = []
     return normalized
 
 
@@ -57,12 +66,95 @@ _FORMAL_BOOTSTRAP_MARKER_CLASS = {
 }
 
 
+# Candidate instance documents (@type TaskNode / DependencyEdge) must have their
+# classes declared in the branch schema graph before the instance write, or
+# TerminusDB 12.0.8 rejects them with api:SchemaCheckFailure
+# (ascribed_type_does_not_exist) once the schema graph holds any class. This
+# mirrors research-wiki's _WIKI_REVISION_SCHEMA approach. The formal bootstrap
+# marker class (SciweaveFormalBootstrap) is what first makes the schema graph
+# non-empty, so candidate writes always need these declared.
+_TASK_NODE_SCHEMA = {
+    "@type": "Class",
+    "@id": "TaskNode",
+    "@key": {"@type": "Lexical", "@fields": ["version_id"]},
+    "mapping_domain_id": "xsd:string",
+    "logical_id": "xsd:string",
+    "version_id": "xsd:string",
+    "title": "xsd:string",
+    "objective": "xsd:string",
+    "scope": "xsd:string",
+    "acceptance_criteria": {"@type": "Set", "@class": "xsd:string"},
+    "expected_outputs": {"@type": "Set", "@class": "xsd:string"},
+    "required_evidence": {"@type": "Set", "@class": "xsd:string"},
+    "executor_refs": {"@type": "Set", "@class": "xsd:string"},
+    "task_owner_id": "xsd:string",
+    "lifecycle_state": "xsd:string",
+    "proposal_id": {"@type": "Optional", "@class": "xsd:string"},
+    "base_formal_revision_id": {"@type": "Optional", "@class": "xsd:string"},
+    "created_by": "xsd:string",
+    "created_at": "xsd:string",
+}
+
+# source_node_version_ref / target_node_version_ref are inline NodeRef objects.
+# Declaring NodeRef as its own Class makes TerminusDB rewrite them into top-level
+# documents plus string references, breaking the exact read-back comparison.
+# sys:JSON keeps them as opaque inline objects that round-trip unchanged.
+_DEPENDENCY_EDGE_SCHEMA = {
+    "@type": "Class",
+    "@id": "DependencyEdge",
+    "@key": {"@type": "Lexical", "@fields": ["version_id"]},
+    "mapping_domain_id": "xsd:string",
+    "logical_id": "xsd:string",
+    "version_id": "xsd:string",
+    "source_node_version_ref": "sys:JSON",
+    "target_node_version_ref": "sys:JSON",
+    "dependency_kind": "xsd:string",
+    "required_outputs": {"@type": "Optional", "@class": "xsd:string"},
+    "blocks_until": {"@type": "Optional", "@class": "xsd:string"},
+    "activation_condition": {"@type": "Optional", "@class": "xsd:string"},
+    "alternative_group_id": {"@type": "Optional", "@class": "xsd:string"},
+    "lifecycle_state": "xsd:string",
+    "proposal_id": {"@type": "Optional", "@class": "xsd:string"},
+    "base_formal_revision_id": {"@type": "Optional", "@class": "xsd:string"},
+    "created_by": "xsd:string",
+    "created_at": "xsd:string",
+}
+
+_CANDIDATE_SCHEMA_CLASSES = [_TASK_NODE_SCHEMA, _DEPENDENCY_EDGE_SCHEMA]
+
+
+def _documents_equal(stored, submitted):
+    """Compare one stored document against the submitted one.
+
+    TerminusDB omits an empty ``@type: Set`` field from the read-back entirely,
+    so a submitted ``executor_refs: []`` (or any optional Set given as ``[]``)
+    comes back as a missing key. Treating a missing key that the other side
+    holds as an empty list as equal avoids a false ``store_result_unknown`` on
+    every document that leaves an optional Set empty. Normalising away such
+    empty Sets on both sides keeps the comparison order- and presence-robust.
+    """
+    if not isinstance(stored, dict) or not isinstance(submitted, dict):
+        return False
+    a = _normalize_set_fields(stored)
+    b = _normalize_set_fields(submitted)
+    for key in set(a) | set(b):
+        av = a.get(key)
+        bv = b.get(key)
+        # A field present as an empty list on either side and missing (or None)
+        # on the other is the same empty Set after TerminusDB's round-trip.
+        if av in (None, []) and bv in (None, []):
+            continue
+        if av != bv:
+            return False
+    return True
+
+
 def _contains_documents(actual, expected):
     """Confirm every submitted document exists unchanged in the exact commit."""
     by_id = {document.get("@id"): document for document in actual if isinstance(document, dict)}
     return all(
         isinstance(document.get("@id"), str)
-        and _normalize_set_fields(by_id.get(document["@id"])) == _normalize_set_fields(document)
+        and _documents_equal(by_id.get(document["@id"]), document)
         for document in expected
     )
 
@@ -170,20 +262,61 @@ class TerminusDBStore:
                 # operation owns it; never append to a pre-existing branch.
                 return CandidateSnapshotResult("unknown", reason_code=errors.STORE_RESULT_UNKNOWN)
 
+            # 先把 TaskNode / DependencyEdge 类声明进该分支的 schema 图；否则在
+            # schema 图非空时，TerminusDB 会以 ascribed_type_does_not_exist 拒绝实例写入，
+            # 服务把它折成 store_rejected（实测 12.0.8）。声明幂等，重复调用安全。
+            self._declare_candidate_schema(branch, marker)
+
             headers = {"Content-Type": "application/json"}
             if self._authorization:
                 headers["Authorization"] = self._authorization
             url = self._branch_document_url(branch) + "?author=sciweave&message=" + quote(marker, safe="")
-            status, response_headers, _ = self._request_opener(
+            status, response_headers, body = self._request_opener(
                 "POST", url, headers, canonical_snapshot.encode("utf-8"), self.timeout
             )
             if not 200 <= status < 300:
+                # A candidate branch is reset to base, so re-declaring an existing
+                # node (required when an edge's endpoint is a base node -- the
+                # validator insists every edge endpoint be declared in the change
+                # set) makes the batch POST fail with DocumentIdAlreadyExists.
+                # TerminusDB has no single upsert verb: POST creates only, PUT
+                # replaces only. Fall back to a per-document upsert: PUT then, on
+                # DocumentNotFound, POST. (ai4-su27)
+                if status == 400 and b"DocumentIdAlreadyExists" in (body or b""):
+                    fallback = self._upsert_documents(branch, documents, marker, headers)
+                    if fallback is not None:
+                        return self._reconcile(branch, marker, documents, digest, fallback)
                 if status >= 500:
                     return self._reconcile(branch, marker, documents, digest)
                 return CandidateSnapshotResult("failed", reason_code="store_rejected")
             return self._reconcile(branch, marker, documents, digest, response_headers)
         except (OSError, TimeoutError, urllib.error.URLError, ValueError, json.JSONDecodeError):
             return self._reconcile(branch, marker, documents, digest)
+
+    def _upsert_documents(self, branch, documents, marker, headers):
+        """Per-document insert-or-replace on the candidate branch.
+
+        TerminusDB's document API has no insert-or-replace verb: POST inserts
+        (fails DocumentIdAlreadyExists if the id exists) and PUT replaces (fails
+        DocumentNotFound if the id is absent). A candidate branch is reset to
+        base, so re-declared base nodes already exist while result nodes do not.
+        Try PUT first, fall back to POST for genuinely new documents. Each write
+        uses the same commit ``marker`` so the branch head message stays the
+        marker the caller reconciles against.
+        """
+        base_url = self._branch_document_url(branch)
+        for document in documents:
+            encoded = json.dumps(document, ensure_ascii=False, sort_keys=True).encode("utf-8")
+            url = base_url + "?author=sciweave&message=" + quote(marker, safe="")
+            status, _, _ = self._request_opener("PUT", url, headers, encoded, self.timeout)
+            if 200 <= status < 300:
+                continue
+            if status == 404:
+                status, _, _ = self._request_opener("POST", url, headers, encoded, self.timeout)
+                if 200 <= status < 300:
+                    continue
+            return None
+        return {}
 
     def _reconcile_if_present(self, branch, marker, documents, digest):
         branches = self._branches()
@@ -407,6 +540,25 @@ class TerminusDBStore:
         ):
             return None
         return new_head
+
+    def _declare_candidate_schema(self, branch, marker):
+        """Declare the candidate document classes in the branch schema graph.
+
+        Idempotent: TerminusDB accepts re-declaring an identical class with 200.
+        Non-fatal on failure — the subsequent instance write is still attempted
+        and will surface a real store_rejected if the schema could not be set.
+        """
+        try:
+            self._request(
+                "POST",
+                self._branch_document_url(branch)
+                + "?author=sciweave&message=" + quote(marker + ":schema", safe="")
+                + "&graph_type=schema",
+                json.dumps(_CANDIDATE_SCHEMA_CLASSES, ensure_ascii=False,
+                           separators=(",", ":")).encode("utf-8"),
+            )
+        except (OSError, TimeoutError, urllib.error.URLError, ValueError):
+            return
 
     def create_formal_snapshot(
         self, store_id: str, database: str, branch_id: str, commit_hash: str, operation_id: str

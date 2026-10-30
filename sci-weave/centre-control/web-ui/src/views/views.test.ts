@@ -25,7 +25,12 @@ describe('dashboard views', () => {
 
   it('shows task dependencies, blocker and stable detail navigation', async () => {
     const { wrapper, router } = await renderAt('/route?status=waiting')
+    // The filtered task renders in the default map view with its blocker and owner.
     expect(wrapper.text()).toContain('等待 Project Owner 审核候选变化')
+    expect(wrapper.text()).toContain('负责人：研究员 B')
+    // Switching to the list view keeps the original dependency labels.
+    await wrapper.get('button[role="tab"]:nth-child(2)').trigger('click')
+    await flushPromises()
     expect(wrapper.text()).toContain('前置任务')
     await router.push('/tasks/task-validation')
     await flushPromises()
