@@ -137,11 +137,24 @@ class SubscriberWorkerRunner:
             return dict(queued)
 
     def _execute(self, claimed: dict[str, Any]) -> dict[str, Any]:
+        domain = str(claimed.get("mapping_domain_id") or "").strip()
+        reference = str(claimed.get("trigger_ref") or "").strip()
+        # The coordinator puts mapping_domain_id on the handoff and the subscriber
+        # stores it on the execution record; without threading it into the command
+        # text the agent has no domain to read a snapshot for and stalls asking for
+        # one (the message carried the id all along). Give the agent the domain it
+        # is working in, not just the node id.
+        parts = [f"Execute TaskNode {claimed['task_node_id']}"]
+        if domain:
+            parts.append(f"in mapping domain {domain!r} (mapping_domain_id={domain})")
+        if reference:
+            parts.append(f"triggered by {reference}")
+        command_text = " ".join(parts)
         request = WorkerRequest(
             execution_id=claimed["execution_id"],
             task_node_id=claimed["task_node_id"],
             session_id=claimed["session_id"],
-            command_text=f"Execute TaskNode {claimed['task_node_id']} triggered by {claimed.get('trigger_ref') or ''}".strip(),
+            command_text=command_text,
         )
         try:
             outcome = self.runtime.resume(request) if claimed.get("resume_of") else self.runtime.run(request)

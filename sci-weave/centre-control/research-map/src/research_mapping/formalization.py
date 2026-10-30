@@ -28,6 +28,11 @@ class FormalizationOutcome:
     formal_revision_id: str | None = None
     reason_code: str | None = None
     attempt_number: int | None = None
+    #: The mapping domain this formalization belongs to, taken from the persisted
+    #: candidate/attempt facts. Present on ``succeeded`` outcomes so the caller can
+    #: publish ``formal_revision_published`` with the correct domain even when the
+    #: optional ``mapping_domain_id`` tool argument was not supplied.
+    mapping_domain_id: str | None = None
 
 
 class MappingFormalizationService:
@@ -122,7 +127,8 @@ class MappingFormalizationService:
                     return FormalizationOutcome("reconciliation_required", operation_id, prior["result_id"],
                                                 reason_code="formal_snapshot_reconciliation_required")
                 return FormalizationOutcome("succeeded", operation_id, prior["result_id"],
-                                            prior["formal_revision_id"], attempt_number=prior["attempt_number"])
+                                            prior["formal_revision_id"], attempt_number=prior["attempt_number"],
+                                            mapping_domain_id=prior["mapping_domain_id"])
             else:
                 committed_ref = None
             details = db.execute(
@@ -367,13 +373,15 @@ class MappingFormalizationService:
                 snapshot.store_id, snapshot.branch_id, snapshot.commit_hash, snapshot.content_digest,
             ):
                 return FormalizationOutcome("succeeded", operation_id, result_id, revision_id,
-                                            attempt_number=attempt_no)
+                                            attempt_number=attempt_no,
+                                            mapping_domain_id=details["mapping_domain_id"])
             status, reason = "reconciliation_required", str(error) or "activation_outcome_unknown"
             self._set_attempt_status(result_id, status, reason, snapshot)
             return FormalizationOutcome(status, operation_id, result_id, reason_code=reason,
                                         attempt_number=attempt_no)
         return FormalizationOutcome("succeeded", operation_id, result_id, revision_id,
-                                    attempt_number=attempt_no)
+                                    attempt_number=attempt_no,
+                                    mapping_domain_id=details["mapping_domain_id"])
 
 
 def _utc_now() -> str:
