@@ -55,3 +55,7 @@ dsh/data/
 dsh/pids/
 dsh/logs/
 dsh/.env
+
+# 本地 compose 覆盖文件（记录本机 Redpanda 网络绕行，生产部署不需要）
+compose.override.yaml
+**/compose.override.yaml

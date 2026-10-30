@@ -1,0 +1,3 @@
+# ai4-icse 的索引归属与简介（人工维护）
+module = "agent"
+summary = "将 suitecheck 收敛为只读声明式套件校验，禁止执行清单中的任意命令"

@@ -5,19 +5,15 @@ Two subcommands, and the split is the point:
 * ``check`` is static. It reads manifests and payload files and reports
   findings. It never runs anything from a manifest, so it is safe to run in CI
   over a suite someone else wrote.
-* ``run install --dry-run`` / ``run check`` executes the commands a manifest
-  declares, because that is what the installing Agent does. ``--dry-run``
-  prints them instead, which is the only way to see what a zip would do before
-  running it.
+* ``run`` only lists the commands a manifest declares. It never executes them;
+  installation and service lifecycle are the consuming Harness's responsibility.
 
-Exit codes: 0 clean, 1 findings at error severity, 2 usage or manifest error.
+Exit codes: 0 clean or inspected, 1 findings at error severity, 2 usage or manifest error.
 """
 
 from __future__ import annotations
 
 import argparse
-import shlex
-import subprocess
 import sys
 from pathlib import Path
 
@@ -74,21 +70,16 @@ def _check(targets: list[str]) -> int:
     return 0
 
 
-def _run(target: str, section: str, *, dry_run: bool) -> int:
+def _run(target: str, section: str) -> int:
+    """List the commands a manifest declares. Never executes them."""
     suite = load_manifest(target)
     commands = suite.install if section == "install" else suite.check
     if not commands:
         print(f"{suite.suite} declares no {section} command", file=sys.stderr)
         return 2
+    print(f"{suite.suite} declares {len(commands)} {section} command(s); suitecheck never executes them")
     for command in commands:
-        argv = shlex.split(command)
-        print(f"$ {command}" if not dry_run else command)
-        if dry_run:
-            continue
-        completed = subprocess.run(argv, cwd=suite.root)
-        if completed.returncode != 0:
-            print(f"failed with {completed.returncode}: {command}", file=sys.stderr)
-            return completed.returncode
+        print(f"  {command}")
     return 0
 
 
@@ -99,16 +90,15 @@ def main(argv: list[str] | None = None) -> int:
     check = sub.add_parser("check", help="statically validate one suite directory, manifest, or a directory of suites")
     check.add_argument("target", nargs="?", default=".")
 
-    runner = sub.add_parser("run", help="execute a manifest's declared commands")
+    runner = sub.add_parser("run", help="list a manifest's declared commands without running them")
     runner.add_argument("section", choices=("install", "check"))
     runner.add_argument("target")
-    runner.add_argument("--dry-run", action="store_true", help="print the commands instead of running them")
 
     args = parser.parse_args(argv)
     if args.command == "check":
         return _check([args.target])
     try:
-        return _run(args.target, args.section, dry_run=args.dry_run)
+        return _run(args.target, args.section)
     except ManifestError as error:
         print(error, file=sys.stderr)
         return 2
