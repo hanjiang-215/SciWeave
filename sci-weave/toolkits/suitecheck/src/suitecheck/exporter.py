@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Iterator, Union
 
 from .manifest import MANIFEST_NAME, ManifestError, load_manifest
+from .secrets import ASSIGNMENT, BEARER, looks_like_secret_value
 from .project_layout import ProjectRootRequired, initialize_project
 
 
@@ -38,27 +39,6 @@ _IGNORED = shutil.ignore_patterns(
     ".env*", ".venv", "venv", "__pycache__", "*.pyc", ".git", "*.sqlite", "*.sqlite3", "*.log", "sessions",
 )
 
-#: ``NAME=value`` at the start of a line, where NAME looks like a credential.
-#: The value is captured whole, quoted or bare, so prose such as
-#: ``PURGE_TOKEN = "PURGE SCIWEAVE DATA"`` is not mistaken for a credential.
-_SECRET_ASSIGNMENT = re.compile(
-    r"(?m)^[ \t]*(?:export[ \t]+)?"
-    r"([A-Z][A-Z0-9_]*(?:TOKEN|SECRET|PASSWORD|PASSWD|API_KEY|CREDENTIAL|PRIVATE_KEY)[A-Z0-9_]*)"
-    r"[ \t]*=[ \t]*(?P<value>\"[^\"]*\"|'[^']*'|[^\s#]+)"
-)
-
-#: Values that document a variable instead of carrying one. A truncated value
-#: (``eyJ...``) is documentation of a shape, not a credential.
-_PLACEHOLDER = re.compile(
-    r"^(?:replace[-_]?with.*|change[-_]?me|todo|<[^>]*>|\$\{[^}]*\}|\$[A-Z_]+|[x*.\-]+|.*(?:\.\.\.|…))$",
-    re.IGNORECASE,
-)
-
-#: A credential pasted into an Authorization header. Real tokens are long; a
-#: short word-like stand-in such as ``buffer-token`` is a test fixture.
-_BEARER = re.compile(r"(?i)\bbearer\s+(?!<|\$\{|replace-)[A-Za-z0-9._~+/-]{20,}=*")
-
-
 def _language_files(root: Path) -> Iterator[tuple[Path, str]]:
     """Yield every decodable text file under ``root``; skip binaries quietly."""
     for path in sorted(root.rglob("*")):
@@ -70,24 +50,14 @@ def _language_files(root: Path) -> Iterator[tuple[Path, str]]:
             continue
 
 
-def _looks_like_secret(value: str) -> bool:
-    """A credential value: no prose, not a placeholder, not a bare reference."""
-    literal = value.strip("\"'")
-    if not literal:
-        return False
-    if any(character.isspace() for character in literal):
-        return False  # prose, e.g. a confirmation phrase
-    return not _PLACEHOLDER.match(literal)
-
-
 def _secret_offenders(root: Path) -> list[str]:
     """Return files that contain what looks like a real credential value."""
     offenders: list[str] = []
     for path, text in _language_files(root):
         if path.name == "manifest.json":
             continue
-        assignment = any(_looks_like_secret(match.group("value")) for match in _SECRET_ASSIGNMENT.finditer(text))
-        if assignment or _BEARER.search(text):
+        assignment = any(looks_like_secret_value(match.group("value")) for match in ASSIGNMENT.finditer(text))
+        if assignment or BEARER.search(text):
             offenders.append(str(path.relative_to(root)))
     return sorted(set(offenders))
 

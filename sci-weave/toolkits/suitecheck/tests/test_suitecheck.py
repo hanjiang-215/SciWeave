@@ -274,14 +274,26 @@ class PayloadTests(SuiteFixture):
         codes = {finding.code for finding in errors(validate_suite(root))}
         self.assertIn("boundary_missing", codes)
 
-    def test_a_suite_without_commands_cannot_be_installed(self) -> None:
+    def test_a_declared_env_var_set_in_this_shell_is_flagged(self) -> None:
+        """The secret-boundary warning must fire on a real declared env name."""
+        root = self.build()
+        import os
+
+        os.environ["DEMO_MCP_URL"] = "https://user:pass@example.test"
+        self.addCleanup(os.environ.pop, "DEMO_MCP_URL", None)
+        findings = validate_suite(root)
+        codes = {finding.code for finding in findings}
+        self.assertIn("env_looks_like_secret", codes)
+
+    def test_a_suite_may_declare_no_commands(self) -> None:
+        """Spec §6 retires install/check as an execution contract: absence is legal."""
         root = self.build()
         text = (root / "suite.yaml").read_text(encoding="utf-8")
         text = text.replace("install:\n  - ./install.sh\n", "").replace("check:\n  - ./check.sh\n", "")
         (root / "suite.yaml").write_text(text, encoding="utf-8")
         codes = {finding.code for finding in errors(validate_suite(root))}
-        self.assertIn("install_commands_missing", codes)
-        self.assertIn("check_commands_missing", codes)
+        self.assertNotIn("install_commands_missing", codes)
+        self.assertNotIn("check_commands_missing", codes)
 
     def test_a_suite_without_payload_is_empty(self) -> None:
         root = self.build()

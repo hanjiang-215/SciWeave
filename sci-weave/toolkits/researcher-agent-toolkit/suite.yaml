@@ -71,6 +71,11 @@ capabilities:
       linux: {status: supported, limitations: []}
       windows: {status: unverified, limitations: [Python exporter not yet run on Windows; Task Agent services unverified]}
       macos: {status: unverified, limitations: [not tested in this release]}
+  - name: candidate_submit
+    platforms:
+      linux: {status: supported, limitations: [draft-buffer, research-mapping and research-wiki cards]}
+      windows: {status: unverified, limitations: [not tested in this release]}
+      macos: {status: unverified, limitations: [not tested in this release]}
 export:
   harness_input: .sciweave/harness/researcher-agent-toolkit
   include: [suite.yaml, install-suite, upgrade-suite, register-instance, audit-buffer, use-research-map, use-research-wiki, promote-draft, push-task-agent-to-rework, deploy-task-agent, mcp]

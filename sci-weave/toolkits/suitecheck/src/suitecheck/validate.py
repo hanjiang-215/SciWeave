@@ -24,6 +24,7 @@ from .manifest import (
     SuiteManifest,
     load_manifest,
 )
+from .secrets import SECRET_NAME_SUFFIXES, contains_pasted_value
 
 
 @dataclass(frozen=True)
@@ -184,33 +185,6 @@ def _cron_findings(suite: SuiteManifest) -> list[Finding]:
     return findings
 
 
-def _command_findings(suite: SuiteManifest) -> list[Finding]:
-    """An install/check command must at least name a program to run.
-
-    `suitecheck` never executes these; `suitecheck run` does, explicitly. A
-    manifest with an empty command list is a suite nobody can install, which is
-    exactly the state `docs/AI4Sci-review-2026-10-22.md` recorded for all four
-    toolkits.
-    """
-    findings: list[Finding] = []
-    if not suite.install:
-        findings.append(_error("install_commands_missing", suite.suite, "no install command is declared"))
-    if not suite.check:
-        findings.append(_error("check_commands_missing", suite.suite, "no check command is declared"))
-    for label, commands in (("install", suite.install), ("check", suite.check)):
-        for command in commands:
-            if not command.strip():
-                findings.append(_error("command_empty", suite.suite, f"{label}: empty command"))
-            elif not command.split()[0].strip():
-                findings.append(_error("command_empty", suite.suite, f"{label}: {command!r} has no program"))
-    return findings
-
-
-_SECRET_VALUE = re.compile(
-    r"(?i)(?:^|\s)(?:[A-Z][A-Z0-9_]*(?:TOKEN|SECRET|PASSWORD|PASSWD|API_KEY|CREDENTIAL)[A-Z0-9_]*)\s*=\s*\S+"
-)
-
-
 def _configuration_findings(suite: SuiteManifest) -> list[Finding]:
     if suite.export is None:
         return []
@@ -220,11 +194,11 @@ def _configuration_findings(suite: SuiteManifest) -> list[Finding]:
         findings.append(_error("configuration_missing", suite.suite, f"{path.name} does not exist"))
         return findings
     text = path.read_text(encoding="utf-8", errors="replace")
-    if _SECRET_VALUE.search(text) or re.search(r"(?i)bearer\s+[A-Za-z0-9._~-]{8,}", text):
+    if contains_pasted_value(text):
         findings.append(_error("configuration_secret_value", suite.suite, "configuration guidance must contain names, not secret values"))
     declared = {item.name: item for item in suite.env}
     for name in re.findall(r"(?m)^\s*[-*]?\s*`?([A-Z][A-Z0-9_]*)`?", text):
-        if name not in declared and name.endswith(("TOKEN", "SECRET", "PASSWORD", "KEY")):
+        if name not in declared and name.endswith(SECRET_NAME_SUFFIXES):
             findings.append(_error("configuration_undeclared_secret", name, "secret-like variable is not declared in suite.requires.env"))
     return findings
 
@@ -274,7 +248,7 @@ def _export_findings(suite: SuiteManifest) -> list[Finding]:
             continue
         if not (suite.root / relative).exists():
             findings.append(_error("export_include_missing", relative, "include entry does not exist in the suite"))
-    for kind, refs in (("skill", suite.skills), ("mcp", suite.mcp)):
+    for kind, refs in (("skill", suite.skills), ("mcp", suite.mcp), ("hook", suite.hooks), ("cron", suite.cron)):
         for ref in refs:
             path = getattr(ref, "path", None) or getattr(ref, "card", None)
             if path is None or path in excluded:
@@ -304,8 +278,9 @@ def _boundary_findings(suite: SuiteManifest) -> list[Finding]:
         findings.append(_error("boundary_missing", suite.suite, "boundary.may_modify is empty"))
     if not suite.boundary.get("must_not"):
         findings.append(_error("boundary_missing", suite.suite, "boundary.must_not is empty"))
+    declared_names = {requirement.name for requirement in suite.env}
     for label, value in os.environ.items():
-        if label in suite.requires.get("env", ()) and value and "://" in value:
+        if label in declared_names and value and "://" in value:
             findings.append(
                 _warn("env_looks_like_secret", suite.suite, f"{label} is set in this environment; manifests must not carry values")
             )
@@ -313,6 +288,9 @@ def _boundary_findings(suite: SuiteManifest) -> list[Finding]:
 
 
 def validate_suite(suite_or_path: SuiteManifest | Path | str) -> list[Finding]:
+    # ``install``/``check`` are not validated as an execution contract: spec §6
+    # retires them as such, and manifest parsing already rejects a malformed
+    # list. Absence is legal, so there is nothing to check here.
     """Every finding for one suite, most severe first per section order."""
     suite = suite_or_path if isinstance(suite_or_path, SuiteManifest) else load_manifest(suite_or_path)
     findings: list[Finding] = []
@@ -324,7 +302,6 @@ def validate_suite(suite_or_path: SuiteManifest | Path | str) -> list[Finding]:
     findings.extend(_mcp_findings(suite))
     findings.extend(_hook_findings(suite))
     findings.extend(_cron_findings(suite))
-    findings.extend(_command_findings(suite))
     if not suite.skills and not suite.mcp:
         # A suite may legitimately declare no cards: a suite that only installs
         # configuration for a service whose MCP clients live in that service's

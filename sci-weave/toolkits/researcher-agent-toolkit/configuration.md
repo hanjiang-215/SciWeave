@@ -39,7 +39,8 @@ and Harness authorization. This ticket does not implement service lifecycle.
 - Confirm every required variable is present without printing its value.
 - Verify each endpoint with the Harness/MCP health check and confirm the expected actor.
 - Run `suitecheck check` against the suite and inspect only status, names, and paths.
-- On Windows, the Harness input directory is supported; Task Agent background services
-  remain unverified and require manual review. Do not report them as installed.
+- On Windows the Python exporter has not been verified yet (suite declares `unverified`);
+  Task Agent background services are unsupported there. Do not report anything as installed
+  until it is actually verified on a Windows host — see `sci-weave/toolkits/WINDOWS.md`.
 - If the Harness cannot perform side effects, show the user the manual registration
   and verification steps instead of executing them.
