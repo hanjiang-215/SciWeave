@@ -252,6 +252,7 @@ class PayloadTests(SuiteFixture):
         codes = {finding.code for finding in errors(validate_suite(root))}
         self.assertIn("capability_unknown", codes)
 
+    @unittest.skipUnless(os.name == "posix", "a POSIX executable bit cannot be removed (or observed) on Windows")
     def test_a_hook_must_be_executable(self) -> None:
         root = self.build()
         hook = root / "hooks/check.sh"

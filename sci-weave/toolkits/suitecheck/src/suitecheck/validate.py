@@ -164,7 +164,11 @@ def _hook_findings(suite: SuiteManifest) -> list[Finding]:
             findings.append(_error("hook_missing", hook.name, f"{hook.path} does not exist"))
             continue
         mode = path.stat().st_mode
-        if not mode & stat.S_IXUSR:
+        # The executable bit is a POSIX concept: NTFS has no such attribute, and
+        # Python only reports S_IXUSR for PATHEXT kinds (``.exe``/``.bat``/...),
+        # never for a ``.sh`` hook. Checking it on Windows would reject every
+        # suite authored there, and ``chmod`` cannot make the bit exist.
+        if os.name == "posix" and not mode & stat.S_IXUSR:
             findings.append(_error("hook_not_executable", hook.name, f"{hook.path} is not executable"))
         if path.suffix not in {".sh", ".py"}:
             findings.append(_warn("hook_unexpected_kind", hook.name, f"{hook.path} is not .sh or .py"))
