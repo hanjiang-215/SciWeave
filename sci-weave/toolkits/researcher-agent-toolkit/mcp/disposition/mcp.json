@@ -1,19 +1,22 @@
 {
   "name": "disposition",
   "version": "0.1.0",
-  "description": "The researcher's own disposition surface for their Task Agent: look at what is queued, running or waiting for an answer, answer it, cancel it, and record an append-only accept/reject on a finished execution.",
+  "description": "The researcher's own disposition surface for their Task Agent: look at what is queued, running or waiting for an answer, answer it, cancel it, and confirm/reject a finished execution. Confirming (accepted) marks the task done on the board and, when CONFIRM_UPLINK_URL is set, forwards the confirmation to the centre gateway so downstream work may proceed.",
   "transport": "streamable-http",
   "endpoint": {
     "url_env": "DISPOSITION_MCP_URL"
   },
   "environment": [
     "DISPOSITION_MCP_URL",
-    "DISPOSITION_MCP_TOKEN"
+    "DISPOSITION_MCP_TOKEN",
+    "CONFIRM_UPLINK_URL",
+    "CONFIRM_UPLINK_TOKEN"
   ],
   "notes": [
     "This is the local gateway/mcp role of the kit the researcher deployed; it is not the central gateway. It reads and writes the local execution store only.",
     "There is deliberately no submit_owner_command and no tool that creates an execution. Handoffs arrive over the queue; a tool that could start one would be a back door around the handoff contract.",
-    "review_execution records a decision on a finished execution. It is not a candidate review and carries no formalize capability: the draft a worker writes still has to go through the draft box and the domain MCP."
+    "review_execution records a decision on a finished execution. It is not a candidate review and carries no formalize capability: the draft a worker writes still has to go through the draft box and the domain MCP.",
+    "review_execution(accepted) is the ONLY way a task becomes 已完成 on the board. When CONFIRM_UPLINK_URL + CONFIRM_UPLINK_TOKEN are configured, it also calls the centre gateway confirm_execution so the task is confirmed server-side (and downstream tasks may start). Without them it records the decision locally only."
   ],
   "tools": [
     {
@@ -142,7 +145,7 @@
     },
     {
       "name": "review_execution",
-      "description": "Record an append-only review decision (accepted or rejected) on a finished execution.",
+      "description": "Confirm (accepted) or reject (rejected) a finished execution. accepted marks the task 已完成 on the board and forwards the confirmation to the centre when CONFIRM_UPLINK_URL is configured; rejected sends the task back. Requires a reason.",
       "input": {
         "type": "object",
         "required": [
@@ -167,15 +170,20 @@
         }
       },
       "output": {
+        "review_id": "string",
         "execution_id": "string",
-        "decision": "string"
+        "decision": "string",
+        "reason": "string",
+        "confirmation_status": "string",
+        "centre_confirmation": "object|null"
       },
       "allowed": [
         "recording that the researcher read the worker's own report"
       ],
       "failures": [
         "execution_not_found",
-        "invalid_transition"
+        "invalid_transition",
+        "centre_confirmation_failed"
       ]
     }
   ]

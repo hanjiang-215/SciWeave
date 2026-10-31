@@ -75,6 +75,8 @@ services:
       SCIWEAVE_MAPPING_DASHBOARD_HOST: 0.0.0.0
       SCIWEAVE_MAPPING_DASHBOARD_PORT: "8711"
       SCIWEAVE_MAPPING_DASHBOARD_TOKEN: ${CENTRE_TOKEN_DASHBOARD_SOURCE:?set CENTRE_TOKEN_DASHBOARD_SOURCE in .env}
+      # B7：把执行事实叠加到任务状态；与 gateway 用同一份执行库（变量名必须是这个，代码读的是它）
+      SCIWEAVE_MAPPING_EXECUTION_DB: /data/centre-agents/centre.sqlite3
       # token -> actor_id；键是 Bearer 后的原文，值是能力表里的 actor。
       SCIWEAVE_MAPPING_MCP_TOKENS_JSON: >-
         {"${CENTRE_TOKEN_MAP_AGENT:?set CENTRE_TOKEN_MAP_AGENT in .env}":"map-agent",

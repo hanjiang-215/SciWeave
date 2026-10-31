@@ -34,8 +34,15 @@ def main() -> int:
         store,
         required("DISPOSITION_MCP_TOKEN"),
     )
+    uplink = bool(
+        os.environ.get("CONFIRM_UPLINK_URL", "").strip()
+        and os.environ.get("CONFIRM_UPLINK_TOKEN", "").strip()
+    )
     logging.info(
-        "disposition MCP listening on %s:%s", server.server_address[0], server.server_address[1]
+        "disposition MCP listening on %s:%s (centre confirm uplink: %s)",
+        server.server_address[0],
+        server.server_address[1],
+        "enabled" if uplink else "local-only",
     )
     try:
         server.serve_forever()

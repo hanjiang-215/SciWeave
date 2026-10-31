@@ -2,7 +2,7 @@ suite: researcher-agent-toolkit
 role: machine
 actor: researcher
 title: 研究员的 Agent套件
-version: 0.1.0
+version: 0.2.0
 summary: >
   研究员机器上的一套东西：教个人 Agent 部署并配置自己的 Task Agent，
   以研究员身份读正式地图与 Wiki、往草稿箱起草、提交候选，以及在被退回后
@@ -32,9 +32,12 @@ requires:
     - LLM_WIKI_MCP_TOKEN
     - EMAIL_MCP_URL
     - EMAIL_MCP_TOKEN
-    - SCIWEAVE_REGISTRY_TOKENS_JSON
+    - SCIWEAVE_REGISTRY_URL
+    - SCIWEAVE_REGISTRY_TOKEN
     - DISPOSITION_MCP_URL
     - DISPOSITION_MCP_TOKEN
+    - CONFIRM_UPLINK_URL
+    - CONFIRM_UPLINK_TOKEN
   services:
     - sciweave-task-agent-mcp.service
     - sciweave-task-agent-subscriber.service
@@ -53,6 +56,8 @@ skills:
     path: use-research-wiki
   - name: promote-draft
     path: promote-draft
+  - name: finish-task
+    path: finish-task
   - name: push-task-agent-to-rework
     path: push-task-agent-to-rework
   # The deployment skills teach this machine's personal Agent how to build and

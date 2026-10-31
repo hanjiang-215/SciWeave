@@ -91,6 +91,13 @@ def run_loop(
     while max_messages is None or processed < max_messages:
         batch = queue.poll(poll_timeout_ms)
         if not batch:
+            # B1: a task_completed staged by confirm_execution must be published
+            # even when no new handoff message arrives. Drain on the idle path so
+            # a researcher's confirmation reaches the coordinator promptly.
+            try:
+                runner.drain_outbox()
+            except Exception:  # noqa: BLE001 - never let drain kill the loop
+                _log.exception("outbox drain failed on idle poll")
             if max_messages is not None:
                 break
             continue

@@ -29,6 +29,8 @@ table shape.
 
 from __future__ import annotations
 
+import json
+
 import sqlite3
 import threading
 import uuid
@@ -146,6 +148,7 @@ class ExecutionStore:
                 draft_id TEXT,
                 result_summary TEXT,
                 error_summary TEXT,
+                confirmation_status TEXT NOT NULL DEFAULT 'awaiting',
                 pending_question TEXT,
                 resume_of TEXT REFERENCES execution_records(execution_id),
                 revision_of TEXT REFERENCES execution_records(execution_id),
@@ -540,6 +543,94 @@ class ExecutionStore:
         return {
             "execution_id": execution_id,
             "decision": decision,
+            "status": resulting,
+        }
+
+    def confirm_execution(
+        self,
+        execution_id: str,
+        decision: str,
+        reason: str,
+        *,
+        idempotency_key: str,
+    ) -> dict[str, object]:
+        """B1: researcher confirms a finished execution.
+
+        ``accepted`` -> confirmation_status='confirmed' and the task_completed
+        governance event is staged in the SAME transaction, so downstream
+        dispatch and the board only advance after a human confirms.
+        ``rejected`` -> confirmation_status='rejected', status='rejected'
+        (no completion event).
+        """
+        if decision not in {"accepted", "rejected"}:
+            raise DispositionError("invalid_state", decision)
+        if not reason.strip():
+            raise DispositionError("invalid_state", "a confirmation needs a reason")
+        now = utc_now()
+        with self.transaction() as connection:
+            replayed = connection.execute(
+                """SELECT decision, resulting_status FROM review_decisions
+                   WHERE idempotency_key = ?""",
+                (idempotency_key,),
+            ).fetchone()
+            if replayed is not None:
+                return {
+                    "execution_id": execution_id,
+                    "decision": replayed["decision"],
+                    "confirmation_status": "confirmed" if replayed["decision"] == "accepted" else "rejected",
+                    "idempotent": True,
+                }
+            row = connection.execute(
+                "SELECT status, task_node_id, business_key, mapping_domain_id, draft_id, finished_at "
+                "FROM execution_records WHERE execution_id = ?",
+                (execution_id,),
+            ).fetchone()
+            if row is None:
+                raise DispositionError("not_found", execution_id)
+            if row["status"] != "completed":
+                raise DispositionError("invalid_state", row["status"])
+            if decision == "accepted":
+                confirmation_status = "confirmed"
+                connection.execute(
+                    "UPDATE execution_records SET confirmation_status = ?, updated_at = ? "
+                    "WHERE execution_id = ?",
+                    (confirmation_status, now, execution_id),
+                )
+                completion_event = {
+                    "execution_id": execution_id,
+                    "task_node_id": row["task_node_id"],
+                    "mapping_domain_id": row["mapping_domain_id"],
+                    "business_key": row["business_key"],
+                    "draft_id": row["draft_id"],
+                    "finished_at": row["finished_at"] or now,
+                }
+                self.record_outbox_event(
+                    connection,
+                    event_type="task_completed",
+                    dedupe_key=f"task_completed:{execution_id}",
+                    payload_json=json.dumps(completion_event, ensure_ascii=False),
+                    created_at=now,
+                )
+                resulting = "completed"
+            else:
+                confirmation_status = "rejected"
+                resulting = "rejected"
+                connection.execute(
+                    "UPDATE execution_records SET status = ?, confirmation_status = ?, updated_at = ? "
+                    "WHERE execution_id = ?",
+                    (resulting, confirmation_status, now, execution_id),
+                )
+            connection.execute(
+                """INSERT INTO review_decisions
+                   (idempotency_key, execution_id, decision, reason, resulting_status, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?)""",
+                (idempotency_key, execution_id, decision, reason, resulting, now),
+            )
+            self._audit(connection, "execution_confirmed", execution_id, now)
+        return {
+            "execution_id": execution_id,
+            "decision": decision,
+            "confirmation_status": confirmation_status,
             "status": resulting,
         }
 

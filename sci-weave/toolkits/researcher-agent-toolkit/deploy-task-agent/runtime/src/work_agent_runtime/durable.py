@@ -32,6 +32,7 @@ CREATE TABLE IF NOT EXISTS execution (
     draft_id_source TEXT,
     error_code TEXT,
     failed_agent TEXT,
+    confirmation_status TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
@@ -91,6 +92,11 @@ class SqliteExecutionStore:
         columns = {row["name"] for row in self._connection.execute("PRAGMA table_info(execution)")}
         if "draft_id_source" not in columns:
             self._connection.execute("ALTER TABLE execution ADD COLUMN draft_id_source TEXT")
+        if "confirmation_status" not in columns:
+            # B1: awaiting / confirmed / rejected. NULL means "no confirmation
+            # surface involved" (older rows). Kept local as an audit mirror of
+            # what the researcher decided; the server is the source of truth.
+            self._connection.execute("ALTER TABLE execution ADD COLUMN confirmation_status TEXT")
 
     def close(self) -> None:
         self._connection.close()
@@ -288,11 +294,19 @@ class SqliteExecutionStore:
                    VALUES (?, ?, ?, ?, ?)""",
                 (review_id, execution_id, decision, reason, now),
             )
+            # B1: mirror the researcher's confirmation locally. accepted ->
+            # confirmed, rejected -> rejected. This is an audit mirror; the
+            # authoritative confirmation lives on the centre gateway.
+            self._connection.execute(
+                "UPDATE execution SET confirmation_status = ?, updated_at = ? WHERE execution_id = ?",
+                ("confirmed" if decision == "accepted" else "rejected", now, execution_id),
+            )
         return {
             "review_id": review_id,
             "execution_id": execution_id,
             "decision": decision,
             "reason": reason,
+            "confirmation_status": "confirmed" if decision == "accepted" else "rejected",
         }
 
     def reviews(self, execution_id: str) -> list[dict]:

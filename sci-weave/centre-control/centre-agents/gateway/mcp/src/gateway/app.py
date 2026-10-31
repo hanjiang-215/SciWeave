@@ -330,6 +330,18 @@ class GatewayApplication:
             execution_id, decision, reason, idempotency_key=idempotency_key
         )
 
+    def confirm_execution(
+        self, execution_id: str, decision: str, reason: str, *, idempotency_key: str
+    ) -> dict[str, Any]:
+        """B1: researcher confirms completion (accepted) or rejects a finished execution.
+
+        ``accepted`` publishes the task_completed event so downstream dispatch and
+        the board treat the task as done; ``rejected`` sends it back.
+        """
+        return self.store.confirm_execution(
+            execution_id, decision, reason, idempotency_key=idempotency_key
+        )
+
     # The front end validates these exact vocabularies (web-ui `isService` /
     # `isEvent`), and dashboard-api strips any key outside its allow-list.
     _SERVICE_ROLE = "centre-agent"
@@ -580,6 +592,16 @@ def make_handler(app: GatewayApplication):
                             idempotency_key=self._required_string(arguments, "idempotency_key"),
                         ),
                     )
+                if name == "confirm_execution":
+                    return self._tool_result(
+                        request_id,
+                        app.confirm_execution(
+                            self._required_string(arguments, "execution_id"),
+                            self._required_string(arguments, "decision"),
+                            self._required_string(arguments, "reason"),
+                            idempotency_key=self._required_string(arguments, "idempotency_key"),
+                        ),
+                    )
                 if name == "query_execution":
                     result = app.query_execution(self._required_string(arguments, "execution_id"))
                     if result is None:
@@ -632,6 +654,7 @@ def make_handler(app: GatewayApplication):
                 {"name": "list_pending", "description": "List Centre Agent executions."},
                 {"name": "answer_question", "description": "Answer a Worker question; queues a resumed execution that points at the original."},
                 {"name": "review_execution", "description": "Dispose a finished execution: request_revision, reject or request_human_takeover."},
+                {"name": "confirm_execution", "description": "B1: researcher confirms a finished execution. accepted marks it done (and advances downstream); rejected sends it back."},
                 {"name": "health", "description": "Read authenticated Centre Agent health."},
             ]
 
