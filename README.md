@@ -166,3 +166,7 @@ docs/
 - [架构决策记录](docs/adr/)
 - [Project Owner 套件](sci-weave/toolkits/project-owner-agent-toolkit/README.md)
 - [Researcher 套件](sci-weave/toolkits/researcher-agent-toolkit/README.md)
+
+## 开源协议
+
+本项目以 [Apache License 2.0](LICENSE) 发布：可自由使用、修改和分发，包括商业用途；再分发时须保留许可证文本以及 [NOTICE](NOTICE) 中的版权与署名声明。
