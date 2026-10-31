@@ -45,11 +45,9 @@
 
 ## 安装
 
-```bash
-./install.sh
-vi ~/.sciweave/owner/.env      # 五个 MCP 的地址与令牌
-./check.sh
-```
+项目根必须由 Harness 或用户显式指定。导出器写入 `<project>/.sciweave/harness/project-owner-agent-toolkit/`，Harness 自行注册技能和 MCP。配置名称与步骤见 `configuration.md`，不要把真实令牌写入文档或导出目录。
+
+旧的 `./install.sh` 只作为历史安装说明保留；`suitecheck` 不会执行清单中的任意命令。
 
 `check.sh` 会额外检查一件事：令牌是不是还停在 `.env.example` 的 `replace-with-*`。
 只检查「非空」的话，一个照抄示例的配置看起来完全正常，直到第一次调用 401。

@@ -2,7 +2,7 @@
 id: ai4-fm4a
 status: in_progress
 deps: []
-links: [ai4-jfvy, ai4-nj9r, ai4-8yk5, ai4-0fwc, ai4-x0ay, ai4-a2ba, ai4-he04, ai4-0wg0, ai4-8d9j, ai4-349h, ai4-japd]
+links: [ai4-jfvy, ai4-nj9r, ai4-8yk5, ai4-0fwc, ai4-x0ay, ai4-a2ba, ai4-he04, ai4-0wg0, ai4-8d9j, ai4-349h, ai4-japd, ai4-sman, ai4-jckq]
 created: 2026-10-28T00:24:02Z
 type: epic
 priority: 1

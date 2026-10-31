@@ -1,0 +1,158 @@
+{
+  "name": "gateway",
+  "version": "0.1.0",
+  "description": "中心任务网关（Centre Agent 处置面）：查执行、看队列、回答 Worker 提问、确认或驳回一条已完成的执行。confirm_execution(accepted) 是任务在看板变「已完成」并放行下游的唯一入口。",
+  "transport": "streamable-http",
+  "endpoint": {
+    "url_env": "SCIWEAVE_GATEWAY_MCP_URL"
+  },
+  "environment": [
+    "SCIWEAVE_GATEWAY_MCP_URL",
+    "SCIWEAVE_GATEWAY_MCP_TOKEN"
+  ],
+  "notes": [
+    "这是中心网关（centre 8760），不是负责人本机的处置面；令牌用中心 CENTRE_TOKEN_GATEWAY。",
+    "confirm_execution 需要 decision ∈ {accepted, rejected}、reason，以及 idempotency_key（建议 confirm:<execution_id>:<decision>）；重试必须沿用同一个 key，服务端是幂等的。",
+    "确认完成 ≠ 成果入库：确认只让看板标「已完成」，成果进正式图仍走 create_merge_request → record_review → formalize_candidate。",
+    "accepted 之后下游节点才会被放行；没有被确认的完成在协调服务里仍是 waiting。"
+  ],
+  "tools": [
+    {
+      "name": "list_pending",
+      "description": "列出中心 Agent 的执行；可用 task_node_id 过滤。",
+      "input": {
+        "type": "object",
+        "required": [],
+        "properties": {
+          "task_node_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "query_execution",
+      "description": "查一条执行的状态、草稿与结果摘要。",
+      "input": {
+        "type": "object",
+        "required": [
+          "execution_id"
+        ],
+        "properties": {
+          "execution_id": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "confirm_execution",
+      "description": "确认（accepted）或驳回（rejected）一条已完成的执行；accepted 才会让任务在看板变已完成并放行下游。",
+      "input": {
+        "type": "object",
+        "required": [
+          "execution_id",
+          "decision",
+          "reason",
+          "idempotency_key"
+        ],
+        "properties": {
+          "execution_id": {
+            "type": "string"
+          },
+          "decision": {
+            "type": "string",
+            "enum": [
+              "accepted",
+              "rejected"
+            ]
+          },
+          "reason": {
+            "type": "string"
+          },
+          "idempotency_key": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "review_execution",
+      "description": "处置一条已完成的执行：request_revision（退回重做）、reject、request_human_takeover。",
+      "input": {
+        "type": "object",
+        "required": [
+          "execution_id",
+          "decision",
+          "reason",
+          "idempotency_key"
+        ],
+        "properties": {
+          "execution_id": {
+            "type": "string"
+          },
+          "decision": {
+            "type": "string",
+            "enum": [
+              "request_revision",
+              "reject",
+              "request_human_takeover"
+            ]
+          },
+          "reason": {
+            "type": "string"
+          },
+          "idempotency_key": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "answer_question",
+      "description": "回答 Worker 提出的问题；会生成一条指向原执行的新执行。",
+      "input": {
+        "type": "object",
+        "required": [
+          "question_id",
+          "answer"
+        ],
+        "properties": {
+          "question_id": {
+            "type": "string"
+          },
+          "answer": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "cancel_execution",
+      "description": "请求取消一条执行。",
+      "input": {
+        "type": "object",
+        "required": [
+          "execution_id"
+        ],
+        "properties": {
+          "execution_id": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "name": "health",
+      "description": "读中心 Agent 的鉴权后健康状态。",
+      "input": {
+        "type": "object",
+        "required": [],
+        "properties": {}
+      }
+    }
+  ]
+}

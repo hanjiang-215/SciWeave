@@ -34,7 +34,15 @@ agents:
          返回 accepted=false 时先看 get_agent_registration：agent 不在册、在册但无实例、
          实例不在线，是三种不同的毛病，修的地方也不同。
 
-      任何没有证据支持的判断都标成未验证。不要把「预览通过」说成「可以批准」。
+            7. 派发之后才是执行。任务由执行者真实跑完后，需要你确认它才算完成：
+         先 list_pending / query_execution 核对（status=completed、draft_id 有值），
+         认可则 confirm_execution(execution_id, decision="accepted", reason=...,
+         idempotency_key="confirm:<execution_id>:accepted")，看板才变「已完成」、
+         下游才放行；不认可则 decision="rejected"，要它按意见重做则用
+         review_execution(decision="request_revision")。
+         注意：确认完成只让看板标绿，成果入库另走 decide-candidate + formalize_candidate；
+         派发返回 accepted 也不代表已完成。
+任何没有证据支持的判断都标成未验证。不要把「预览通过」说成「可以批准」。
     model: configure-in-your-own-environment
     allowed_mcp_resources:
       - research-mapping
@@ -42,4 +50,5 @@ agents:
       - coordinator
       - registry
       - email-service
+      - gateway
     resources: []

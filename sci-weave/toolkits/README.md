@@ -3,7 +3,7 @@
 所谓的套件，指的是 skills + MCP + hooks/extensions + cronjob 的集合
 （不是每一个都必须）
 
-目标，上传一个套件zip给Agent，他能自动安装使用
+目标，把套件导出为 Harness 可发现的项目级输入目录；Harness 自行注册，不由套件改写私有配置。
 
 ## 两个套件
 
@@ -32,6 +32,12 @@
 套件的差别不在「工具多少」，而在**谁能把什么变成正式事实**：研究员能提交不能批准，
 负责人能正式化不能预审。任何一套里出现越界的工具，先看 `suite.yaml` 的 `actor`
 是不是写错了。
+
+## 项目级部署
+
+套件导出器要求显式项目根，输出 `<project>/.sciweave/harness/<suite-id>/`。运行代码、SQLite、会话和日志属于项目实例；用户自定义定义留在 `.sciweave/project/`。Linux 上 Task Agent 由用户级 systemd 按项目绑定托管。项目移动后必须显式重绑。Windows 只按能力声明支持状态，未验证的后台服务不能报告为已安装。
+
+旧的 `~/.sciweave/task-agent` 安装不会自动归属。能读取绑定才可迁移；普通卸载保留 `data/`、`project/` 和 `.env`。
 
 ## 套件长什么样
 

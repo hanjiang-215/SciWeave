@@ -32,9 +32,9 @@
 ## 安装与启动边界
 
 ```bash
-./install.sh            # 装到 ~/.sciweave/task-agent 并注册两个用户服务
-vi ~/.sciweave/task-agent/.env
-systemctl --user enable --now sciweave-task-agent-subscriber.service
+# 新契约：显式项目根由导出器和 project systemd manager 使用。
+# Linux 用户服务绑定 <project>/.sciweave/，不默认写入 ~/.sciweave/task-agent。
+# 旧安装只有在 project-binding.json 能确认归属后才迁移。
 ```
 
 `install.sh` 幂等：重复执行只更新代码，保留已有的 `.env`、`WORKER_HOME` 与 SQLite 文件。装到别处用 `SCIWEAVE_TASK_AGENT_HOME=/path ./install.sh`，单元文件里的路径会同步替换。

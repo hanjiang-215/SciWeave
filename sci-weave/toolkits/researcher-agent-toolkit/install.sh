@@ -57,7 +57,11 @@ echo "  1. fill $KIT_HOME/.env (see .env.example; it was copied for you if absen
 echo "  2. point your own harness at both skill directories, e.g. in the harness config:"
 echo "       $SKILLS_HOME"
 echo "       $SOURCE/deploy-task-agent/deploy-task-agent-skills"
-echo "  3. systemctl --user enable --now sciweave-task-agent-subscriber.service"
+if command -v systemctl >/dev/null 2>&1; then
+  echo "  3. systemctl --user enable --now sciweave-task-agent-subscriber.service"
+else
+  echo "  3. (no systemd) start the gateway roles by hand: $KIT_HOME/bin/start-mcp and $KIT_HOME/bin/start-subscriber"
+fi
 echo "  4. ask your Agent to run the 'register-instance' skill before expecting a handoff"
 echo
 echo "Do NOT add either directory to SCIWEAVE_SKILLS_PATH: that is the worker's own"

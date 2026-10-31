@@ -3,6 +3,7 @@ role: machine
 actor: researcher
 title: 研究员的 Agent套件
 version: 0.2.0
+schema_version: 1
 summary: >
   研究员机器上的一套东西：教个人 Agent 部署并配置自己的 Task Agent，
   以研究员身份读正式地图与 Wiki、往草稿箱起草、提交候选，以及在被退回后
@@ -22,25 +23,73 @@ boundary:
     - 改造中央服务器上的 Centre Agent 或领域 MCP 服务
 requires:
   env:
-    - SCIWEAVE_AGENT_ID
-    - SCIWEAVE_SUBSCRIBER_TOPICS
-    - DRAFT_BUFFER_MCP_URL
-    - DRAFT_BUFFER_MCP_TOKEN
-    - RESEARCH_MAPPING_MCP_URL
-    - RESEARCH_MAPPING_MCP_TOKEN
-    - LLM_WIKI_MCP_URL
-    - LLM_WIKI_MCP_TOKEN
-    - EMAIL_MCP_URL
-    - EMAIL_MCP_TOKEN
-    - SCIWEAVE_REGISTRY_URL
-    - SCIWEAVE_REGISTRY_TOKEN
-    - DISPOSITION_MCP_URL
-    - DISPOSITION_MCP_TOKEN
-    - CONFIRM_UPLINK_URL
-    - CONFIRM_UPLINK_TOKEN
+    - name: SCIWEAVE_AGENT_ID
+      purpose: researcher Task Agent identity
+      required: true
+    - name: SCIWEAVE_SUBSCRIBER_TOPICS
+      purpose: subscriber topic names
+      required: true
+    - name: DRAFT_BUFFER_MCP_URL
+      purpose: draft buffer endpoint
+      required: true
+    - name: DRAFT_BUFFER_MCP_TOKEN
+      purpose: draft buffer bearer credential
+      required: true
+    - name: RESEARCH_MAPPING_MCP_URL
+      purpose: research mapping endpoint
+      required: true
+    - name: RESEARCH_MAPPING_MCP_TOKEN
+      purpose: research mapping bearer credential
+      required: true
+    - name: LLM_WIKI_MCP_URL
+      purpose: research wiki endpoint
+      required: true
+    - name: LLM_WIKI_MCP_TOKEN
+      purpose: research wiki bearer credential
+      required: true
+    - name: EMAIL_MCP_URL
+      purpose: email service endpoint
+      required: true
+    - name: EMAIL_MCP_TOKEN
+      purpose: email service bearer credential
+      required: true
+    - name: SCIWEAVE_REGISTRY_URL
+      purpose: registry endpoint
+      required: true
+    - name: SCIWEAVE_REGISTRY_TOKEN
+      purpose: registry bearer credential
+      required: true
+    - name: DISPOSITION_MCP_URL
+      purpose: disposition endpoint
+      required: true
+    - name: DISPOSITION_MCP_TOKEN
+      purpose: disposition bearer credential
+      required: true
+    - name: CONFIRM_UPLINK_URL
+      purpose: centre gateway confirm endpoint
+      required: true
+    - name: CONFIRM_UPLINK_TOKEN
+      purpose: centre gateway confirm bearer credential
+      required: true
   services:
     - sciweave-task-agent-mcp.service
     - sciweave-task-agent-subscriber.service
+capabilities:
+  - name: read
+    platforms:
+      linux: {status: supported, limitations: []}
+      windows: {status: unverified, limitations: [Python exporter not yet run on Windows; Task Agent services unverified]}
+      macos: {status: unverified, limitations: [not tested in this release]}
+  - name: candidate_submit
+    platforms:
+      linux: {status: supported, limitations: [draft-buffer, research-mapping and research-wiki cards]}
+      windows: {status: unverified, limitations: [not tested in this release]}
+      macos: {status: unverified, limitations: [not tested in this release]}
+export:
+  harness_input: .sciweave/harness/researcher-agent-toolkit
+  include: [suite.yaml, install-suite, upgrade-suite, register-instance, audit-buffer, use-research-map, use-research-wiki, promote-draft, finish-task, push-task-agent-to-rework, deploy-task-agent, mcp]
+  exclude: [.env, data, runtime/.venv]
+  configuration: configuration.md
 skills:
   - name: install-suite
     path: install-suite
