@@ -12,9 +12,16 @@ if ! command -v uv >/dev/null 2>&1; then
   echo "uv is required: https://docs.astral.sh/uv/getting-started/installation/" >&2
   exit 69
 fi
-if ! command -v systemctl >/dev/null 2>&1; then
-  echo "systemctl is required: the two gateway roles run as user services" >&2
-  exit 69
+# systemctl is only needed to register the two user services. On Windows/macOS
+# (or anywhere without systemd) we still install the kit files and the runtime
+# venv, and leave service registration to the operator (start bin/start-* by
+# hand or via the operator's process manager). Linux behavior is unchanged.
+HAVE_SYSTEMCTL=0
+if command -v systemctl >/dev/null 2>&1; then
+  HAVE_SYSTEMCTL=1
+else
+  echo "note: systemctl not found - skipping systemd user-service registration;" >&2
+  echo "      start the gateway roles manually via bin/start-mcp and bin/start-subscriber." >&2
 fi
 
 mkdir -p "$TARGET"
@@ -42,12 +49,19 @@ chmod +x "$TARGET"/bin/start-mcp "$TARGET"/bin/start-subscriber
 
 # The checked-in units use %h/.sciweave/task-agent. Substitute the real target so
 # SCIWEAVE_TASK_AGENT_HOME keeps working; %h stays the fallback for the default.
-UNIT_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
-mkdir -p "$UNIT_DIR"
-for unit in sciweave-task-agent-mcp.service sciweave-task-agent-subscriber.service; do
-  sed "s#%h/.sciweave/task-agent#$TARGET#g" "$TARGET/systemd/$unit" > "$UNIT_DIR/$unit"
-done
-systemctl --user daemon-reload
+# Only do this when systemd is available; otherwise skip straight to the summary.
+if [ "$HAVE_SYSTEMCTL" = "1" ]; then
+  UNIT_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
+  mkdir -p "$UNIT_DIR"
+  for unit in sciweave-task-agent-mcp.service sciweave-task-agent-subscriber.service; do
+    sed "s#%h/.sciweave/task-agent#$TARGET#g" "$TARGET/systemd/$unit" > "$UNIT_DIR/$unit"
+  done
+  systemctl --user daemon-reload
+fi
 
 echo "installed at $TARGET"
-echo "next: fill $TARGET/.env, then 'systemctl --user enable --now sciweave-task-agent-subscriber.service'"
+if [ "$HAVE_SYSTEMCTL" = "1" ]; then
+  echo "next: fill $TARGET/.env, then 'systemctl --user enable --now sciweave-task-agent-subscriber.service'"
+else
+  echo "next: fill $TARGET/.env, then start 'bin/start-mcp' and 'bin/start-subscriber' by hand."
+fi
