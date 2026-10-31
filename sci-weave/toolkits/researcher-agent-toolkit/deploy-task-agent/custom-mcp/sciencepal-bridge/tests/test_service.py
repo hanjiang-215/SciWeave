@@ -103,6 +103,22 @@ class ServiceTests(unittest.TestCase):
                 files=[{"path": str(outside)}],
             )
 
+    def test_a_file_inside_the_workspace_is_accepted_whatever_the_config_spelling(self) -> None:
+        # The config here is built from a raw path, exactly like a deployment whose
+        # SCIENCEPAL_WORKSPACE was captured before the directory existed (or with
+        # an 8.3 short form). The containment check must resolve both sides.
+        source = self.workspace / "iris.csv"
+        source.write_bytes(b"a,b\n1,2\n")
+        (self.workspace / "notes.md").write_text("n\n", encoding="utf-8")
+        config = make_config(Path(str(self.workspace)))
+        service = SciencePalService(config, client=self.client, store=RunStore(config.run_db))
+        result = service.start(
+            instruction="run",
+            idempotency_key="exec-spelling",
+            files=[{"path": str(source)}, {"path": "notes.md"}],
+        )
+        self.assertEqual([item["name"] for item in result["inputs"]], ["iris.csv", "notes.md"])
+
     def test_start_hashes_inputs(self) -> None:
         source = self.workspace / "iris.csv"
         source.write_bytes(b"a,b\n1,2\n")
