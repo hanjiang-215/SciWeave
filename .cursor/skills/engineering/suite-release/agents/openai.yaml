@@ -1,0 +1,3 @@
+interface:
+  display_name: "Suite Release"
+  short_description: "Cut a Gitee release of the two Agent suites from develop"
