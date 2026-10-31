@@ -126,6 +126,7 @@ class InstallScriptTests(unittest.TestCase):
 class HarnessHookTests(unittest.TestCase):
     """The hook runs on every harness start, so it cannot fail on an uninstalled machine."""
 
+    @unittest.skipUnless(os.name == "posix", "the hook drives systemd user services; it is a POSIX artifact")
     def test_hook_no_longer_fails_when_the_services_are_not_installed(self) -> None:
         script = KIT_ROOT / "hooks" / "check-services.sh"
         result = subprocess.run(["bash", str(script)], capture_output=True, text=True)
