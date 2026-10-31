@@ -64,9 +64,14 @@ class WorkerSettings:
             raise ValueError("DEEPSEEK_BASE_URL must use HTTPS")
         if require_api_key and not self.model.strip():
             raise ValueError("SCIWEAVE_WORKER_MODEL must be configured")
-        if not self.session_dir or Path(self.session_dir).is_absolute():
-            raise ValueError("SCIWEAVE_WORKER_SESSION_DIR must be a relative path")
-        ensure_relative_session_dir(self.session_dir, "SCIWEAVE_WORKER_SESSION_DIR must stay within Worker home")
+        # One refusal message for every escape shape. ``Path(...).is_absolute()``
+        # answers differently per platform (``C:/x`` is absolute on Windows and
+        # relative on POSIX), so branching on it here made the same bad value
+        # produce two different messages depending on the OS; the textual checks
+        # inside ``ensure_relative_session_dir`` are the platform-independent gate.
+        ensure_relative_session_dir(
+            self.session_dir, "SCIWEAVE_WORKER_SESSION_DIR must stay within Worker home"
+        )
         if not re.fullmatch(r"[A-Za-z0-9_-]+", self.connection_scope):
             raise ValueError("SCIWEAVE_WORKER_CONNECTION_SCOPE has invalid characters")
 

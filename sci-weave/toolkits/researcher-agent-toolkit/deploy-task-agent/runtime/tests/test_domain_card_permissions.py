@@ -62,6 +62,9 @@ OWNER_SIDE = {
         "preview_wiki_review", "create_wiki_merge_request", "decide_wiki_review",
         "formalize_wiki", "reconcile_wiki_formalization", "append_prereview_log",
         "create_merged_candidate",
+        # Owner-only: creates the wiki_management graph/document set. A researcher
+        # calling it is refused by the service (research-wiki/tests/test_bootstrap.py).
+        "bootstrap_wiki",
     },
 }
 

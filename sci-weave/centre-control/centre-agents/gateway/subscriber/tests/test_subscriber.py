@@ -441,7 +441,13 @@ class _RecordingCompletionPublisher:
 
 
 class CompletionPublisherTests(unittest.TestCase):
-    """B6: a completed execution must publish task_completed for downstream release."""
+    """B1: ``task_completed`` is staged by the researcher's confirm, not by the run.
+
+    A finished Worker run is not a finished task. The subscriber records
+    ``confirmation_status='awaiting'`` and publishes nothing; only
+    ``confirm_execution(accepted)`` stages the governance event, in the same
+    transaction as the confirmation.
+    """
 
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory()
@@ -459,7 +465,15 @@ class CompletionPublisherTests(unittest.TestCase):
         queue_message = self.queue.publish("sciweave.task-handoff.agent-1", "event-1", message)
         return self.service.handle_message(queue_message)
 
-    def test_completed_execution_publishes_task_completed(self) -> None:
+    def _confirm(self, execution_id: str, decision: str = "accepted") -> None:
+        self.store.confirm_execution(
+            execution_id,
+            decision,
+            "研究结果可用" if decision == "accepted" else "结果需要返工",
+            idempotency_key=f"confirm:{execution_id}:{decision}",
+        )
+
+    def test_a_completed_run_publishes_nothing_before_confirmation(self) -> None:
         self._enqueue()
         publisher = _RecordingCompletionPublisher()
         runner = SubscriberWorkerRunner(
@@ -467,6 +481,20 @@ class CompletionPublisherTests(unittest.TestCase):
         )
         outcome = runner.run_once("node-1")
         self.assertEqual(outcome["status"], "completed")
+        self.assertEqual(publisher.published, [])
+        self.assertEqual(self.store.pending_outbox_events(), [])
+        record = self.store.get_execution(outcome["execution_id"])
+        self.assertEqual(record["confirmation_status"], "awaiting")
+
+    def test_confirmation_publishes_task_completed(self) -> None:
+        self._enqueue()
+        publisher = _RecordingCompletionPublisher()
+        runner = SubscriberWorkerRunner(
+            self.store, self.service, DeterministicRuntime(), completion_publisher=publisher
+        )
+        outcome = runner.run_once("node-1")
+        self._confirm(outcome["execution_id"])
+        self.assertEqual(runner.drain_outbox(), 1)
         self.assertEqual(len(publisher.published), 1)
         published = publisher.published[0]
         self.assertEqual(published["mapping_domain_id"], "iris")
@@ -482,6 +510,19 @@ class CompletionPublisherTests(unittest.TestCase):
         runner.run_once("node-1")
         self.assertEqual(publisher.published, [])
 
+    def test_a_rejected_confirmation_publishes_nothing(self) -> None:
+        self._enqueue()
+        publisher = _RecordingCompletionPublisher()
+        runner = SubscriberWorkerRunner(
+            self.store, self.service, DeterministicRuntime(), completion_publisher=publisher
+        )
+        outcome = runner.run_once("node-1")
+        self._confirm(outcome["execution_id"], decision="rejected")
+        self.assertEqual(runner.drain_outbox(), 0)
+        self.assertEqual(publisher.published, [])
+        record = self.store.get_execution(outcome["execution_id"])
+        self.assertEqual(record["confirmation_status"], "rejected")
+        self.assertEqual(record["execution_status"], "rejected")
 
 class KafkaCompletionEnvelopeTests(unittest.TestCase):
     """The published envelope matches the coordinator's task_completed router keys."""
@@ -513,7 +554,12 @@ class KafkaCompletionEnvelopeTests(unittest.TestCase):
 
 
 class CompletionOutboxTests(unittest.TestCase):
-    """ai4-odwi: a crash between commit and publish must not lose task_completed."""
+    """ai4-odwi: a crash between commit and publish must not lose task_completed.
+
+    The staging point moved with B1 — ``confirm_execution`` writes the outbox row
+    in the same transaction as the confirmation — so that is where the replay
+    window opens now.
+    """
 
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory()
@@ -526,42 +572,50 @@ class CompletionOutboxTests(unittest.TestCase):
         self.store.close()
         self.temp.cleanup()
 
-    def _enqueue(self) -> None:
+    def _run_and_confirm(self, runner: "SubscriberWorkerRunner") -> str:
         message = task_handoff("node-1", "event-1", formal_revision_id="rev-9", target_version_ref="node-v7")
         queue_message = self.queue.publish("sciweave.task-handoff.agent-1", "event-1", message)
         self.service.handle_message(queue_message)
+        outcome = runner.run_once("node-1")
+        self.assertEqual(outcome["status"], "completed")
+        self.store.confirm_execution(
+            outcome["execution_id"], "accepted", "研究结果可用",
+            idempotency_key=f"confirm:{outcome['execution_id']}:accepted",
+        )
+        return outcome["execution_id"]
 
     def test_event_is_staged_even_if_publish_fails_then_replayed(self) -> None:
-        self._enqueue()
         publisher = _RecordingCompletionPublisher()
-        publisher.fail = True  # broker down at completion time
         runner = SubscriberWorkerRunner(
             self.store, self.service, DeterministicRuntime(), completion_publisher=publisher
         )
-        outcome = runner.run_once("node-1")
-        self.assertEqual(outcome["status"], "completed")
-        # The publish failed, so nothing was delivered -- but the event is staged.
-        self.assertEqual(publisher.published, [])
+        self._run_and_confirm(runner)
         pending = self.store.pending_outbox_events()
         self.assertEqual(len(pending), 1)
         self.assertEqual(pending[0]["event_type"], "task_completed")
 
+        # The broker is down when the drain first runs: nothing is delivered and
+        # the row stays pending rather than being lost.
+        publisher.fail = True
+        self.assertEqual(runner.drain_outbox(), 0)
+        self.assertEqual(publisher.published, [])
+        self.assertEqual(len(self.store.pending_outbox_events()), 1)
+
         # The broker recovers: the next drain replays the staged event exactly once.
         publisher.fail = False
-        delivered = runner.drain_outbox()
-        self.assertEqual(delivered, 1)
+        self.assertEqual(runner.drain_outbox(), 1)
         self.assertEqual(len(publisher.published), 1)
         self.assertEqual(publisher.published[0]["task_node_id"], "node-1")
         self.assertEqual(publisher.published[0]["mapping_domain_id"], "iris")
         self.assertEqual(self.store.pending_outbox_events(), [])
 
     def test_event_is_staged_and_delivered_on_success(self) -> None:
-        self._enqueue()
         publisher = _RecordingCompletionPublisher()
         runner = SubscriberWorkerRunner(
             self.store, self.service, DeterministicRuntime(), completion_publisher=publisher
         )
-        runner.run_once("node-1")
+        self._run_and_confirm(runner)
+        self.assertEqual(runner.drain_outbox(), 1)
         self.assertEqual(len(publisher.published), 1)
         self.assertEqual(self.store.pending_outbox_events(), [])
 

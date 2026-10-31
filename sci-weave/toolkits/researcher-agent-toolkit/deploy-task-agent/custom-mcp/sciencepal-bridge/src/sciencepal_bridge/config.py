@@ -109,11 +109,17 @@ class BridgeConfig:
 
     def resolve_input(self, path: str) -> Path:
         self.ensure_workspace()
+        # Re-resolve here rather than trusting ``self.workspace``: a config built
+        # with a path that did not exist yet (or that carries an 8.3 short form
+        # such as ``C:\Users\RUNNER~1\...``) keeps the raw spelling, while
+        # ``resolve()`` on the input returns the long one. Comparing the two makes
+        # every in-workspace input look like an escape on such a machine.
+        workspace = self.workspace.resolve()
         candidate = Path(path).expanduser()
         if not candidate.is_absolute():
-            candidate = self.workspace / candidate
+            candidate = workspace / candidate
         candidate = candidate.resolve()
-        if not candidate.is_relative_to(self.workspace):
+        if not candidate.is_relative_to(workspace):
             raise ConfigError(
                 "sciencepal_workspace_violation",
                 "input path escapes SCIENCEPAL_WORKSPACE",

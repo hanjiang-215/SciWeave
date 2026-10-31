@@ -25,10 +25,16 @@ URL_VARIABLES = {
     "email-service": "EMAIL_MCP_URL",
 }
 
+#: URL *and* token for each server: the shipped cards declare both, and the
+#: assembler refuses to render a bearer-only server without its token (ai4-sue2),
+#: so a fixture that only supplies URLs cannot load the repository's own tree.
 ENVIRON = {
     "RESEARCH_MAPPING_MCP_URL": "https://mapping.invalid/mcp",
+    "RESEARCH_MAPPING_MCP_TOKEN": "synthetic-mapping-token",
     "LLM_WIKI_MCP_URL": "https://wiki.invalid/mcp",
+    "LLM_WIKI_MCP_TOKEN": "synthetic-wiki-token",
     "EMAIL_MCP_URL": "https://email.invalid/mcp",
+    "EMAIL_MCP_TOKEN": "synthetic-email-token",
 }
 
 DEFINITION = textwrap.dedent(

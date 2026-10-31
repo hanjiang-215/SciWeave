@@ -373,7 +373,8 @@ class ExecutionStore:
                           e.status AS execution_status, e.trigger, e.trigger_ref,
                           e.business_key, e.draft_id, e.result_summary,
                           e.error_summary, e.pending_question, e.resume_of,
-                          e.revision_of, e.created_at, e.started_at, e.finished_at,
+                          e.revision_of, e.confirmation_status,
+                          e.created_at, e.started_at, e.finished_at,
                           e.updated_at, c.command_id, c.command_text,
                           c.idempotency_key, c.caller_id
                    FROM execution_records e

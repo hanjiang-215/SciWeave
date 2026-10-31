@@ -13,12 +13,14 @@ class CandidateTerminusDBStoreTestCase(unittest.TestCase):
         candidate_commit = "candidate-commit"
         documents = [{"@type": "TaskNode", "@id": "TaskNode/n1", "logical_id": "n1"}]
         events = []
+        urls = []
         write_completed = False
 
         def request(method, url, headers, body, timeout):
             nonlocal write_completed
             path = urlparse(url).path
             events.append((method, path, headers, body))
+            urls.append(url)
             if method == "GET" and path == "/api/db/store/db":
                 return 200, {"Content-Type": "application/json"}, json.dumps({"branches": ["main"]}).encode()
             if method == "POST" and "/api/branch/" in path:
@@ -45,7 +47,20 @@ class CandidateTerminusDBStoreTestCase(unittest.TestCase):
         self.assertEqual(result.store_id, "store")
         self.assertEqual(result.branch_id, "candidate-" + _full_key("idem-1"))
         self.assertEqual(result.commit_hash, candidate_commit)
-        self.assertEqual([event[0] for event in events], ["GET", "POST", "POST", "GET", "POST", "GET", "GET"])
+        self.assertEqual([event[0] for event in events], ["GET", "POST", "POST", "GET", "POST", "POST", "GET", "GET"])
+        # The two document POSTs are not interchangeable: the first declares the
+        # candidate classes in the branch's schema graph (otherwise TerminusDB
+        # rejects the instance write with ascribed_type_does_not_exist), the
+        # second writes the documents themselves.
+        schema_writes = [url for url in urls if "graph_type=schema" in url]
+        instance_writes = [
+            url for url in urls
+            if urlparse(url).path.startswith("/api/document/")
+            and "/commit/" not in urlparse(url).path
+            and "graph_type=schema" not in url
+        ]
+        self.assertEqual(len(schema_writes), 1)
+        self.assertEqual(len(instance_writes), 1)
 
     def test_reconciles_existing_exact_candidate_without_rewriting(self):
         candidate_commit = "already-written"

@@ -55,7 +55,10 @@ class ProjectSystemdManagerTests(unittest.TestCase):
     def test_unit_escapes_paths_that_contain_spaces(self):
         manager = self.manager("project with spaces")
         unit = manager.generate().read_text(encoding="utf-8")
-        escaped = str(manager.runtime_path).replace(" ", "\\x20")
+        # A unit value escapes ``\`` and ``%`` and spells a space as ``\x20``,
+        # so the expectation has to apply the same escaping to the raw path;
+        # a Windows path also contains backslashes.
+        escaped = str(manager.runtime_path).replace("\\", "\\\\").replace("%", "%%").replace(" ", "\\x20")
         self.assertIn(f"WorkingDirectory={escaped}", unit)
         self.assertIn("EnvironmentFile=-", unit)
         self.assertIn("Restart=on-failure", unit)
@@ -100,7 +103,10 @@ class ProjectSystemdManagerTests(unittest.TestCase):
             manager.start(run_systemctl=False)
         rebound = manager.rebind(moved)
         self.assertEqual(rebound.project_root, moved.resolve())
-        self.assertIn(str(moved.resolve()), rebound.binding_path.read_text(encoding="utf-8"))
+        # Compare the parsed field, not the raw text: the binding is JSON, so a
+        # Windows path is stored with escaped backslashes.
+        binding = json.loads(rebound.binding_path.read_text(encoding="utf-8"))
+        self.assertEqual(binding["project_root"], str(moved.resolve()))
         rebound.start(run_systemctl=False)
 
     def test_start_never_infers_the_project_from_the_working_directory(self):

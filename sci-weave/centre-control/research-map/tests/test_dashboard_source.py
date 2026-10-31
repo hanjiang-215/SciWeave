@@ -72,22 +72,27 @@ class ExecutionStatusResolverTests(unittest.TestCase):
     """B7: task status is derived from execution facts when the node has none."""
 
     def _make_db(self, rows):
+        import os
         import sqlite3, tempfile
         path = tempfile.mktemp(suffix=".sqlite3")
+        self.addCleanup(lambda: os.path.exists(path) and os.unlink(path))
         conn = sqlite3.connect(path)
+        # The resolver reads result_summary and confirmation_status as well as
+        # status (ai4-sue2 / B1); a fixture table without them makes the whole
+        # read fail and silently degrade to "no execution fact at all".
         conn.execute(
-            "CREATE TABLE execution_records (task_node_id TEXT, business_key TEXT, mapping_domain_id TEXT, status TEXT)"
+            """CREATE TABLE execution_records (
+                   task_node_id TEXT, business_key TEXT, mapping_domain_id TEXT,
+                   status TEXT, result_summary TEXT, confirmation_status TEXT)"""
         )
-        conn.executemany("INSERT INTO execution_records VALUES (?,?,?,?)", rows)
+        conn.executemany("INSERT INTO execution_records VALUES (?,?,?,?,?,?)", rows)
         conn.commit()
         conn.close()
         return path
 
-    def test_status_derived_from_execution_fact(self) -> None:
-        from research_mapping.dashboard_source import ExecutionStatusResolver
-        path = self._make_db([("a", "a:a-v1:rev-1", "mapping-1", "completed")])
-        resolver = ExecutionStatusResolver(path)
-        result = SimpleNamespace(
+    @staticmethod
+    def _result():
+        return SimpleNamespace(
             status="available",
             mapping_domain_id="mapping-1",
             formal_revision_id="formal-7",
@@ -95,18 +100,54 @@ class ExecutionStatusResolverTests(unittest.TestCase):
                 {"@id": "TaskNode/a-v1", "@type": "TaskNode", "logical_id": "a", "version_id": "a-v1", "title": "Prep"},
             ),
         )
-        payload = build_mapping_fragment(result, observed_at="2026-10-29T00:00:00Z", execution_status_resolver=resolver)
+
+    def test_status_derived_from_execution_fact(self) -> None:
+        from research_mapping.dashboard_source import ExecutionStatusResolver
+        path = self._make_db([("a", "a:a-v1:rev-1", "mapping-1", "completed", "", "confirmed")])
+        resolver = ExecutionStatusResolver(path)
+        payload = build_mapping_fragment(
+            self._result(), observed_at="2026-10-29T00:00:00Z", execution_status_resolver=resolver
+        )
         self.assertEqual(payload["tasks"][0]["status"], "succeeded")
         self.assertEqual(payload["projects"][0]["completed"], 1)
 
-    def test_without_resolver_stays_unknown(self) -> None:
+    def test_an_unconfirmed_execution_is_waiting_not_succeeded(self) -> None:
+        # B1: a finished Worker run is not a finished task. Until the researcher
+        # confirms, the board must not claim the task is 已完成.
+        from research_mapping.dashboard_source import ExecutionStatusResolver
+        path = self._make_db([("a", "a:a-v1:rev-1", "mapping-1", "completed", "", "awaiting")])
+        resolver = ExecutionStatusResolver(path)
+        payload = build_mapping_fragment(
+            self._result(), observed_at="2026-10-29T00:00:00Z", execution_status_resolver=resolver
+        )
+        self.assertEqual(payload["tasks"][0]["status"], "waiting")
+        self.assertEqual(payload["projects"][0]["completed"], 0)
+
+    def test_without_resolver_a_task_with_no_fact_is_never_reported_done(self) -> None:
+        # B1: with no execution fact the board derives position in the route
+        # instead of inventing a status. A node with no prerequisites is the
+        # executable frontier (进行中), and nothing is counted as completed.
+        payload = build_mapping_fragment(self._result(), observed_at="2026-10-29T00:00:00Z")
+        self.assertEqual(payload["tasks"][0]["status"], "running")
+        self.assertEqual(payload["projects"][0]["completed"], 0)
+
+    def test_a_task_behind_an_unfinished_prerequisite_is_queued(self) -> None:
         result = SimpleNamespace(
             status="available",
             mapping_domain_id="mapping-1",
             formal_revision_id="formal-7",
             documents=(
                 {"@id": "TaskNode/a-v1", "@type": "TaskNode", "logical_id": "a", "version_id": "a-v1", "title": "Prep"},
+                {"@id": "TaskNode/b-v1", "@type": "TaskNode", "logical_id": "b", "version_id": "b-v1", "title": "Run"},
+                {
+                    "@id": "DependencyEdge/e-1",
+                    "@type": "DependencyEdge",
+                    "source_node_version_ref": {"version_id": "a-v1"},
+                    "target_node_version_ref": {"version_id": "b-v1"},
+                },
             ),
         )
         payload = build_mapping_fragment(result, observed_at="2026-10-29T00:00:00Z")
-        self.assertEqual(payload["tasks"][0]["status"], "unknown")
+        statuses = {task["logicalId"]: task["status"] for task in payload["tasks"]}
+        self.assertEqual(statuses["a"], "running")
+        self.assertEqual(statuses["b"], "queued")

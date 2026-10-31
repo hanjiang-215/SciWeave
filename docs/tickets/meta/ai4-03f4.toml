@@ -1,0 +1,3 @@
+# ai4-03f4 的索引归属与简介（人工维护）
+module = "infra"
+summary = "GitHub Actions 首次执行时 6 个测试模块在 ubuntu/windows 上失败（fixture 缺 token、B1 契约过期、Windows 路径与可执行位）"
