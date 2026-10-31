@@ -30,9 +30,8 @@ jobs:
         with:
           enable-cache: true
 
+      # 版本由仓库根 package.json 的 packageManager 字段决定，不在这里重复声明。
       - uses: pnpm/action-setup@v4
-        with:
-          version: 10
 
       - uses: actions/setup-node@v4
         with:
