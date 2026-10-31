@@ -9,6 +9,7 @@ import threading
 import unittest
 import urllib.error
 import urllib.request
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from work_agent_runtime import SqliteExecutionStore
 from work_agent_runtime.disposition_mcp import create_disposition_server
@@ -185,6 +186,79 @@ class DispositionMcpTests(unittest.TestCase):
         )
 
         self.assertEqual(payload["status"], "invalid_transition")
+
+    def test_accepted_review_sets_confirmation_status_locally(self) -> None:
+        # B1: with no uplink configured, accepted still records locally and the
+        # local audit mirror shows confirmation_status=confirmed.
+        execution_id = self._execution()
+        record = self.store.get(execution_id)
+        self.store.start(record)
+        self.store.complete(record, "draft-1")
+
+        payload = self._payload(
+            self._call(
+                "review_execution",
+                {"execution_id": execution_id, "decision": "accepted", "reason": "checked"},
+            )[1]
+        )
+
+        self.assertEqual(payload["confirmation_status"], "confirmed")
+        row = self.store._connection.execute(
+            "SELECT confirmation_status FROM execution WHERE execution_id = ?", (execution_id,)
+        ).fetchone()
+        self.assertEqual(row["confirmation_status"], "confirmed")
+
+    def test_accepted_review_forwards_to_centre_when_uplink_configured(self) -> None:
+        # B1: when CONFIRM_UPLINK_URL/TOKEN are set, an accepted review must POST
+        # confirm_execution to the centre gateway so the task becomes done there.
+        received = {}
+
+        class _FakeHandler(BaseHTTPRequestHandler):
+            def log_message(self, *a):  # noqa: D401 - silence
+                return
+
+            def do_POST(self):  # noqa: N802
+                length = int(self.headers.get("Content-Length", "0"))
+                received["auth"] = self.headers.get("Authorization")
+                body = json.loads(self.rfile.read(length))
+                received["payload"] = body
+                inner = {"execution_id": body["params"]["arguments"]["execution_id"],
+                         "decision": body["params"]["arguments"]["decision"],
+                         "confirmation_status": "confirmed", "status": "completed"}
+                out = {"jsonrpc": "2.0", "id": body.get("id"), "result": {
+                    "content": [{"type": "text", "text": json.dumps(inner)}]}}
+                data = json.dumps(out).encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+
+        fake = ThreadingHTTPServer(("127.0.0.1", 0), _FakeHandler)
+        threading.Thread(target=fake.serve_forever, daemon=True).start()
+        self.addCleanup(fake.server_close)
+        self.addCleanup(fake.shutdown)
+        os.environ["CONFIRM_UPLINK_URL"] = f"http://127.0.0.1:{fake.server_address[1]}/mcp"
+        os.environ["CONFIRM_UPLINK_TOKEN"] = "gw-token"
+        self.addCleanup(os.environ.pop, "CONFIRM_UPLINK_URL", None)
+        self.addCleanup(os.environ.pop, "CONFIRM_UPLINK_TOKEN", None)
+
+        execution_id = self._execution()
+        record = self.store.get(execution_id)
+        self.store.start(record)
+        self.store.complete(record, "draft-1")
+
+        payload = self._payload(
+            self._call(
+                "review_execution",
+                {"execution_id": execution_id, "decision": "accepted", "reason": "checked"},
+            )[1]
+        )
+
+        self.assertEqual(payload.get("centre_confirmation", {}).get("confirmation_status"), "confirmed")
+        self.assertEqual(received["auth"], "Bearer gw-token")
+        self.assertEqual(received["payload"]["params"]["name"], "confirm_execution")
+        self.assertEqual(received["payload"]["params"]["arguments"]["decision"], "accepted")
 
     def test_an_unknown_tool_is_rejected(self) -> None:
         status, body = self._call("delete_everything")

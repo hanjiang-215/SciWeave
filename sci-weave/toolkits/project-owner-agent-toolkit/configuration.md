@@ -17,6 +17,8 @@ values, Bearer tokens, passwords, or `.env` contents.
 | `SCIWEAVE_REGISTRY_TOKEN` | Registry credential | yes | Registry administrator secret store |
 | `EMAIL_MCP_URL` | Email service endpoint | yes | Platform operator |
 | `EMAIL_MCP_TOKEN` | Email service credential | yes | Platform operator secret store |
+| `SCIWEAVE_GATEWAY_MCP_URL` | Centre task gateway endpoint | yes | Platform operator |
+| `SCIWEAVE_GATEWAY_MCP_TOKEN` | Centre task gateway credential | yes | Platform operator secret store |
 
 ## Setup
 

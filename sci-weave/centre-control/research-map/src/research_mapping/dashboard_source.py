@@ -55,7 +55,8 @@ class ExecutionStatusResolver:
         try:
             connection.row_factory = sqlite3.Row
             rows = connection.execute(
-                """SELECT task_node_id, business_key, mapping_domain_id, status
+                """SELECT task_node_id, business_key, mapping_domain_id, status,
+                          result_summary, confirmation_status
                    FROM execution_records"""
             ).fetchall()
         except sqlite3.Error:
@@ -67,6 +68,18 @@ class ExecutionStatusResolver:
             mapped = _EXECUTION_STATUS_MAP.get(str(row["status"]))
             if mapped is None or not version_ref:
                 continue
+            # 只有科研者真实提交/确认才算“已完成”。框架预审取数（centre-prereview）、
+            # 网关占位运行时（placeholder）等自动动作的 completed 一律不作数，
+            # 否则任务会被自动刷成 succeeded。这类记录直接忽略，任务保持等待执行。
+            summary = str(row["result_summary"] or "")
+            if mapped == "succeeded" and _is_non_submission_completion(summary):
+                continue
+            # B1：completed 只代表 worker 跑完；必须研究员确认（confirmation_status
+            # =confirmed）才算“已完成”。未确认的显示为“待确认”（waiting/等待处理）。
+            if mapped == "succeeded":
+                confirmation = str(row["confirmation_status"] or "awaiting")
+                if confirmation != "confirmed":
+                    mapped = "waiting"
             for key in _candidate_keys(row["mapping_domain_id"], row["task_node_id"], version_ref):
                 # Later rows (newer executions) win, matching list ordering intent.
                 result[key] = mapped
@@ -79,6 +92,14 @@ class ExecutionStatusResolver:
             if key in self._cache:
                 return self._cache[key]
         return None
+
+
+# 判定一条 completed 执行是否“非科研者提交”的框架自动动作。命中则不投影成 succeeded。
+_NON_SUBMISSION_MARKERS = ("centre-prereview", "placeholder", "预审")
+
+def _is_non_submission_completion(result_summary: str) -> bool:
+    summary = (result_summary or "").lower()
+    return any(marker in summary for marker in _NON_SUBMISSION_MARKERS)
 
 
 def _version_ref_from_business_key(business_key: object) -> str:
@@ -123,12 +144,45 @@ def build_mapping_fragment(
         if source and target and target in prerequisites and source in node_ids:
             prerequisites[target].append(source)
 
+    domain_id = str(getattr(result, "mapping_domain_id", "mapping")) or "mapping"
+
+    # 第一遍：先算出每个节点的“事实状态”（来自执行事实/节点字段），
+    # 只可能是 succeeded/failed/cancelled/revision_required/result_unknown，
+    # 或“未完成”。据此再按 DAG 位置推导“进行中 / 未开始”的可执行前沿。
+    base_status: dict[str, str] = {}
+    for node in nodes:
+        node_id = _document_id(node)
+        base_status[node_id] = _task_status(
+            node,
+            execution_status_resolver=execution_status_resolver,
+            mapping_domain_id=domain_id,
+        )
+
+    _TERMINAL = {"succeeded", "failed", "cancelled", "revision_required", "result_unknown"}
+
+    def _frontier_status(node_id: str) -> str:
+        current = base_status.get(node_id, "queued")
+        # 只要节点已有明确的执行事实（已完成/待确认/失败/需返修/结果未知等），
+        # 就直接采用该事实，不再用 DAG 前沿覆盖它。前沿只用于“没有任何执行事实”
+        # 的 queued 节点。
+        if current != "queued":
+            return current
+        # 无执行事实：若它是初始节点（无前置），或所有前置都已 succeeded，
+        # 则它处于“可执行前沿”= 进行中；否则 = 未开始（等待执行）。
+        prereqs = prerequisites.get(node_id, [])
+        if not prereqs:
+            return "running"
+        if all(base_status.get(pre) == "succeeded" for pre in prereqs):
+            return "running"
+        return "queued"
+
     tasks = [
         _task_projection(
             node,
             prerequisites.get(_document_id(node), []),
             execution_status_resolver=execution_status_resolver,
-            mapping_domain_id=str(getattr(result, "mapping_domain_id", "mapping")) or "mapping",
+            mapping_domain_id=domain_id,
+            status_override=_frontier_status(_document_id(node)),
         )
         for node in nodes
     ]
@@ -163,9 +217,10 @@ def _task_projection(
     *,
     execution_status_resolver: "ExecutionStatusResolver | None" = None,
     mapping_domain_id: str | None = None,
+    status_override: str | None = None,
 ) -> dict[str, object]:
     task_id = _document_id(document)
-    status = _task_status(
+    status = status_override or _task_status(
         document,
         execution_status_resolver=execution_status_resolver,
         mapping_domain_id=mapping_domain_id,
@@ -212,7 +267,9 @@ def _task_status(
         )
         if derived is not None:
             return derived
-    return "unknown"
+    # 没有任何真实执行事实（未提交、未确认）→ 任务“等待执行”（未开始），
+    # 而不是笼统的“状态未知”。
+    return "queued"
 
 
 def _document_id(document: Mapping[str, Any]) -> str:

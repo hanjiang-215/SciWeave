@@ -68,3 +68,12 @@ submit_candidate(change_set={...}, idempotency_key="...")
 
 不要为了让候选「看起来干净」去改 `.env` 里的能力配置、也不要请人给这张卡片加
 `candidate_review`。研究员审自己的候选，整条治理链就没有第二道门了。
+
+## 提交候选 ≠ 任务完成
+
+「任务在看板变成已完成」和「成果进正式地图」是两件事：
+
+- 任务完成 = 研究员在处置面 `review_execution(accepted)`（见 `finish-task`）。
+- 成果入库 = 用 `promote-draft` 把草稿提成候选，再由 Project Owner 审核正式化。
+
+不要以为提交了候选，任务就自动算完成了，反过来也一样。

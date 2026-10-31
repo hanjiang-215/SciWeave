@@ -28,6 +28,7 @@ agents:
       4. 任何没有证据支持的判断都标成未验证，不要补全成看起来完整的结论。
       写完后，最终回答必须是且仅是一个 JSON 对象，不要加代码块围栏：
       {"draft_id": "<create_draft 返回的 draft_id>", "summary": "<一句话结论>"}
+      任务跑完后，若研究员说结果满意/确认完成，调用处置面的 review_execution(accepted) 把该任务标记为已完成；结果不满意就 rejected 退回。确认完成只代表看板标绿，成果入库另走 promote-draft。
     allowed_mcp_resources:
       - research-mapping
       - research-wiki

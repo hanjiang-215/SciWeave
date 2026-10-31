@@ -194,11 +194,18 @@ class SubscriberWorkerRunner:
         now = utc_now()
         completion_event: dict[str, Any] | None = None
         with self.store.transaction() as connection:
+            # B1: a completed execution still needs the researcher's explicit
+            # confirmation before it counts as "done" (board + downstream). We
+            # stamp confirmation_status so the dashboard can show 待确认 and the
+            # coordinator only advances after confirm_execution publishes the
+            # task_completed event.
+            confirmation_status = "awaiting"
             updated = connection.execute(
                 """UPDATE execution_records SET status = ?, result_summary = ?,
-                   error_summary = ?, draft_id = ?, finished_at = ?, updated_at = ?
+                   error_summary = ?, draft_id = ?, confirmation_status = ?,
+                   finished_at = ?, updated_at = ?
                    WHERE execution_id = ? AND status = 'running'""",
-                (status, result_summary, error_summary, draft_id, now, now, claimed["execution_id"]),
+                (status, result_summary, error_summary, draft_id, confirmation_status, now, now, claimed["execution_id"]),
             )
             if updated.rowcount == 0:
                 # The record left 'running' while the Worker was busy: a cancel
@@ -229,26 +236,11 @@ class SubscriberWorkerRunner:
                    VALUES (?, ?, ?, '{}', ?)""",
                 (event, claimed["task_node_id"], claimed["execution_id"], now),
             )
-            if status == "completed" and self.completion_publisher is not None:
-                # ai4-odwi: stage the task_completed event in the SAME
-                # transaction as the terminal state, so a crash after commit but
-                # before publish can never lose it -- the drain below or the next
-                # run_once() replays it from the outbox.
-                completion_event = {
-                    "execution_id": claimed["execution_id"],
-                    "task_node_id": claimed["task_node_id"],
-                    "mapping_domain_id": claimed.get("mapping_domain_id"),
-                    "business_key": claimed.get("business_key"),
-                    "draft_id": draft_id,
-                    "finished_at": now,
-                }
-                self.store.record_outbox_event(
-                    connection,
-                    event_type="task_completed",
-                    dedupe_key=f"task_completed:{claimed['execution_id']}",
-                    payload_json=json.dumps(completion_event, ensure_ascii=False),
-                    created_at=now,
-                )
+            # B1: task_completed is NOT published on worker completion. It is
+            # staged later by confirm_execution (researcher accepts) so that
+            # downstream dispatch and the "done" board state wait for a human
+            # confirmation. The outbox replay path still covers a crash between
+            # confirm and publish.
         result = {
             **claimed,
             "status": status,
@@ -259,8 +251,6 @@ class SubscriberWorkerRunner:
         }
         # Best-effort immediate delivery; anything still pending is retried by
         # drain_outbox() (called at the start of every run_once and the CLI).
-        if status == "completed" and self.completion_publisher is not None:
-            self.drain_outbox()
         return result
 
     def drain_outbox(self) -> int:

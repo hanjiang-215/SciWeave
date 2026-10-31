@@ -17,9 +17,12 @@ Bearer tokens, passwords, or `.env` contents.
 | `LLM_WIKI_MCP_TOKEN` | Research wiki credential | yes | Platform operator secret store |
 | `EMAIL_MCP_URL` | Email service endpoint | yes | Platform operator |
 | `EMAIL_MCP_TOKEN` | Email service credential | yes | Platform operator secret store |
-| `SCIWEAVE_REGISTRY_TOKENS_JSON` | Registry token mapping | yes | Registry administrator secret store |
+| `SCIWEAVE_REGISTRY_URL` | Registry endpoint | yes | Platform operator |
+| `SCIWEAVE_REGISTRY_TOKEN` | Registry credential | yes | Platform operator secret store |
 | `DISPOSITION_MCP_URL` | Disposition endpoint | yes | Platform operator |
 | `DISPOSITION_MCP_TOKEN` | Disposition credential | yes | Platform operator secret store |
+| `CONFIRM_UPLINK_URL` | Centre gateway confirm endpoint | yes | Platform operator |
+| `CONFIRM_UPLINK_TOKEN` | Centre gateway confirm credential | yes | Platform operator secret store |
 
 ## Setup
 

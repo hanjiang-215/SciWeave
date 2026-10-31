@@ -25,9 +25,16 @@ _WIKI_REVISION_SCHEMA = {
     "@id": "WikiRevision",
     "@key": {"@type": "Lexical", "@fields": ["wiki_revision_id"]},
     "wiki_revision_id": "xsd:string",
-    "title": "xsd:string",
-    "body_markdown": "xsd:string",
-    "lifecycle_state": "xsd:string",
+    "document_id": {"@type": "Optional", "@class": "xsd:string"},
+    "category": {"@type": "Optional", "@class": "xsd:string"},
+    "title": {"@type": "Optional", "@class": "xsd:string"},
+    "body_markdown": {"@type": "Optional", "@class": "xsd:string"},
+    "created_by": {"@type": "Optional", "@class": "xsd:string"},
+    "created_at": {"@type": "Optional", "@class": "xsd:string"},
+    "lifecycle_state": {"@type": "Optional", "@class": "xsd:string"},
+    "wiki_domain_id": {"@type": "Optional", "@class": "xsd:string"},
+    "proposal_id": {"@type": "Optional", "@class": "xsd:string"},
+    "base_formal_revision_id": {"@type": "Optional", "@class": "xsd:string"},
 }
 
 

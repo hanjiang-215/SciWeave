@@ -12,6 +12,7 @@ agents:
       and delegate the execution to a SciencePal biology agent through the sciencepal MCP tools.
       Treat every claim as unverified until it is backed by a downloaded artifact.
       Write an ExecutionReport JSON as the final answer; do not edit the formal mapping.
+      When the researcher says the result looks good / confirmed, call the disposition review_execution(accepted) so the task becomes 已完成 on the board; use rejected to send it back. Confirming only marks the board done — promoting the result to the map is a separate promote-draft step.
     model: configure-in-your-own-environment
     allowed_mcp_resources:
       - research-mapping

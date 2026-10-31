@@ -13,7 +13,9 @@ version -- the researcher-side deployment is single-tenant per agent id.
 from __future__ import annotations
 
 import json
+import os
 import secrets
+import urllib.request
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, Callable
@@ -70,7 +72,8 @@ TOOLS = [
     ),
     _tool(
         "review_execution",
-        "Record an append-only review decision (accepted or rejected) on a finished execution.",
+        "Confirm or reject a finished execution. accepted marks the task done on the board "
+        "(and forwards to the centre when CONFIRM_UPLINK_URL is configured); rejected sends it back.",
         {
             "execution_id": _ID,
             "decision": {"type": "string", "enum": ["accepted", "rejected"]},
@@ -79,6 +82,66 @@ TOOLS = [
         ["execution_id", "decision", "reason"],
     ),
 ]
+
+
+class _ConfirmUplink:
+    """B1: forward a researcher's accept to the centre gateway confirm_execution.
+
+    The disposition surface is local-only by design. When the deployment wires
+    a centre gateway (``CONFIRM_UPLINK_URL`` + ``CONFIRM_UPLINK_TOKEN``), an
+    ``accepted`` review must also reach the server so the task actually becomes
+    "done" there. Unset -> silent local-only behaviour (backward compatible).
+    """
+
+    def __init__(self, url: str, token: str) -> None:
+        self.url = url
+        self.token = token
+
+    @classmethod
+    def from_environment(cls) -> "_ConfirmUplink | None":
+        url = os.environ.get("CONFIRM_UPLINK_URL", "").strip()
+        token = os.environ.get("CONFIRM_UPLINK_TOKEN", "").strip()
+        if not url or not token:
+            return None
+        return cls(url, token)
+
+    def confirm(self, execution_id: str, decision: str, reason: str) -> dict[str, Any]:
+        """POST confirm_execution to the centre gateway MCP. Raises on failure."""
+        payload = {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {
+                "name": "confirm_execution",
+                "arguments": {
+                    "execution_id": execution_id,
+                    "decision": decision,
+                    "reason": reason,
+                    "idempotency_key": f"confirm:{execution_id}:{decision}",
+                },
+            },
+        }
+        body = json.dumps(payload).encode("utf-8")
+        request = urllib.request.Request(
+            self.url,
+            data=body,
+            method="POST",
+            headers={
+                "Authorization": f"Bearer {self.token}",
+                "Content-Type": "application/json",
+                "Accept": "application/json, text/event-stream",
+            },
+        )
+        with urllib.request.urlopen(request, timeout=15) as response:
+            raw = response.read().decode("utf-8")
+        envelope = json.loads(raw)
+        result = envelope.get("result") or {}
+        if result.get("isError"):
+            raise RuntimeError(f"confirm_execution rejected: {raw}")
+        content = result.get("content") or []
+        if content:
+            return json.loads(content[0]["text"])
+        return result
 
 
 def _dispatch(store: SqliteExecutionStore, name: str, arguments: dict) -> dict:
@@ -109,9 +172,25 @@ def _dispatch(store: SqliteExecutionStore, name: str, arguments: dict) -> dict:
     if name == "answer_question":
         return store.answer(arguments["question_id"], arguments["answer"])
     if name == "review_execution":
-        return store.review(
+        outcome = store.review(
             arguments["execution_id"], arguments["decision"], arguments["reason"]
         )
+        uplink = _ConfirmUplink.from_environment()
+        if uplink is not None:
+            # B1: an accepted review must reach the centre so the task becomes
+            # "done" there. Do it after the local audit row is written; if the
+            # uplink fails, surface a clear error so the caller can retry (the
+            # server's confirm_execution is idempotent on the idempotency_key).
+            try:
+                server_result = uplink.confirm(
+                    arguments["execution_id"], arguments["decision"], arguments["reason"]
+                )
+            except Exception as exc:  # noqa: BLE001 - report, do not swallow
+                raise RuntimeError(
+                    f"local review recorded but centre confirmation failed: {exc}"
+                ) from exc
+            outcome = {**outcome, "centre_confirmation": server_result}
+        return outcome
     raise KeyError(name)
 
 

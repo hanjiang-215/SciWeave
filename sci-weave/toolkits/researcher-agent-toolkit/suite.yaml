@@ -2,7 +2,7 @@ suite: researcher-agent-toolkit
 role: machine
 actor: researcher
 title: 研究员的 Agent套件
-version: 0.1.0
+version: 0.2.0
 schema_version: 1
 summary: >
   研究员机器上的一套东西：教个人 Agent 部署并配置自己的 Task Agent，
@@ -53,14 +53,23 @@ requires:
     - name: EMAIL_MCP_TOKEN
       purpose: email service bearer credential
       required: true
-    - name: SCIWEAVE_REGISTRY_TOKENS_JSON
-      purpose: registry token mapping
+    - name: SCIWEAVE_REGISTRY_URL
+      purpose: registry endpoint
+      required: true
+    - name: SCIWEAVE_REGISTRY_TOKEN
+      purpose: registry bearer credential
       required: true
     - name: DISPOSITION_MCP_URL
       purpose: disposition endpoint
       required: true
     - name: DISPOSITION_MCP_TOKEN
       purpose: disposition bearer credential
+      required: true
+    - name: CONFIRM_UPLINK_URL
+      purpose: centre gateway confirm endpoint
+      required: true
+    - name: CONFIRM_UPLINK_TOKEN
+      purpose: centre gateway confirm bearer credential
       required: true
   services:
     - sciweave-task-agent-mcp.service
@@ -78,7 +87,7 @@ capabilities:
       macos: {status: unverified, limitations: [not tested in this release]}
 export:
   harness_input: .sciweave/harness/researcher-agent-toolkit
-  include: [suite.yaml, install-suite, upgrade-suite, register-instance, audit-buffer, use-research-map, use-research-wiki, promote-draft, push-task-agent-to-rework, deploy-task-agent, mcp]
+  include: [suite.yaml, install-suite, upgrade-suite, register-instance, audit-buffer, use-research-map, use-research-wiki, promote-draft, finish-task, push-task-agent-to-rework, deploy-task-agent, mcp]
   exclude: [.env, data, runtime/.venv]
   configuration: configuration.md
 skills:
@@ -96,6 +105,8 @@ skills:
     path: use-research-wiki
   - name: promote-draft
     path: promote-draft
+  - name: finish-task
+    path: finish-task
   - name: push-task-agent-to-rework
     path: push-task-agent-to-rework
   # The deployment skills teach this machine's personal Agent how to build and
